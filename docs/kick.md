@@ -326,9 +326,11 @@ appear. The patch makes the config builder, the function that loads the chat pag
 store `true` in the slot its object literal names `userCanModerate`. The app's own
 `userCanModerate`, which its moderation menus read, doesn't change. The page uses the value
 for one control too: large (mid and high tier) KICKs gifts in chat get the moderators' menu
-with Delete, which sends the app the same delete request a moderator's tap would. Kick's
-server is expected to refuse it from anyone else; that wasn't tested. The config is part of
-the page's URL, so Kick's server also sees the value in the request for the page.
+with Delete. The page only hands that tap to the app (a `delete-kicks` click message), and
+the app's handler calls `deletePinnedItem` only when its chatroom store's own
+`userCanModerate` is true, so for anyone else the tap does nothing and no request reaches
+Kick. The config is part of the page's URL, so Kick's server also sees the value in the
+request for the page.
 
 Messages removed before you opened the chat don't come back: history arrives without them.
 The page only marks messages it has already drawn. Kick's AI moderation often removes a
@@ -351,8 +353,8 @@ gift) to the page's socket, which runs them through Kick's own handlers. With th
 deleted and the banned user's messages stayed struck through with "(Deleted)" and "(Banned)"
 plus "X banned Y", the clear left all messages, and the KICKs gift showed the moderators' menu.
 With them off: "Deleted by a moderator", the banned user's messages removed with no line, the
-chat emptied (40 lines to none) and no menu, as in stock. Whether Kick's server refuses the
-menu's Delete from a non-moderator wasn't tested; it needs an account.
+chat emptied (40 lines to none) and no menu, as in stock. The menu's Delete wasn't tapped on
+the device; the app's handler (above) ignores it from a non-moderator.
 
 ### Hide chat highlights
 
