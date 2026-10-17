@@ -293,13 +293,16 @@ be triggered from outside.
 `useAppRating` opens Kick's rating sheet after a won prediction, a number of follows or a
 redeemed reward, through `showAppRatingDialog`. That asks the rating store's
 `shouldShowAppRating` first (never shown, or more than 120 days ago), and the patch makes
-it return false. The developer-settings button that forces the sheet is untouched. Those
-triggers need an account, but one more path doesn't: when a trigger fires in landscape, the
-rating store persists `shouldShowAppRatingOnNextPortrait`, and `AppRatingOrientationHandler`
-opens the sheet on the next portrait screen, gated only by the `appRating` feature flag and
-`shouldShowAppRating`. Checked on the emulator by setting that flag in Kick's AsyncStorage
-(`app-rating`) before starting Kick: with the switch off the "Rate us" sheet appeared at once;
-with it on (the default) no sheet appeared.
+it return false. The developer-settings button that forces the sheet is untouched. The
+follow trigger fires on a follow once you have followed ten channels and the app has been open
+for an hour in total (`app-session-time`); below that it only counts the follow. Checked on the
+emulator with a test account: after ten follows and an hour in the app, the next follow with the
+switch on (the default) showed no sheet and left the count at ten, so the trigger fired and was
+suppressed; with the switch off and Kick restarted, the next follow opened the "Rate us" sheet.
+One more path needs no account: a trigger that fires in landscape persists
+`shouldShowAppRatingOnNextPortrait`, and `AppRatingOrientationHandler` opens the sheet on the
+next portrait screen through the same check; with that flag set in Kick's AsyncStorage
+(`app-rating`), the switch off showed the sheet at start and the switch on didn't.
 
 ### Show deleted messages
 
