@@ -1,9 +1,13 @@
 name: Build
 
-# Pull requests get a build check. Pushes are covered by release.yml, which also compiles
-# when nothing is released.
+# Pull requests into dev get a build check. Pushes are covered by release.yml, which also compiles
+# when nothing is released. The dev → main pull request is left out: open_pull_request.yml opens it
+# with GITHUB_TOKEN, whose events can't start jobs, so its run only ever failed. Its head commit
+# already has release.yml's check from the push to dev.
 on:
   pull_request:
+    branches:
+      - dev
 
 permissions:
   contents: read
