@@ -66,12 +66,10 @@ bash bin/test-rumble ~/scratch/morphe/rumble/3.21.0/base.apk PremiumProbe
 - All six output DEX files pass `dexdump` and D8; APK manifest, signature and alignment
   verification pass. The optional cross-DEX verifier reports the same 42 missing
   optional SDK/reference issues on both stock and patched APKs, with no added issues.
-- The workspace Gradle build was blocked by HTTP 401 from GitHub Packages with both
-  configured credentials. The tested `.mpp` was compiled against the patcher API in
-  the existing Morphe Desktop JAR, using the installed Kotlin compiler and Android D8.
-  It contains both JVM classes and Android DEX. The local reproduction script is
-  `~/scratch/morphe/build-rumble/build.py`; normal Gradle build validation remains pending
-  working `read:packages` credentials.
+- The workspace Gradle build was blocked by HTTP 401 from GitHub Packages, so the tested
+  `.mpp` was compiled against the patcher API in the existing Morphe Desktop JAR, using
+  the Kotlin compiler and Android D8. It contains both JVM classes and Android DEX.
+  Releases build the patch with Gradle in CI.
 
 Artifacts are in `~/scratch/morphe/out/`: `rumble-3.21.0.mpp`,
 `rumble-3.21.0-patched.apk` and the Morphe result JSON. Build and verification logs
