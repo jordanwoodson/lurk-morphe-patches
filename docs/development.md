@@ -89,6 +89,10 @@ bin/emu shot             # screenshot → $MORPHE_WORK/shots/
   artwork (a flat logo on a flat background).
 - `bin/patch` passes anything after `--` to Morphe Desktop, for example
   `bin/patch twitch -- --exclusive -e "Disable analytics"`.
+  Each run copies the unchanged input into its own `$MORPHE_WORK/tmp/patch.*` directory:
+  Morphe extracts APKM components beside its input even when given `-t`. Extraction and
+  temporary files are removed on exit; the original upload and shared signing directory
+  stay intact, and the output remains in `$MORPHE_WORK/out/`.
 - `bin/refs` clones Morphe's own repos (patcher docs, patches library, official patches, the
   template) into `$MORPHE_WORK/refs/` for API reference.
 - `bin/apk-info <file|app>` shows a file's package, version and signing cert, or an app's stored versions.

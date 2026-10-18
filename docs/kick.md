@@ -700,7 +700,9 @@ Firebase's content provider initializes before the application collection hook, 
 Disable analytics also sets the manifest's `firebase_analytics_collection_enabled`
 default to false; Firebase prefers the value the startup hook persists, so the switch
 still turns collection back on.
-Authenticated flows, broadcaster token sharing and every server ad configuration
+The [dated verification record](verification-2026-10-17.md) distinguishes current native
+composer/provider and loader evidence from historical observations above.
+Authenticated feature flows, broadcaster token sharing and every server ad configuration
 need device/account coverage. Do not interpret SDK suppression or static VOD fallback
 validation as verified removal of every video ad.
 

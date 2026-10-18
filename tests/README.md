@@ -19,7 +19,11 @@ or publishing. Add new standalone APK-free checks to the list in `bin/test-host`
 
 The host suite includes the Twitch interface, playback/link and privacy-consent JVM helpers, the
 Kick player and privacy JVM helpers, deterministic shared sleep-timer regressions, Rumble identity and
-saved-speed transitions, the offline Kick chat-page browser test, and `test_release.py`.
+saved-speed transitions, the offline Kick chat-page browser test, `test_release.py`, and
+`test_patch.py`. The patch-command regression runs the real `bin/patch` in scratch fixture
+repositories with a controlled Java boundary that reproduces Morphe's adjacent APKM extraction.
+It checks unchanged inputs/repository/signing configuration, CLI options and install forwarding,
+success/failure cleanup, plain APKs and concurrent per-run staging. It does not patch a real APK.
 CI installs the pinned dependency and verifies the hosted Chrome binary before running the suite;
 missing dependencies fail the checks. The interface probe exercises startup
 destinations, Home and profile tabs, explicit Clips routing, and disabled settings. Release tests use
@@ -100,7 +104,9 @@ per-video mapping and repeated taps. Null sources, disabled refresh, absent play
 quality changes are controls. A caught player Exception, escaping logger RuntimeException and escaping
 Error check callback restoration. These are synthetic boundaries, not observed playback failures.
 `verify_refresh.py` additionally checks the emitted fatal-state/mobile-panel branch and catch metadata.
-Real fatal-stream failure, resumed network playback and visible position remain installed-app verification.
+Actual emulator fatal-panel/tap/recovery evidence now exists under an explicitly qualified
+three-method error-policy fixture; see [the dated verification record](../docs/verification-2026-10-17.md).
+Physical-phone and authenticated playback remain separate gates.
 
 
 Twitch RN and provider checks:
@@ -133,3 +139,11 @@ changes, retired effects and mismatched native catalog identities. Pronoun compl
 response orders, including owner retirement, opt-out and shared native demand. The host check controls
 JSON tokens/drawing; `bin/test-twitch-providers` repeats those completion assertions on ART with real
 JsonReader/Canvas/PNG, controlled HTTP responses and isolated preferences (no provider traffic or app data).
+
+`test_rn_chat.py` also runs `test_overlay_context.js` and `test_column_opacity.js`. They exercise
+the original host/store/ChatLine boundary with committed immutable authority, canonical/protected
+matching, retired publishers and unchanged host state, plus the measured nested column fills,
+neutral/off/unsupported guards, sibling isolation and child state across opacity/PiP/docked changes.
+These are controlled React/store boundaries. The [dated verification record](../docs/verification-2026-10-17.md)
+separately records actual L floating provider images/local deletion controls and final N visible
+column opacity, with explicit source linkage and cached badge/pronoun/default-control qualifications.

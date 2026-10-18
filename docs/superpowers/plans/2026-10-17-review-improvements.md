@@ -87,20 +87,42 @@ Task 5 implementation and scoped re-review complete at `14cd09b`: native picker/
 
 **Files:** Twitch chat/emote/badge patches, Hermes helpers, runtime chat/provider/layout helpers and tests as indicated by target inspection.
 
-- [ ] Map RN live chat and replay surfaces in the pinned APK, and record current hooks versus missing coverage in the spec.
-- [ ] Add behavioral fixtures and extend existing settings for supported timestamps, deletion retention, keywords, appearance and third-party rendering paths; keep account restrictions and stock off behavior.
-- [ ] Add provider malformed/empty/error payload parsing, Unicode range, overlay ownership and gesture-cancellation tests.
+- [x] Map RN live chat and replay surfaces in the pinned APK, and record current hooks versus missing coverage in the spec.
+- [x] Add behavioral fixtures and extend existing settings for supported timestamps, deletion retention, keywords, appearance and third-party rendering paths; keep account restrictions and stock off behavior.
+- [x] Add provider malformed/empty/error payload parsing, Unicode range, overlay ownership and gesture-cancellation tests.
 - [ ] Check native and RN flows on phone, then update coverage docs and commit. Any unsupported path requires specific evidence and a recorded resolution, not silent omission.
+
+Task 6 implementation and scoped re-review complete at `3b5330c`: all three final review
+findings resolved, retained stale-provider/cold-pronoun regressions pass, actual Android
+catalog/pronoun checks and mounted original RN provider images pass. Current emulator native,
+RN consumer and same-process reload evidence is qualified in the dated verification record.
+The unchecked phone item remains a Task 7 requirement; implementation acceptance does not close it.
+Task 7 subsequently found and fixed the original floating RN path's missing genuine context and
+the measured column opacity composition at `3ba886c`; combined Task 7 review remains pending.
 
 ### Task 7: Full output, phone, account and privacy verification
 
 **Files:** verification scripts and `docs/verification-2026-10-17.md` (create), any failures' owning implementation files.
 
-- [ ] Build the bundle and patch all three pinned APKs; verify emitted extension calls, resources, settings and Hermes edits. Record hashes and selected patches.
+- [x] Build the bundle and patch all three pinned APKs; verify emitted extension calls, resources, settings and Hermes edits. Record hashes and selected patches.
 - [ ] Install on authorized USB phone and run relevant ART/UI probes; background/foreground, Wi-Fi/mobile, lock-screen and PiP transitions.
 - [ ] Obtain user-entered account sessions and validate named authenticated flows. Do not send real chat, spend points/money, or change subscriptions without explicit scope for the specific action; use read-only/test-channel equivalents where they prove the behavior, and record remaining input needs.
-- [ ] Inspect residual telemetry payloads/dependencies and compare relevant switch transitions, including Rumble consent restart and push consequences.
+- [x] Inspect residual telemetry payloads/dependencies and compare relevant switch transitions, including Rumble consent restart and push consequences.
 - [ ] Fix failures and rerun affected plus full host/build gates; have independent review of completed diff and resolve findings.
+
+Task 7 progress and exact artifact/evidence limits are recorded in
+`docs/verification-2026-10-17.md`. The input-staging defect has retained real-command
+RED/GREEN coverage. RN floating canonical context/retention/provider and actual column width/opacity
+fixes are implemented at `3ba886c`; final N Twitch signatures/compiler/source/owner/build checks,
+15-check host gate and qualified L/N actual consumer evidence are recorded. Four Kick/Rumble
+artifacts reuse explicitly unchanged production source and retain their exact prior checks.
+Same-process Kick reload and final production public playback smokes are supplied. Actual SDK
+synthetic-payload investigation, real Rumble consent/restart
+SDK-state transitions and the Firebase/Airship push dependency trace are supplied; no broad
+SDK block was added. Physical-phone UI and named authenticated flows remain required,
+and combined Task 7 scoped review/full independent branch review are pending. USB final Twitch N
+and Kick updates succeeded; Rumble retains its previous APK after two bounded install timeouts.
+None of the unavailable phone/account/review stages is a pass; Task 7 as a whole is incomplete.
 
 ### Task 8: Push and stable release
 

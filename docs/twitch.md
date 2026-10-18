@@ -369,6 +369,28 @@ subscribes only while its store is mounted; history, deleted lines and rerenders
 All-off restores the original exports. `bin/test-twitch-chat-style` checks native styling on ART,
 including mentions with a fixture account; `bin/test-twitch-rn` checks native RN bridge ownership.
 
+The original floating one-chat overlay projects away the message type and omits store/channel props.
+Its original host now publishes its genuine store and exact numeric destination/login through
+tree-local React context after commit. Projected rows must match the canonical original line's
+id/body/user/userId/source-room/deleted/hidden/unpublished fields before using provider or received
+deletion privileges. Immutable authority rejects a changed destination before effects run; cleanup
+retires only its own publisher. The original store hook runs once and returns unchanged, and the
+host component type/key stays stable so drag/collapse/scroll state survives. There is no extra
+network request, timer or global render provenance.
+
+The column width/opacity settings target `landscape-column-chat`, reached through the original
+video double-tap cycle; floating one-chat retains its stock opacity. Nondefault column opacity
+uses the existing empty background as black and existing foreground as theme color with alpha,
+then clears only the two measured covering fills in ClassicChatColumn/ChatArea. Header/composer,
+text/emote colors, player, gutters and actions keep their original styles. A stable React Provider
+carries primitive opacity or neutral null without adding a native View or remounting chat when
+opacity changes. While wrappers are installed, neutral paths preserve original native styles and
+child objects, rather than literal outer React object identity; full configure-off restores the
+original exports. Unknown shapes keep stock handling. The
+[dated verification record](verification-2026-10-17.md) distinguishes actual visible opacity
+controls from the earlier style-only readback, and real provider images from controlled cached
+badge/pronoun metadata.
+
 The original RN live store is keyed by channel login. Keyword notification ownership preserves that
 bounded login exactly; provider row acquisition independently uses the numeric channel/source-room ID.
 
@@ -652,7 +674,10 @@ functions and switch targets using the production interface probe's manifest.
 with boundary fixtures. The existing Rumble and Kick Android probes also pass on
 APKs made with the expanded patch bundle.
 
-**Signed-in playback and chat, sending messages, actual server ad delivery, purchases,
+The [dated verification record](verification-2026-10-17.md) adds current guest native
+VOD/replay/chapters/PiP and qualified RN consumer/provider/reload observations, with
+artifact-specific provenance. The following account limits remain:
+**signed-in playback and chat, sending messages, actual server ad delivery, purchases,
 subscription/member screens and Amazon sign-in remain unverified.** Stock Twitch
 requires Log In or Sign Up, including for a direct channel URL, and no test account
 was available. Since "Watch without signing in" opens Twitch's own signed-out mode,

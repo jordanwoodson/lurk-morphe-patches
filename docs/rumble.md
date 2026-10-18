@@ -123,7 +123,9 @@ Turning the switch off uses the cached consent again.
 The switch offers a restart after either toggle. It blocks future Ketch calls immediately, but cannot
 undo SDK initialization or replace consent already applied to the running process. Restart to apply the
 startup consent path consistently; turning it off also needs a restart to restore that path. The
-consent and push consequences described below require real-app validation, beyond helper checks.
+actual-process consent/restart SDK-state matrix is recorded in
+[the 2026-10-17 verification record](verification-2026-10-17.md); notification delivery and
+live queued-event drain remain untested.
 
 Validated on 2026-10-14 on the Android 16 emulator, fresh data each time, location resolved by Ketch as
 US-MO:
@@ -140,9 +142,13 @@ US-MO:
 The visible banner itself wasn't reproduced, since no notice is shown at that location; the patch doesn't
 depend on jurisdiction, because both entry points that can display one are disabled.
 
-Block cookie notice also stops push notifications. Rumble only starts Airship, its push service, from
-the consent callback, and enables Airship's push feature only with the `essential_services` purpose. With
-no consent recorded, Airship never takes off and incoming pushes are dropped.
+Block cookie notice prevents Airship, Rumble's push service, from starting after a restart.
+Airship-handled messages cannot be processed without it; Airship's push feature requires the
+`essential_services` purpose. The actual consent matrix confirms startup and feature state,
+but no notification was delivered. The inherited FirebaseMessagingService can independently
+auto-display recognized notification payloads while the app is backgrounded or locked, before
+calling Airship's `onMessageReceived`. Data-message handling has a separate Airship-availability
+guard. This is therefore not a guarantee that every incoming FCM notification is suppressed.
 
 ## Lurk settings
 
@@ -780,5 +786,8 @@ repeated taps, disabled/null cases and preserved quality callbacks. The generate
 its callback in a catch-all handler too: stock `x4` catches ordinary Exceptions, but an escaping Error
 or failure inside its logger previously left the no-op callback installed. These exceptions are
 synthetic regression inputs; no live occurrence is claimed. `tests/rumble/verify_refresh.py` checks
-emitted catch metadata and the fatal-state branch to the mobile panel. A real failed stream followed
-by recovered playback and visible position still requires installed-app verification.
+emitted catch metadata and the fatal-state branch to the mobile panel. The
+[dated verification record](verification-2026-10-17.md) adds real emulator network failure,
+fatal-panel tap and continuing nonzero playback under an explicit three-method error-policy
+fixture. Unchanged production recovered automatically from the observed outage; natural fatal
+entry, physical-phone and authenticated/Premium behavior are not established by that fixture.

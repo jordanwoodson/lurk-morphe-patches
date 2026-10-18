@@ -1,0 +1,296 @@
+# Review-improvements verification, 2026-10-17–18
+
+Task 7 is incomplete. Task 6 was accepted at `3b5330c`; Task 7 fixes input staging at `783e045`
+and measured RN landscape integration at `3ba886c`. This snapshot precedes combined Task 7
+scoped review and whole-branch review. Physical-phone UI and named authenticated flows also
+remain required before release.
+No push, tag, release or merge was performed for this verification. Missing prerequisites are
+recorded as open gates, never as passing tests.
+
+Evidence root (`ROOT` below):
+`~/scratch/morphe/improvements-2026-10-17/`. These local captures, manifests and logs are retained
+for review; they are not committed or distributed release artifacts. The older observations in
+the per-app pages describe their original artifacts. Current evidence is qualified below.
+
+## Source, inputs and patch selections
+
+Pinned originals in `ROOT/inputs/MANIFEST.tsv`:
+
+| App | Package/version | Original APKM SHA-256 |
+|---|---|---|
+| Twitch | `tv.twitch.android.app` / 31.6.0 | `4545266092a493fcaaf6e84dfecd7d3ca7e754ad6de73d3404cbb765f56cc528` |
+| Kick | `com.kick.mobile` / 40.32.1 | `17af0b07f4e3f8949bdf12668d6f3caf057014365999ae9b6aa0fddc60cc34ea` |
+| Rumble | `com.rumble.battles` / 3.21.0 | `271cf31923f5657838d762a333150a6dcf0d5e4a38b5f592e24c8f9c2eca6ddf` |
+
+Both default and expanded selections preserve package identity and the existing signing key.
+Expanded selections add the optional non-identity patches below. Clone app and Change app name
+are excluded; no new coverage of those options is claimed. Patch inclusion does not establish
+the installed app's current preference value.
+
+| App | Default / expanded patch count | Optional additions to defaults |
+|---|---:|---|
+| Twitch | 33 / 43 | Default video quality; Hide Bits tipping; Hide Clips; Hide Home sections; Hide chat highlights; Hide mature content warning; Hide player buttons; Hide subscription upsells; Playlist proxy; Show video stats |
+| Kick | 19 / 24 | Bypass VOD ad sessions; Default video quality; Hide Clips; Hide KICKs tipping; Hide subscription upsells |
+| Rumble | 26 / 30 | Default video quality; Disable autoplay; Hide Shorts; Hide tipping and Rants |
+
+Final verification APKs: Twitch N uses `3ba886c`; the four Kick/Rumble J artifacts use
+`3b5330c`, with their production source unchanged by Task 7's Twitch-only integration fix.
+
+| Selection | Path relative to ROOT | APK SHA-256 |
+|---|---|---|
+| Twitch default | `task-7-n-output/twitch/twitch.apk` | `e5abd45cea3976e1444484fe83c21d632af5d746643a94722a0be315f134358c` |
+| Twitch expanded | `task-7-n-output/twitch-expanded/twitch.apk` | `483839bb3c8843a4a3735bfd29ea73646db52e801e5141d7fdecda05668700d0` |
+| Kick default | `task-7/candidate-task6-fix1/kick-default/kick.apk` | `4dc6226c95a0062ab4d91ab5eabea105deee5eed0c04b0bb4a082973247e163f` |
+| Kick expanded | `task-7/candidate-task6-fix1/kick-expanded/kick.apk` | `b806bf7317c97b50ff17d21e4e9c79046cc5154752bbdd657150184a4bae2957` |
+| Rumble default | `task-7/candidate-task6-fix1/rumble-default/rumble.apk` | `19d1122f10109f90e410fde9a89b24ed060e896f753c2e7021d6ed7f3fbf880a` |
+| Rumble expanded | `task-7/candidate-task6-fix1/rumble-expanded/rumble.apk` | `2cd0a0d5abd986c3180569d45eb7d03d726af13da46bca6273bff32022df9839` |
+
+`task-7-n-output/verified-artifacts.json` records successful signature/16 KiB alignment checks
+and compiler/source/bytecode contracts: Hermes compiler `250829098.0.19`, upstream
+`facebook/hermes`, compiler SHA-256
+`925ddf1bc2f17578e8af5df391c9d84dbd98441540fb43257aac3ef75c54b749`.
+Final runtime source SHA-256 is `a7fad0225986fe058770d98bf67884d838de7cb6ff26727abb4c967c20f35bb9`;
+HBC98 bytecode SHA-256 is `72fdec40d84347a7f253f32c351adced65de30af763632594ab263f5770dc552`.
+`bundle-source.json` verifies both committed production source hashes, including RNChatPatch
+`b3e51cfde9418572a7cb3cc67c00b525041bf72f521728283e2e0496d777b1b7`.
+The copied `task-7-n-output/patches-1.11.1.mpp` snapshot SHA-256 is
+`8d86a996b154a37533c04506635e2662641700a89cb9270571ea54ff72eda1ed`.
+`task-7/candidate-task6-fix1/verified-artifacts.json` records the other four signature,
+16 KiB alignment, package/version and successful-selection checks. Adjacent `*-result.json`
+files retain each selected patch name and step. Their adjacent `bundle-source.json` binds the
+earlier J bundle: SHA-256 `ad7fb8bbbdb8d36304eb480382c995df6cccd8f0a7f995548f031ad4e4ea22a7`.
+`task-7-n-output/unchanged-kick-rumble-source.json` proves only Twitch's RN patch/runtime
+production paths changed since J; shared extensions and Kick/Rumble source remain unchanged.
+No new target runs are implied for those four artifacts.
+
+The earlier build at tooling commit `783e045` passed 46 tasks in 14 seconds
+(`task-7/final-build.log`, `final-build-source.json`). Its MPP SHA-256 is
+`64390e158346769b0b9fd866bc62f79305b447363dc0a1c116f0be132e9d22e4`.
+This packaging rerun differs from the artifact-stage bundle hash above; they are separate
+artifacts. Production Hermes/Java/DEX/Kotlin/resource tasks remained up to date, and source
+comparison showed only the three tooling/test paths changed at that checkpoint. Final N's
+later coherent build also passed 46 tasks in 14 seconds (`task-7-n-output/build.log`), with
+33/43 successful Twitch selections and all 14 uniquely discovered direct owner contracts.
+
+## Host, build, emitted output and ART
+
+Tasks 1–6 retain their specific RED/GREEN, build and scoped review evidence in their reports.
+Task 6's final host run passed all 14 then-registered checks and 19 release tests without
+compiler warnings. J's coherent build passed 46 Gradle tasks. Production dependency versions
+are unchanged; the local build uses the exact official pinned sources via
+`build-composite.sh` and `composite-build.init.gradle` under ROOT. This local dependency
+resolution does not prove that a future CI run can authenticate to GitHub Packages.
+
+`task-7/candidate-31e9c97/evidence.md` and adjacent JSON manifests record all six H candidate
+signatures, pinned package/version, 16 KiB alignment, input hashes, selected successful patch
+steps, 16 emitted-output checks, and actual USB ART probes. Output checks cover extension
+calls, resources/settings, privacy/interface/playback bytecode, Hermes edits and reversibility,
+Kick quality/countdown/analytics/sleep and Rumble fatal refresh/catch metadata.
+Twelve Twitch runners, Kick loader/catalog/native response captures and all ten Rumble probes
+passed. These are isolated `app_process` executions on the locked physical phone, with controlled
+platform/network/Compose boundaries where stated; they do not establish visible phone UI,
+account authorization or real stream entitlement.
+
+The first Kick wrapper browser stage failed because nested TMPDIR made Chrome's Unix socket
+path exceed 108 bytes. The exact saved native captures passed using the existing shorter
+`ROOT/tmp`; logs preserve both attempts. This is a test-environment path issue. Initial
+extension-call checks also used incorrect `CompiledBundle` hook-owner names; corrected
+`TwitchRNChat`/`KickComposer` checks pass. Rumble's RefreshProbe javac deprecated-API note
+is retained, not hidden or treated as a failed test.
+
+I linkage (`task-7/candidate-e949b96/`) proves only unused `TwitchRNChat` changed in Kick/Rumble;
+their other decoded classes/resources/runtime assets are byte-identical to H. J changes Twitch
+provider leases/pronoun completion. Fresh J USB RN and provider probes pass exact catalog
+identity and all seven pronoun response-order/owner cases. Historical unchanged checks are
+reused only with explicit source/byte comparisons; no claim of rerunning every suite on every
+artifact is made. Final Kick/Rumble J comparisons in `candidate-task6-fix1/*-smali-diff.json`
+find only TwitchPronouns (including Lookup), TwitchRNChat and TwitchThirdParty changed from I.
+The independent `*-method-diff.json` comparisons establish every other method's instructions
+identical. All non-DEX ZIP payloads are identical. Those unused Twitch helpers do not change
+Kick/Rumble's covered runtime paths.
+
+`bin/patch` now stages an unchanged input copy and Morphe's temporary files inside a unique
+`$MORPHE_WORK/tmp/patch.*` per run, removing the directory on exit. Morphe previously extracted
+APKM components beside the repository input despite `-t`. `tests/test_patch.py` executes the
+real shell command against scratch fixture repositories and a controlled Java boundary that
+reproduces adjacent extraction. All four regressions first failed for the repository input
+being passed directly; all four pass after staging. They cover success/failure cleanup, APKM
+and APK inputs, overlapping runs, input hashes/repository contents, CLI/install options,
+unchanged signing configuration and output path. This is command-boundary coverage, not a
+real APK/signature test. `patch-staging-{red,green}.log` are under `ROOT/task-7/`; the regression
+is registered in `bin/test-host`.
+
+The tooling host checkpoint (`MORPHE_WORK=ROOT/task-7 TMPDIR=ROOT/tmp bin/test-host`)
+passed all 15 registered checks (`task-7/host-final.log`). After the landscape fixes, the final
+host command with `MORPHE_WORK=ROOT/task-7/rn-landscape-fix` and the pinned JAVA_HOME also
+passed all 15 checks, including 19 release tests and four staging cases; `full-host-n.log`
+in that directory retains the warning-clean output. The pinned-original Hermes gate passes
+in `hermes-n.log`, including all new unique-owner assertions and existing restoration checks.
+
+## Installed-app evidence and boundaries
+
+The emulator is Android 36 `emulator-5580`, launched without audio. No audible-output or
+physical-carrier claim follows from playback state/frames. The USB Motorola edge 2025
+`ZA2234BBJ8` remains securely locked. Earlier ART probes did not install/launch phone apps.
+Task 7 subsequently updated final default Twitch N and Kick with `adb install -r`, after verifying
+their existing signer equals the candidate signer; both installed APK hashes match exactly.
+N's 11:01:04 UTC readback records deviceLocked=1, UNTRUSTED, showing=true and secure=true
+(`task-7/rn-landscape-fix/phone-install-n.json`).
+No data wipe, account entry, phone app launch or security change was attempted. Rumble's
+same-signer USB update timed out after 240 seconds streaming and a target-only retry after
+90 seconds via pushed APK/`pm install -r`. Querying its installed path/hash afterward confirms
+the previous `7beeaa46f7dcd3ee755a445b355aaca9a3fd00ffbdd0911e8824f47dca530918`
+APK remains installed. Logs and target-only state are retained in `task-7/final-device-smoke/`;
+no global adb restart or further retry was made.
+
+| Flow | Evidence supplied | Boundary / remaining proof |
+|---|---|---|
+| Twitch native public VOD, replay and chapters | Production I APK `1eaadae6a6ab299a6d516ae0787096e3409187ebfa0dfca71e07c6b641caf6b4`; real four-chapter response/dialog; selected second chapter reached 4:25:09 | Emulator guest, before J provider fix. `task-7/twitch-i-ui/evidence.md`; physical/account proof remains |
+| Twitch PiP/background/network/screen sleep | Actual pinned PiP, system Expand return, Wi-Fi→emulated mobile→Wi-Fi; no-tap sleep/wake control retained PLAYING with increasing position | Emulator transports use host networking; no physical carrier/audio proof. Settings/network restored |
+| Twitch RN consumer, moderation and reload | Original Fragment/ReactSurface and actual store/action controls; default/prepared/off execution and same-PID cleanup/rebootstrap in Task 6 | Explicit isolated route/observer fixture; production chooses native theatre in this guest session. No authenticated sending gate inferred from keyboard focus |
+| Twitch provider images / pronouns | J mounted original RN provider images and real Android parser/Canvas/PNG pronoun cases; L adds actual post-rotation floating original row with genuine store/channel and three real CDN image decodes | L floating context/row code is byte-identical in N. Badge/pronoun consumer phase uses explicitly controlled cached metadata; no real-network badge/pronoun claim |
+| Twitch overlay/gesture | Fourteen ART cases with real MotionEvent/View/Handler, owner retirement and pointer/off/cancel controls | Controlled Activity/window boundaries; visible physical gestures, vibration and volume remain open |
+| Kick picker/autocomplete/lifecycle | Task 5 actual native first mount/leave/reentry, cursor/manual moves, mixed stock span, autocomplete and follower-only restrictions | Emulator ARM-library extraction workaround only; no APK modification. Physical UI and feature-specific account compatibility remain open |
+| Kick live provider sets / zero-width | Production-source EventAPI add/update/remove/gap/heartbeat/retry/resubscription and offline browser layering regressions | Controlled provider/browser boundaries; live provider-admin mutation not claimed |
+| Kick same-process reload | Final default `4dc6226c…` plus two-call-through observer: original host.reload, same PID 8454, original release removes old registry, new instance/context on same host, bootstrap/configure/sourceURL twice, Home renders | `task-7/kick-reload/evidence.md`; default path proven. No prepared-main reload, GC/leak, mounted WebView disposal or broadcaster handoff claim; exact production APK/settings restored |
+| Rumble playback/outage/PiP | Production `9905b9b2f0ad4a7eb371a3bdb3b76380c4986b094dc426be747c00ada7ad5653` decoded public video, automatically recovered from real network outage, entered PiP and returned | Task 4 emulator evidence; final/physical/authenticated/Premium proof separate |
+| Rumble fatal error→Refresh→continuing position | Real Exo UnknownHostException, actual Compose fatal panel and actual tap→unchanged emitted callback→same video 02:32→03:02 under explicit three-method error-policy fixture | `ui-preparation/rumble-recovery/evidence.md`; fixture changes classification/fatal-state preservation only. Unchanged production did not naturally enter fatal during outage. Exact failure millisecond/source URL separately covered by ART; fixture not a release artifact |
+
+Rumble refresh preference was originally false, temporarily enabled through actual UI, restored
+false and production APK hash verified after the fixture. Twitch settings/network restoration
+and historical J reinstall are recorded in Task 6 fix1; final N restoration is recorded below.
+Original user sessions/data were
+retained. No chat was sent, points/money spent, or follow/subscription changed. Kick's original
+viewer provider is retained; a signature mismatch alone does not prove an incoming
+`ContentProvider.call` is denied. Stock companion caller behavior and authenticated token handoff
+remain unverified; no token was read or permission weakened.
+
+Final production emulator smokes under `task-7/final-device-smoke/` additionally establish
+Kick default `4dc6226c…` preserved the existing test-account profile and opened Sliggy's real
+channel with changing decoded video and read-only incoming chat. `kick-live.png` is still Home;
+`kick-channel-settled.png` and later playback captures establish the actual channel. A second
+tap based on stale UIAutomator XML opened a read-only viewer card, which was dismissed without
+an account action. The failed idle dump is retained and not treated as fresh hierarchy proof.
+`kick-background-activity.txt` establishes a pinned task; the immediate screenshot alone is
+not used as a settled PiP visual claim. MediaSession reported NONE, so video frames do not
+imply a playing MediaSession or audible audio.
+
+Rumble final default `19d1122f…` opened Home and BobbyPoffGaming's public video; changing decoded
+frames, visible PiP with `mode=pinned` and return to the same title are captured. These are
+public playback checks; a video's embedded Premium logo does not prove Premium entitlement.
+App preference values were not changed; both apps were force-stopped after capture.
+
+J's portrait/landscape observation exposed a real context gap: the same original projected row
+had three provider spans in portrait and none after rotation. The causal readback in
+`task-7/rotation-diagnosis/run-v2/actual.log` established missing genuine store/channel/type
+in the original floating overlay path; it was not waived as an unsupported fixture.
+The first short readback entered an actual server ad and was inconclusive, which remains
+explicit in the evidence. The bounded Task 7 fix now supplies committed tree-local context
+without weakening canonical/protected/received/deletion gates or changing original host identity.
+
+The fix's actual L observations in `task-7/rn-landscape-fix/observer/actual.log` establish:
+
+- Same local original-store row gains genuine store/channel and three spans after rotation;
+  original RN Image onLoad decodes real 7TV 96×96, BTTV 112×112 and FFZ 132×120 CDN images.
+- A separately labeled cached-metadata phase supplies controlled badge/pronoun metadata
+  while preserving native lease identity; the actual floating row consumes both titles.
+  This proves consumer integration, not live badge/pronoun lookup.
+- Original local delete handler changes the ordinary received row to retained deletion with
+  strikethrough and suppressed URL/emote/actions. `observer-column/actual.log` separately
+  verifies hidden/unpublished deletion controls gain no retained-deletion privilege or provider
+  additions and preserve stock callback surfaces. No line or moderation was sent to Twitch.
+
+L default SHA-256 was `f550a3d57c610cb043aad1436111f2c4e1d703d22c2ff85bd4d3d8139f0d0053`.
+`l-to-n-source-linkage.json` verifies floating context and row-consumer regions byte-identical
+in N; these are qualified L runs reused for unchanged code, not fresh N floating runs.
+
+Original video double-tap cycles one-chat→no-chat→column-chat→one-chat. L measured 75%/25%
+player/chat widths. M fixed the actual nested Fragment shape and returned alpha .5, but the
+rendered panel remained opaque because original foreground and column fills covered it.
+Bounded rendered controls rejected an extra-layer approach; it never entered production.
+Final N uses existing empty background/foreground layers and clears only the two measured
+ClassicChatColumn/ChatArea covering fills. A stable neutral React Provider avoids remounting
+chat when opacity changes; it adds no native View. Header/composer, text/emote colors, player,
+gutters and actions remain stock. Full configure-off restores original exports; malformed or
+unsupported shapes retain stock handling. Floating one-chat opacity remains its stock behavior;
+Lurk's column settings apply to `landscape-column-chat`.
+
+N's unchanged-production `observer-n` proves real-native 50% settings render transcript RGB124
+with ordinary incoming rows. Its file named `column-100.png` also contains 50%: that attempted
+native getter control failed, so those two filenames do not establish a paired comparison.
+`observer-n-pair` adds one explicit scratch-only cached-config default override at stage entry,
+removed after eight seconds; the final 50% phase passes through real native settings unchanged.
+The same-route 100%→50% pair reads transcript RGB247/247/248→124/124/124 across each 100×100
+sample, composer #f7f7f8, and widths 75%/25%. The pair occurred during a stock ad interval and
+proves rendering, not ad suppression or playback. Neither N fixture changes rows/provider metadata.
+
+`task-7-rn-landscape-report.md` records exact source, fixture and earlier failed-control provenance.
+Final `observer-n-pair/restored.json` and `ui-modes.json` verify production N's installed hash,
+byte-identical original Lurk preferences, initial one-chat mode, free orientation, networks 1/1,
+force-stop and removal of remote staging. The guest routing fixture overrides only the pinned
+final capability/rollout return; it does not simulate authentication. No composer focus, draft,
+account or provider-consent change occurred. Parent owns both devices; emulator shutdown to
+release idle memory is parent-coordinated, not evidence of another app transition.
+
+## Privacy investigation and Rumble restart matrix
+
+`research-residual-telemetry.md` traces the pinned original DEX/JADX, and
+`privacy-payload-probes/run-3.log` executes actual SDK serializers/callbacks with synthetic
+identifiers and an in-memory transport. All fixture requests use that transport. The proof
+establishes possible payload fields/completion behavior, not live account/device payloads.
+No broad SDK, Firebase service or FCM block was added.
+
+| Residual family | Established evidence | Remaining limits / compatibility dependency |
+|---|---|---|
+| Twitch Branch 5.20.3 | Actual limited-mode linked init retains synthetic advertising IDs/referrers; no-link init completes once with SDK -117 and zero requests; actual queued/synchronous URL serializers differ | Live advertising-ID presence/permissions, persisted transitions and real link routing untested. Link/share completion prevents safe blanket blocking; no complete identifier-scrub claim |
+| Firebase Installations / FCM | Pinned registration/auth-refresh/header schemas and dependency paths; actual Rumble FIS body serializers with synthetic IDs | FIDs/auth and app/device metadata are identifying. Blocking shared workers can strand Tasks and break config/push; live registration/delivery untested |
+| Rumble Remote Config | Actual fetch body/headers retain synthetic FID/auth, optional Analytics properties/firstOpen/custom signals; NO_CHANGE parsed; real launch listener resumes once for success and failure | Successful Task with result false resumes true (`isSuccessful`). Real namespace/cache/consent payloads unobserved; launch/config consumers retained |
+| Rumble Firebase logging | Pinned CCT envelope/producer and separate Crashlytics endpoint traced | Hostname/CONNECT cannot identify producer, record age or queued payload. No live CCT decode, queued-drain or zero-telemetry claim |
+| Rumble Facebook Graph | Startup settings constructor uses app token and SDK metadata; auto-event gating does not remove settings/gatekeeper fetch dependencies | Specific constructor has no advertising ID, which does not exclude other Graph requests. Auth/share compatibility untested; no blanket provider disable |
+
+The actual emulator Rumble consent matrix uses production `9905…` plus an explicit single-call
+observer in `RumbleMainActivity.onResume` and a new observer DEX. Other original method
+instructions/ZIP contents are verified unchanged. User-visible Data Consent supplied real grants;
+the observer neither sets consent nor fabricates SDK singletons. Disable analytics was explicitly
+false throughout the main matrix, isolating cookie blocking.
+
+| Actual UI transition | PID / observed SDK state |
+|---|---|
+| Cookie block off + Restart + Accept All/Confirm | 4433: applied grants, Analytics G111/measurement true, Performance/Crashlytics/Facebook flags true, Airship ready / feature mask 117 |
+| Cookie block on, return without restart | Same PID 4433: effective cached getter false but already applied grants/SDKs/G111 remain enabled |
+| Actual Restart Rumble | New PID 5401: raw cached grants preserved, effective decision false, empty applied purposes, G100/measurement false, tracked SDK flags false, no Airship instance |
+| Cookie block off + actual Restart | New PID 5748: cached grants and prior enabled flags/G111/Airship restored |
+
+`task-7/consent-fixture/run-v1/verified-matrix.json` assertions passed.
+This supplies actual-process SDK-state evidence for the consent/restart finding. It does not
+prove live payload absence, deletion of previously queued records or notification delivery.
+POST_NOTIFICATIONS was denied throughout. Absent Airship mask is UNOBSERVED, not zero.
+
+The push dependency trace (`task-7/consent-preparation/push-dependency.md`) corrects the old
+blanket push-drop claim: Airship-handled messages require Airship startup and push features,
+but inherited FirebaseMessagingService can display recognized notification payloads in the
+background/locked state before invoking Airship's callback. Data-message handling has a
+separate Airship-availability guard. This is static bytecode/source evidence of a possible path,
+not receipt of any real notification. No delivery was attempted or inferred.
+
+Afterward actual UI rejected optional grants; the real essential-only cache remains masked by
+the restored default-on cookie blocker. Both privacy keys were restored to their original
+implicit defaults, other settings checked unchanged, exact production APK/hash restored and
+observer removed. Wi-Fi/mobile remained 1/1. The evidence records this cache change explicitly.
+
+## Required remaining gates
+
+- User unlock of the authorized physical phone, then visible native/RN/composer/gesture and
+  playback background/foreground, real Wi-Fi/mobile, lock-screen and PiP checks on final APKs.
+- User-entered account sessions on device only: Twitch authenticated chat/points/Amazon/member
+  flows; Kick physical-phone authenticated navigation/playback and stock broadcaster token handoff; Rumble
+  authenticated/Premium playback. A read-only/test-channel equivalent must prove the named
+  behavior. Sending real chat, spending points/money and subscription changes need specific scope.
+- Complete combined Task 7 scoped review and full independent branch review, then resolve any
+  findings. The landscape implementation/evidence above is recorded before those reviews.
+- Task 8 publication/CI/prerelease/stable/backmerge verification after all required evidence.
+
+Real notification delivery, live wire payloads/queue drain, provider-admin mutations and audible
+emulator playback are unclaimed evidence limits. The privacy investigation and actual SDK-state
+matrix above satisfy their stated investigation/state scope without silently converting those
+additional unobserved behaviors into passes.

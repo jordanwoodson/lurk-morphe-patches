@@ -207,6 +207,25 @@ provider acquisition is explicit and disposed interests prevent queued new reque
 native demand. Bounds include50 queued provider jobs,1000 row leases,16 rooms/stores,2000 snapshot
 emotes and8192 wide-emote ratios.
 
+Task7's measured landscape contract adds unique owners overlayHost4974, theatreStore4589,
+ClassicChatColumn4285 and ChatArea4587. The original floating host owns the genuine store but
+its ChatLine render path omits store/channel and projects away type. Preserve the original host
+type/key and original store-hook call/return; publish the genuine committed store with immutable
+numeric-destination/login authority through tree-local context. Match canonical message identity
+and protection fields before recovering row eligibility. Retired publishers must not clear a
+replacement; stale destinations fail synchronously before effects. No global render provenance,
+network-on-render or weakening of received/protected/action gates.
+
+Column appearance follows the actual Fragment/background/foreground tree and exact
+ClassicChatColumn View→ErrorBoundary→LatencyNode→ChatArea path. For nondefault25/50/75 opacity,
+use existing black background and alpha theme foreground, clearing only the two covering fills.
+Keep header/composer, text/emotes, player, gutters, actions and unrelated siblings stock. A stable
+React Provider carries opacity or neutral null; no native View is added. Neutral paths preserve
+child/native-style/action identity while installed wrappers intentionally retain the Provider;
+full configure-off restores original exports. Guard all owner capabilities/shapes before mutation.
+Floating one-chat opacity remains stock; these settings apply only to landscape-column-chat.
+The dated verification record supplies actual rendered controls and explicit fixture/source limits.
+
 Native overlay ownership uses the measured viewer feeder field, stream-model destination emission
 and onDestroyView. The observer branch's complete two-successor tail proves v2/v3 dead while preserving
 v0/v1/v6 and has no exception handlers; unsupported shapes fail patching. Same-feeder view recreation
