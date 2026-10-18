@@ -369,6 +369,9 @@ subscribes only while its store is mounted; history, deleted lines and rerenders
 All-off restores the original exports. `bin/test-twitch-chat-style` checks native styling on ART,
 including mentions with a fixture account; `bin/test-twitch-rn` checks native RN bridge ownership.
 
+The original RN live store is keyed by channel login. Keyword notification ownership preserves that
+bounded login exactly; provider row acquisition independently uses the numeric channel/source-room ID.
+
 The pinned live RN owners are discovered by unique exports in Hermes98, with an additional compiled
 bundle installed before consumers render. Both embedded and prepared main bundles retain
 `assets://index.android.bundle`; ReactInstance and native-module teardown retire their own state.

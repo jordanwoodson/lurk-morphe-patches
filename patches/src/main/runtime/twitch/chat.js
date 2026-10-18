@@ -284,7 +284,8 @@
         owners.react.useEffect(()=>{
             const id='store'+(++nextOwner), room=String(channel || '');
             const state=store && store.getState(), handlers=state && state._tmiClient && state._tmiClient.lineHandlers;
-            if (!(handlers instanceof Set) || !/^[0-9]{1,12}$/.test(room)) return;
+            // The original store is keyed by channel login; provider row leases separately use numeric IDs.
+            if (!(handlers instanceof Set) || !/^[a-z0-9_]{1,25}$/i.test(room)) return;
             let active=data({op:'watch',id,channel:room}).active===true;
             if (!active) return;
             const incoming=line=>{

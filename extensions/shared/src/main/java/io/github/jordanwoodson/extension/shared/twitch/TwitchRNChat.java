@@ -90,7 +90,8 @@ public final class TwitchRNChat {
 
     private static String watch(Object owner,JSONObject request) {
         String id=request.optString("id"),room=request.optString("channel");
-        if(id.isEmpty() || id.length()>64 || !room.matches("[0-9]{1,12}"))return "{}";
+        // Store identity is the original channel login, distinct from numeric provider room IDs.
+        if(id.isEmpty() || id.length()>64 || !room.matches("[a-zA-Z0-9_]{1,25}"))return "{}";
         Scope scope=OWNERS.computeIfAbsent(owner,key->new Scope());
         if(!scope.streams.containsKey(id) && scope.streams.size()>=16)return "{}";
         scope.streams.put(id,room);

@@ -73,9 +73,10 @@ assert.equal(global[1998063107]({...msg,hidden:true},{kind:'delete',targetMsgId:
 assert.equal(global[1998063107](msg,{kind:'clear'}),undefined);
 config={version:1,keywords:true,vibrate:true};
 const liveHandlers=new Set();state={lines:[],_tmiClient:{lineHandlers:liveHandlers}};
-effects=[];modules.store.useChatStore('42');
+effects=[];modules.store.useChatStore('theburntpeanut_247');
 const liveCleanups=effects.map(f=>f());
-assert.equal(liveHandlers.size,1,'committed store owns one live ingress listener');
+assert.equal(liveHandlers.size,1,'actual login-keyed store owns one live ingress listener');
+assert.equal(providerCalls.filter(q=>q.op==='watch').at(-1).channel,'theburntpeanut_247','store login remains exact owner identity');
 const emit=line=>liveHandlers.forEach(f=>f(line));
 providerCalls=[];emit({...msg,id:'live',body:'bright'});
 assert.equal(providerCalls.filter(q=>q.op==='live').length,1,'new live line reaches native keyword vibration gate');
@@ -84,6 +85,8 @@ assert.equal(providerCalls.filter(q=>q.op==='live').length,1,'history/deletion/p
 config={version:1,keywords:false,vibrate:true};emit({...msg,id:'off'});
 assert.equal(providerCalls.filter(q=>q.op==='live').length,1,'current opt-out blocks ingress');
 liveCleanups.forEach(f=>{if(f)f();});assert.equal(liveHandlers.size,0,'navigation removes old store listener');
+for(const channel of ['bad/room','x'.repeat(26),'']){effects=[];modules.store.useChatStore(channel);effects.forEach(f=>f());assert.equal(liveHandlers.size,0,'invalid store identity is rejected');}
+effects=[];modules.store.useChatStore('42');const numericCleanups=effects.map(f=>f());assert.equal(liveHandlers.size,1,'numeric store identity remains bounded and supported');numericCleanups.forEach(f=>{if(f)f();});
 config={version:1,providers:true};
 const providerMessage={...msg,id:'providers',body:'😀 Kappa',emotes:[],badges:{subscriber:'1'}};
 state={lines:[{key:'providers',line:providerMessage}]};
