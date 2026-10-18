@@ -66,10 +66,10 @@
 
 **Files:** Kick `tests/kick/HermesProbe.kt`, `tests/kick/test_chat_page.py`, new Kick native chat boundary probe; Rumble `tests/rumble/RefreshProbe.java` and any defect uncovered in the corresponding hooks.
 
-- [ ] Exercise actual patched countdown options through host waiting, Watch now, Cancel/close, switch off and a second host event.
-- [ ] Exercise production KickHttp/KickChat from full and info responses through URL config to page options; numeric/string IDs, malformed JSON/config, unknown channel, previews, independent toggles and response preservation.
-- [ ] Execute refresh callback with test player state, verify reload position and quality invariants; repeat on the phone with a recoverable real stream failure.
-- [ ] Fix any exposed implementation defects, run output checks and commit.
+- [x] Exercise actual patched countdown options through host waiting, Watch now, Cancel/close, switch off and a second host event.
+- [x] Exercise production KickHttp/KickChat from full and info responses through URL config to page options; numeric/string IDs, malformed JSON/config, unknown channel, previews, independent toggles and response preservation.
+- [x] Execute refresh callback with test player state, verify reload position and quality invariants. The installed-app recoverable real stream failure remains required under Task 7.
+- [x] Fix any exposed implementation defects, run output checks and commit.
 
 ### Task 5: Kick emote features and resilient delivery
 
