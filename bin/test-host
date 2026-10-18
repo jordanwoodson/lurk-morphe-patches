@@ -10,6 +10,8 @@ checks=(
     tests/twitch/test_async.py
     tests/twitch/test_vod_requests.py
     tests/twitch/test_privacy_consent.py
+    tests/twitch/test_providers.py
+    tests/twitch/test_rn_chat.py
     tests/shared/test_sleep_timer.py
     tests/rumble/test_state_transitions.py
     tests/kick/verify_player.py

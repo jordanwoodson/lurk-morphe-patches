@@ -1,0 +1,139 @@
+'use strict';
+const assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
+const source = process.argv[2];
+assert.ok(fs.existsSync(source), 'compiled RN chat consumer source exists');
+let config = {version:1}, rowProps, bodyProps, effects = [], state = {lines:[]}, providerCalls=[];
+const rowRef={current:0};let refreshes=0, catalogRevision=1, providerActive=true;const timers=new Map();let timerId=0;
+const tick=()=>{const pending=Array.from(timers.entries());timers.clear();for(const [,f] of pending)f();};
+const element = (type, props, ...children) => ({type, props:{...props, ...(children.length ? {children:children.length===1?children[0]:children}: {})}});
+const React = {createElement:element, cloneElement:(e,p)=>({ ...e,props:{...e.props,...p}}), isValidElement:e=>!!(e&&e.props),
+ useState:initial=>[initial,()=>{refreshes++;}], useRef:()=>rowRef, useMemo:f=>f(), useEffect:f=>effects.push(f), useContext:c=>c.value, createContext:value=>({value,Provider:'Provider'}), memo:f=>({type:f})};
+const modules = {
+  react:React, native:{Text:'Text',View:'View',StyleSheet:{flatten:s=>Object.assign({},...[s].flat(10).filter(Boolean))},
+   NativeModules:{TwitchRNFeedSettings:{getLurkChatData:raw=>{const q=JSON.parse(raw);providerCalls.push(q);return JSON.stringify(q.op==='revision'?{active:providerActive&&!!config.providers,token:String(catalogRevision)}:q.op==='catalog'?{generation:1,emotes:{Kappa:'lurk7s_abc'},badges:[{title:'he/him',url:'data:image/png;base64,AA=='}]}:(q.op==='acquire'||q.op==='watch')?{active:true}:q.op==='config'?config:q.op==='verdict'?{verdict:q.body.includes('hide')?2:q.body.includes('bright')?1:0}:{});}}}},
+  row:{ChatMessageRow:React.memo(p=>{rowProps=p;return element('Row',p);})},
+  body:{MessageBody:p=>{bodyProps=p;return element('Text',{style:{fontSize:14},children:element('Text',{style:{fontSize:14},children:p.body})});}},
+  time:{formatTimestamp:()=> '13:05',TimestampPart:p=>element('Text',{style:{fontSize:12},children:['13:05','\u00a0']})},
+  store:{useChatStore:()=>store,useChatSelector:(s,select)=>select(s.getState())},
+  badges:{badgeKey:(set,v)=>set+'/'+v},
+  column:{useColumnTrackWidth:(expanded,collapsed,wide)=>expanded?wide:collapsed},
+  stage:{useClassicStagePresentation:p=>({beforePlayerRegion:element('View',{children:[element('View',{style:{backgroundColor:'#000000'}}),element('View',{style:{backgroundColor:'#181818'}})]}),
+    afterPlayerRegion:element('View',{children:p.chat}),widths:[modules.column.useColumnTrackWidth(false,'66.6667%','50%',true),modules.column.useColumnTrackWidth(false,'33.3333%','50%',true)]})},
+  metrics:{ChatTextMetricsContext:{value:{xHeight:7,ascender:12,calibrationSettled:true}},ChatFontScaleContext:{value:1}}
+};
+const store = {getState:()=>state,subscribe:()=>()=>{}};
+const originals = Object.fromEntries(Object.entries(modules).map(([k,v])=>[k,{...v}]));
+const global = {console,Date,Map,Set,WeakMap,WeakSet,setTimeout:f=>{const id=++timerId;timers.set(id,f);return id;},clearTimeout:id=>timers.delete(id),__r:id=>modules[id],RN$registerCallableModule:()=>{}};
+global.globalThis=global;
+vm.runInNewContext(fs.readFileSync(source,'utf8'),global);
+const contract = Object.fromEntries(Object.keys(modules).map(k=>[k,k]));
+global.LurkTwitchChat.configure(JSON.stringify(contract));
+assert.equal(modules.row.ChatMessageRow,originals.row.ChatMessageRow,'all off preserves export identity');
+config={version:1,timestamps:true,clock:1,deleted:true,keywords:true,appearance:true,scale:115,plain:true,alternate:true};
+global.LurkTwitchChat.configure(JSON.stringify(contract));
+const render = p=>{const c=modules.row.ChatMessageRow;return (c.type||c)(p);};
+const msg = {id:'m1',type:'chat',user:'viewer',body:'normal',tmiSentTs:new Date(2026,0,1,13,5).valueOf()};
+render({message:msg,channelID:'42',chatStore:store});
+assert.equal(rowProps.showTimestamp,true);
+assert.equal(rowProps.message,msg);
+assert.equal(modules.time.formatTimestamp(msg.tmiSentTs,{}),'1:05');
+assert.equal(modules.time.TimestampPart({tmiSentTs:msg.tmiSentTs}).props.children[0],'1:05');
+render({message:{...msg,deleted:true},channelID:'42',chatStore:store});
+assert.equal(rowProps.message.deleted,true);
+assert.equal(rowProps.message.modActionType,'delete','received ordinary viewer line uses stock deleted presentation');
+const action=()=>{throw Error('retained message action must remain unavailable');};
+render({message:{...msg,deleted:true},channelID:'42',chatStore:store,openURL:action,onPressEmote:action,onReply:action,onOpenThread:action});
+for(const name of ['openURL','onPressEmote','onReply','onOpenThread']) assert.equal(rowProps[name],undefined,'retained row suppresses '+name);
+for(const protection of [{hidden:true},{isUnpublished:true},{maskedRanges:[{start:0,end:4}]},{lowTrust:true}]) {
+ const protectedMsg={...msg,...protection,deleted:true};
+ render({message:protectedMsg,channelID:'42',chatStore:store,maskedRanges:protection.maskedRanges});
+ assert.equal(rowProps.message,protectedMsg,'protected line remains stock');
+}
+const raw={...msg,id:'projected'};
+state={lines:[{key:'projected',line:raw}]};
+const projected={...raw};delete projected.type;
+render({message:projected,channelID:'42',chatStore:store});
+state={lines:[{key:'projected',line:{...raw,deleted:true}}]};
+render({message:{...projected,deleted:true},channelID:'42',chatStore:store});
+assert.equal(rowProps.message.modActionType,'delete','actual ChatLineComponent projection omits type');
+const unknown={...msg,id:'unknown',deleted:true};render({message:unknown,channelID:'42',chatStore:store});assert.equal(rowProps.message,unknown);
+render({message:{...msg,deleted:true},channelID:'different',chatStore:store});assert.equal(rowProps.message.modActionType,undefined,'proof is channel scoped');
+const hidden={key:'h',line:{...msg,id:'h',body:'hide me'}}, visible={key:'v',line:msg};
+state={lines:[hidden,visible],paused:false};
+assert.equal(modules.store.useChatStore('channel'),store,'original store identity');
+const lines=modules.store.useChatSelector(store,s=>s.lines);assert.deepEqual(Array.from(lines),[visible]);
+assert.equal(modules.store.useChatSelector(store,s=>s.lines),lines,'stable filtered snapshot');assert.equal(state.lines.length,2,'store not mutated');
+modules.body.MessageBody({body:'hello',action:true});assert.equal(bodyProps.action,false);
+const delayed={...msg,id:'delayed'};assert.equal(global[1998063107](delayed,{kind:'delete',targetMsgId:'delayed'}),false);assert.equal(delayed.deleted,true);
+const unrelated={...delayed};render({message:unrelated,channelID:'other-room',chatStore:store});
+assert.equal(rowProps.message,unrelated,'delayed proof cannot cross stores through matching IDs/content');
+render({message:delayed,channelID:'42',chatStore:store});assert.equal(rowProps.message.modActionType,'delete','original delayed object retains presentation');
+for(const kind of ['timeout','ban']) {const line={...msg,id:kind};assert.equal(global[1998063107](line,{kind,userLogin:'viewer'}),false);assert.equal(line.deleted,true);}
+assert.equal(global[1998063107]({...msg,hidden:true},{kind:'delete',targetMsgId:'m1'}),undefined);
+assert.equal(global[1998063107](msg,{kind:'clear'}),undefined);
+config={version:1,keywords:true,vibrate:true};
+const liveHandlers=new Set();state={lines:[],_tmiClient:{lineHandlers:liveHandlers}};
+effects=[];modules.store.useChatStore('42');
+const liveCleanups=effects.map(f=>f());
+assert.equal(liveHandlers.size,1,'committed store owns one live ingress listener');
+const emit=line=>liveHandlers.forEach(f=>f(line));
+providerCalls=[];emit({...msg,id:'live',body:'bright'});
+assert.equal(providerCalls.filter(q=>q.op==='live').length,1,'new live line reaches native keyword vibration gate');
+for(const extra of [{isHistorical:true},{deleted:true},{hidden:true},{isUnpublished:true},{maskedRanges:[1]}])emit({...msg,...extra,id:'protected'});
+assert.equal(providerCalls.filter(q=>q.op==='live').length,1,'history/deletion/protected events never notify');
+config={version:1,keywords:false,vibrate:true};emit({...msg,id:'off'});
+assert.equal(providerCalls.filter(q=>q.op==='live').length,1,'current opt-out blocks ingress');
+liveCleanups.forEach(f=>{if(f)f();});assert.equal(liveHandlers.size,0,'navigation removes old store listener');
+config={version:1,providers:true};
+const providerMessage={...msg,id:'providers',body:'😀 Kappa',emotes:[],badges:{subscriber:'1'}};
+state={lines:[{key:'providers',line:providerMessage}]};
+effects=[];render({message:providerMessage,channelID:'42',chatStore:store,badgeRegistry:{'subscriber/1':{title:'Subscriber'}}});
+const beforeRefresh=refreshes;
+const cleanups=effects.map(f=>f());
+assert.equal(refreshes,beforeRefresh+1,'successful committed provider acquisition refreshes cached row presentation');
+assert.ok(providerCalls.some(q=>q.op==='acquire'&&q.channel==='42'),'committed row explicitly acquires provider demand');
+render({message:providerMessage,channelID:'42',chatStore:store,badgeRegistry:{'subscriber/1':{title:'Subscriber'}}});
+assert.equal(rowProps.message.emotes[0].start,2,'history emote offsets use Unicode code points');
+assert.equal(rowProps.message.emotes[0].end,6);
+assert.equal(rowProps.message.badges.subscriber,'1');
+assert.ok(Object.values(rowProps.badgeRegistry).some(b=>b.title==='he/him'),'cached pronoun/badge registry reaches actual row');
+const stockEmote={...providerMessage,emotes:[{id:'native',start:2,end:6}]};
+render({message:stockEmote,channelID:'42',chatStore:store,badgeRegistry:{}});
+assert.equal(rowProps.message.emotes,stockEmote.emotes,'native emote keeps precedence and array identity');
+const nativeBridge=modules.native.NativeModules.TwitchRNFeedSettings.getLurkChatData;
+modules.native.NativeModules.TwitchRNFeedSettings.getLurkChatData=raw=>JSON.parse(raw).op==='catalog'?
+ JSON.stringify({generation:2,emotes:{Kappa:'lurk7a_a',BTTV:'lurkbs_b',FFZ:'lurkfs_c'}}):nativeBridge(raw);
+render({message:{...providerMessage,body:'😀 Kappa BTTV FFZ Kappa!'},channelID:'42',chatStore:store,badgeRegistry:{}});
+assert.deepEqual(Array.from(rowProps.message.emotes,e=>e.id),['lurk7a_a','lurkbs_b','lurkfs_c'],'all providers and animation preserve whole-token boundaries');
+modules.native.NativeModules.TwitchRNFeedSettings.getLurkChatData=nativeBridge;
+cleanups.forEach(f=>{if(f)f();});assert.ok(providerCalls.some(q=>q.op==='release'),'unmount releases row demand');
+config={version:1,appearance:true,alternate:true,width:25,opacity:50};
+const first=render({message:{...msg,id:'stripe1'},channelID:'stripes',chatStore:store});
+const second=render({message:{...msg,id:'stripe2'},channelID:'stripes',chatStore:store});
+assert.equal(React.isValidElement(first),true);
+assert.equal(modules.native.StyleSheet.flatten(second.props.style).backgroundColor,'rgba(128,128,128,0.0784313725490196)','alternate row uses native shade');
+assert.equal(modules.native.StyleSheet.flatten(render({message:{...msg,id:'stripe2'},channelID:'stripes',chatStore:store}).props.style).backgroundColor,
+ modules.native.StyleSheet.flatten(second.props.style).backgroundColor,'stripe remains stable on rerender');
+const stage=modules.stage.useClassicStagePresentation({mode:'landscape-column-chat',chat:'chat'});
+assert.deepEqual(Array.from(stage.widths),['75%','25%'],'landscape player and chat widths stay complementary');
+assert.equal(modules.native.StyleSheet.flatten(stage.beforePlayerRegion.props.children[1].props.style).backgroundColor,'rgba(24,24,24,0.5)','only background alpha changes');
+const portrait=modules.stage.useClassicStagePresentation({mode:'portrait',chat:'chat'});
+assert.deepEqual(Array.from(portrait.widths),['66.6667%','33.3333%']);
+config={version:1,providers:true};providerActive=true;
+const mounted=[];
+for(let i=0;i<2;i++) {rowRef.current=null;effects=[];render({message:{...msg,id:'poll'+i},channelID:'42',chatStore:store});mounted.push(...effects.map(f=>f()));}
+assert.equal(timers.size,1,'multiple provider rows share one runtime timer');
+providerCalls=[];tick();const primedRefreshes=refreshes;
+providerCalls=[];tick();assert.equal(refreshes,primedRefreshes,'unchanged token never refreshes rows');
+assert.deepEqual(providerCalls.map(q=>q.op),['revision'],'unchanged poll is one small native call, no catalogs or acquisition');
+catalogRevision++;tick();assert.equal(refreshes,primedRefreshes+2,'late provider completion refreshes both committed rows');
+mounted.forEach(f=>{if(f)f();});assert.equal(timers.size,0,'last release clears runtime poll');
+rowRef.current=null;effects=[];render({message:msg,channelID:'42',chatStore:store});const disposed=effects.map(f=>f());
+providerActive=false;tick();assert.equal(timers.size,0,'native runtime disposal stops polling');disposed.forEach(f=>{if(f)f();});
+providerActive=true;rowRef.current=null;effects=[];render({message:msg,channelID:'42',chatStore:store});const optedOut=effects.map(f=>f());
+config={version:1,providers:false};tick();assert.equal(timers.size,0,'provider opt-out stops polling');optedOut.forEach(f=>{if(f)f();});
+config={version:1};
+global.LurkTwitchChat.configure(JSON.stringify(contract));
+for(const k of ['row','body','time','store','stage','column']) for(const n of Object.keys(originals[k])) assert.equal(modules[k][n],originals[k][n],'off restores '+n);
+assert.equal(global[1998063107](msg,{kind:'delete',targetMsgId:'m1'}),undefined,'off predicate delegates to stock');
+console.log('PASS RN timestamps, received-only deleted presentation, protected rows, history selector identity, plain action and delayed marking');

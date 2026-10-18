@@ -29,10 +29,10 @@ val chatAppearancePatch = bytecodePatch(
     name = "Chat appearance",
     description = "Adds chat look settings: text size, alternating row backgrounds, plain /me messages, and the " +
         "width and background opacity of the landscape chat panel. Each keeps Twitch's look until changed in Lurk " +
-        "settings. Native live chat, chat history and VOD chat replay; not React Native chat.",
+        "settings. Native and React Native live chat and history, plus native VOD chat replay.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
-    dependsOn(twitchSettingsPatch)
+    dependsOn(twitchRNChatPatch, twitchSettingsPatch)
     execute {
         styleLines()
         numberLiveMessages()

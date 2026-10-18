@@ -1,5 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.badges
 
+import io.github.jordanwoodson.patches.twitch.chat.twitchRNChatPatch
+
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -21,13 +23,13 @@ private const val BADGES = "Lio/github/jordanwoodson/extension/shared/twitch/Twi
 val thirdPartyBadgesPatch = bytecodePatch(
     name = "Third-party badges",
     description = "Adds switches that show FrankerFaceZ and Chatterino badges and pronouns.alejo.io pronouns next " +
-        "to chatters' names in native chat. Each switch is off until turned on in Lurk settings. The badge " +
+        "to chatters' names in native and React Native chat. Each switch is off until turned on in Lurk settings. The badge " +
         "switches download that service's public list of all badge holders (api.frankerfacez.com, " +
         "api.chatterino.com) about once an hour and check it on the phone. The pronouns switch sends the " +
         "username of each chatter whose message you see to pronouns.alejo.io. 7TV badges are not included.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
-    dependsOn(twitchSettingsPatch, chatImageSizePatch)
+    dependsOn(twitchRNChatPatch, twitchSettingsPatch, chatImageSizePatch)
     execute {
         val spanGroup = SpanGroupFingerprint.twitchMatch("chat line span group").classDef.type
         val user = ChatMessageUserFingerprint.twitchMatch("chat message user").classDef.type

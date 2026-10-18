@@ -19,6 +19,7 @@ import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.HermesBundle
 import io.github.jordanwoodson.patches.twitch.shared.hex
+import io.github.jordanwoodson.patches.twitch.shared.installDelayedPredicate
 import io.github.jordanwoodson.patches.twitch.shared.twitchHermes
 import io.github.jordanwoodson.patches.twitch.shared.twitchHermesPatch
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
@@ -36,15 +37,18 @@ val showDeletedMessagesPatch = bytecodePatch(
         "the messages when a moderator clears the whole chat.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
-    dependsOn(twitchSettingsPatch, twitchHermesPatch)
+    dependsOn(twitchRNChatPatch, twitchSettingsPatch, twitchHermesPatch)
     execute {
         keepMessagesDeletedBeforeShown()
         keepMessagesDeletedAfterShown()
         ignoreChatClears()
         twitchHermes.ignoreClearChatEvents()
+        val predicate = object {}.javaClass.classLoader.getResourceAsStream("twitch/delayed.hbc")?.use { it.readBytes() }
+            ?: throw PatchException("Twitch: missing compiled delayed predicate; run the pinned compiler task")
+        twitchHermes.installDelayedPredicate(predicate)
         twitchSettings.add(
             SwitchSetting(SHOW_DELETED, "Show deleted messages",
-                "Keep deleted messages, struck through, instead of \"message deleted\".", Section.CHAT),
+                "Keep deleted messages, struck through, instead of \"message deleted\".", Section.CHAT, restart = true),
             SwitchSetting(IGNORE_CLEARS, "Ignore chat clears",
                 "Keep the messages when a moderator clears the chat. Timeouts and bans still apply.",
                 Section.CHAT, restart = true),

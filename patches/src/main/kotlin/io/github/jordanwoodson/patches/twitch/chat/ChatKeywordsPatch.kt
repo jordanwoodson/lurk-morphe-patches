@@ -26,11 +26,11 @@ val chatKeywordsPatch = bytecodePatch(
     name = "Chat keywords",
     description = "Highlights chat messages that mention you or contain your highlight words with a tinted " +
         "background, optionally with a vibration, and hides messages with blocked words or from blocked users. " +
-        "Mentions are on by default; the word and user lists start empty and are set in Lurk settings. Native " +
-        "live chat, chat history and VOD chat replay; not React Native chat.",
+        "Mentions are on by default; the word and user lists start empty and are set in Lurk settings. Native and React Native " +
+        "live chat and history, plus native VOD chat replay.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
-    dependsOn(twitchSettingsPatch)
+    dependsOn(twitchRNChatPatch, twitchSettingsPatch)
     execute {
         markLines()
         filterLiveMessages()

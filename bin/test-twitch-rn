@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Run the actual RN JSON/settings bridge on ART, with isolated preferences.
+source "$(dirname "$0")/lib/common.sh"
+[[ $# == 1 && -f "$1" ]] || die "usage: bash bin/test-twitch-rn <patched.apk>"
+serial=${ANDROID_SERIAL:-emulator-5580}
+out="$WORK/tests/twitch-rn"
+remote=/data/local/tmp/morphe-twitch-rn-test
+mkdir -p "$out/classes" "$out/dex" "$WORK/tmp"
+export TMPDIR="$WORK/tmp"
+javac --release 17 -classpath "$ANDROID_HOME/platforms/android-36/android.jar" \
+    -d "$out/classes" "$ROOT/tests/twitch/RNBridgeProbe.java"
+"$(build_tool d8)" --min-api 29 --lib "$ANDROID_HOME/platforms/android-36/android.jar" \
+    --output "$out/dex" "$out/classes/"*.class
+(cd "$out/dex" && jar cf "$out/probe.jar" classes.dex)
+adb -s "$serial" shell mkdir -p "$remote"
+trap 'adb -s "$serial" shell rm -rf "$remote" >/dev/null 2>&1 || true' EXIT
+adb -s "$serial" push "$1" "$remote/app.apk" >/dev/null
+adb -s "$serial" push "$out/probe.jar" "$remote/probe.jar" >/dev/null
+adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin RNBridgeProbe $remote/app.apk $remote/cache"
