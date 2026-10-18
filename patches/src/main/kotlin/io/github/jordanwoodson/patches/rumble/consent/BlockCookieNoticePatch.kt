@@ -61,8 +61,9 @@ val blockCookieNoticePatch = bytecodePatch(
             SwitchSetting(
                 KEY,
                 "Block cookie notice",
-                "No Ketch consent notice and no consent recorded. Push notifications need consent.",
+                "After restarting: no Ketch consent notice and no consent recorded. Push notifications need consent.",
                 Section.PRIVACY,
+                restart = true,
             ),
         )
     }

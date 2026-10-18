@@ -120,6 +120,11 @@ Crashlytics, Performance and Facebook switch their persisted collection off agai
 Airship are never started. The cached consent strings still go into ad requests, which Block ads stops.
 Turning the switch off uses the cached consent again.
 
+The switch offers a restart after either toggle. It blocks future Ketch calls immediately, but cannot
+undo SDK initialization or replace consent already applied to the running process. Restart to apply the
+startup consent path consistently; turning it off also needs a restart to restore that path. The
+consent and push consequences described below require real-app validation, beyond helper checks.
+
 Validated on 2026-10-14 on the Android 16 emulator, fresh data each time, location resolved by Ketch as
 US-MO:
 
@@ -150,7 +155,7 @@ choices.
 | Switch | Key | Takes effect |
 |---|---|---|
 | Block ads | `block_ads` | at the next ad request |
-| Block cookie notice | `block_cookie_notice` | at the next resume |
+| Block cookie notice | `block_cookie_notice` | after a restart |
 | Clean share links | `clean_share_links` | at the next share |
 | Disable analytics, Keep watch progress | `disable_analytics`, `keep_watch_progress` | at the next upload |
 | Hide Premium upsells | `hide_premium_upsells` | when the screen is drawn again |
@@ -170,7 +175,7 @@ choices.
 | Highlight words, Blocked words, Blocked users (text) | `chat_highlight_words`, `chat_blocked_words`, `chat_blocked_users` | at the next chat messages |
 | Don't save searches | `no_search_history` | at the next search |
 | Resume videos when signed out | `resume_signed_out` | at the next video |
-| Remember playback speed | `remember_speed` | at the next pick |
+| Remember playback speed | `remember_speed` | at the next speed read or pick |
 | Fill screen | `fill_screen` | when the player is laid out again |
 | Keep playing during other sounds (a choice; "Pause" is 0) | `audio_focus` | at the next interruption |
 | Keep screen on while paused | `keep_screen_on_paused` | at the next pause |
@@ -548,8 +553,10 @@ A Kotlin object keeps the picked speed per scope (video page, other) in memory; 
 found through their `videoScope`/`speed` null checks, and the player service resets every scope to 1x. The
 player takes the stored speed unless the video is live without DVR. While `remember_speed` is on, a pick is
 also kept by name in the SharedPreferences file `lurk_rumble` (Lurk's own state, not the settings), and the
-getter returns it for every scope, also after a restart. While off nothing is kept or returned, and turning it
-on starts from the next pick.
+getter returns it for every scope, also after a restart. While off, picks don't replace Lurk's saved speed
+and the getter uses Rumble's own value. The saved value is retained: turning the switch on again restores
+the last speed picked while it was enabled, until another enabled pick replaces it. With no saved value,
+Rumble's own speed applies until that first enabled pick.
 
 ### Fill screen
 

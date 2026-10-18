@@ -34,6 +34,14 @@ public final class PlayerProbe {
         resetAll.invoke(store);
         ProbeSupport.check(get.invoke(store, scope) == fast, "switch on: the picked 1.5x survives the reset");
         ProbeSupport.check(get.invoke(store, Enum.valueOf(scopeType, "Other")) == fast, "and applies to every scope");
+        ProbeSupport.setting("remember_speed", "false");
+        set.invoke(store, scope, normal);
+        resetAll.invoke(store);
+        ProbeSupport.check(get.invoke(store, scope) == normal, "off: stock reset and getter return 1x");
+        ProbeSupport.setting("remember_speed", "true");
+        ProbeSupport.check(get.invoke(store, scope) == fast, "on again restores the previous saved speed");
+        set.invoke(store, scope, normal);
+        ProbeSupport.check(get.invoke(store, scope) == normal, "an enabled pick replaces the saved speed");
 
         Method ignore = Class.forName(PLAYBACK).getMethod("ignoreFocusLoss", int.class);
         ProbeSupport.check(!(boolean) ignore.invoke(null, -2), "Rumble's default pauses on a transient loss");

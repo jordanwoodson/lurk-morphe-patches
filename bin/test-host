@@ -8,6 +8,8 @@ checks=(
     tests/twitch/verify_interface.py
     tests/twitch/verify_playback_links.py
     tests/twitch/test_privacy_consent.py
+    tests/shared/test_sleep_timer.py
+    tests/rumble/test_state_transitions.py
     tests/kick/verify_player.py
     tests/kick/verify_privacy.py
     tests/kick/test_chat_page.py

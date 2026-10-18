@@ -33,7 +33,7 @@ public final class KickPlayer {
     private static volatile WeakReference<View> lastView = new WeakReference<>(null);
 
     static {
-        SleepTimer.setPauseAction(KickPlayer::pauseAll);
+        SleepTimer.setExpiryAction(KickPlayer::pauseAll);
     }
 
     private KickPlayer() {
@@ -114,7 +114,7 @@ public final class KickPlayer {
      * Pauses through Kick's player view, which also updates its audio service and tells React Native, then
      * pauses any player that view didn't stop a few seconds later.
      */
-    private static void pauseAll() {
+    private static void pauseAll(SleepTimer.Expiry expiry) {
         View view = lastView.get();
         if (view != null) {
             try {
@@ -123,18 +123,7 @@ public final class KickPlayer {
                 Logger.d("sleep timer: " + e);
             }
         }
-        MAIN.postDelayed(KickPlayer::pauseLeftovers, 3000);
-    }
-
-    private static void pauseLeftovers() {
-        for (Object player : SleepTimer.started()) {
-            try {
-                player.getClass().getMethod("pause").invoke(player);
-                Logger.d("sleep timer: paused a player Kick's view missed");
-            } catch (Throwable t) {
-                Logger.d("sleep timer: " + t);
-            }
-        }
+        MAIN.postDelayed(() -> expiry.pauseLeftovers("Kick's view"), 3000);
     }
 
     // ---------------------------------------------------------------------------------------------

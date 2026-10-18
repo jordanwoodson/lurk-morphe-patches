@@ -18,7 +18,8 @@ failures and exits nonzero if any check fails. Both PR builds and release jobs r
 or publishing. Add new standalone APK-free checks to the list in `bin/test-host`.
 
 The host suite includes the Twitch interface, playback/link and privacy-consent JVM helpers, the
-Kick player and privacy JVM helpers, the offline Kick chat-page browser test, and `test_release.py`.
+Kick player and privacy JVM helpers, deterministic shared sleep-timer regressions, Rumble identity and
+saved-speed transitions, the offline Kick chat-page browser test, and `test_release.py`.
 CI installs the pinned dependency and verifies the hosted Chrome binary before running the suite;
 missing dependencies fail the checks. The interface probe exercises startup
 destinations, Home and profile tabs, explicit Clips routing, and disabled settings. Release tests use
@@ -26,6 +27,13 @@ temporary local Git repositories and in-memory publication state: they cover mis
 stable backmerge retries, advanced dev, checkout restoration, output preservation and host gate failure
 propagation without calling GitHub or building a bundle. Scratch fixtures are removed on Linux and
 retained on macOS.
+
+`tests/shared/test_sleep_timer.py` compiles the complete production SleepTimer, KickPlayer and
+TwitchPlayer classes against platform stubs and drives their real scheduled callbacks with a virtual
+clock. It covers new players after expiry, resuming the same player, missed old players, stop/release,
+repeated expiry and disabling a pending fallback. `tests/rumble/test_state_transitions.py` runs the
+production chat filter and Rumble helpers for empty and keywords-off joins, account changes, sign-out
+and remember-speed on/off/on. Neither needs an APK, SDK or device.
 
 The release script also runs the selected source's `bin/test-host` immediately before building a fresh
 release or rebuilding an older release for recovery. A missing source gate or a failed check stops

@@ -47,7 +47,8 @@ STUBS = {
     "io/github/jordanwoodson/extension/shared/SleepTimer.java": """
         package io.github.jordanwoodson.extension.shared;
         public class SleepTimer {
-            public static void setPauseAction(Runnable action) { }
+            public static final class Expiry { public void pauseLeftovers(String platform) { } }
+            public static void setExpiryAction(java.util.function.Consumer<Expiry> action) { }
             public static void onPlay(Object player) { }
             public static void onStop(Object player) { }
             public static java.util.List<Object> started() { return new java.util.ArrayList<>(); }
