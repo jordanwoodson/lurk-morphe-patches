@@ -2,7 +2,7 @@
 (function (global) {
     'use strict';
     if (global.LurkTwitchChat !== undefined || global[1998063107] !== undefined) return;
-    let owners, original, config = {}, installed = false;
+    let owners, original, overlayContext, columnContext, config = {}, installed = false;
     const received = new Map(), delayed = new Map(), snapshots = new WeakMap(), rowIndexes = new WeakMap();
     const LIMIT = 1000, catalogs = new Map(), stripes = new Map();
     let nextOwner = 0, columnWidth = 0;
@@ -96,6 +96,11 @@
     function originalLine(props) {
         const message = props.message;
         if (!message || message.type !== undefined) return message;
+        return canonicalLine(props);
+    }
+    function canonicalLine(props) {
+        const message=props.message;
+        if(!message)return undefined;
         // ChatLineComponent projects the row payload and omits its type. Recover only a matching
         // original store line; extension/callout rows without a store do not gain retention privileges.
         const state = props.chatStore && props.chatStore.getState();
@@ -109,6 +114,41 @@
         }
         const line = index.get(message.id);
         return line && line.body === message.body && line.user === message.user ? line : undefined;
+    }
+
+    // The floating host omits store/channel in ChatLine's projected row. Scope authority to this
+    // React tree and publish only the genuine original hook result after commit, never during render.
+    function overlayHost(props) {
+        const R=owners.react, channel=String(props.channelId || ''), login=String(props.channelLogin || '');
+        const authority=R.useMemo(()=>({channel,login}),[channel,login]);
+        const committed=R.useRef(null), pair=R.useState(null), binding=pair[0], setBinding=pair[1];
+        R.useLayoutEffect(()=>{committed.current=authority;return ()=>{if(committed.current===authority)committed.current=null;};},[authority]);
+        const publish=R.useMemo(()=>({
+            attach(store,token) {if(committed.current===authority)setBinding({authority,store,token});},
+            detach(token) {if(committed.current===authority)setBinding(old=>old && old.token===token ? null : old);}
+        }),[authority]);
+        const valid=/^[0-9]{1,12}$/.test(channel) && /^[a-z0-9_]{1,25}$/i.test(login);
+        const value=R.useMemo(()=>valid ? {authority,publish,store:binding && binding.authority===authority ? binding.store : null} : null,[authority,publish,binding,valid]);
+        // Preserve the original host component identity and all drag/collapse/scroll state.
+        return R.createElement(overlayContext.Provider,{value},R.createElement(original.overlayHost,props));
+    }
+    function theatreStore(props) {
+        const store=original.theatreStore(props), R=owners.react, context=R.useContext(overlayContext);
+        const authority=context && context.authority, publish=context && context.publish;
+        R.useEffect(()=>{
+            if(!authority || authority.login!==String(props.channelLogin || '') || !store || typeof store.getState!=='function')return;
+            const token={};publish.attach(store,token);return ()=>publish.detach(token);
+        },[store,props.channelLogin,authority,publish]);
+        return store;
+    }
+    function overlayRow(props,context) {
+        if(!context || !context.store || (props.chatStore && props.chatStore!==context.store) ||
+            (props.channelID!=null && String(props.channelID)!==context.authority.channel))return undefined;
+        const next=Object.assign({},props,{chatStore:context.store,channelID:context.authority.channel});
+        const line=canonicalLine(next), message=props.message;
+        // A stale projected payload cannot borrow the current tree's canonical line/ownership.
+        if(!line || !message || ['id','body','user','userId','sourceRoomID','deleted','hidden','isUnpublished'].some(name=>line[name]!==message[name]))return undefined;
+        return next;
     }
 
     function providers(props, origin) {
@@ -198,27 +238,75 @@
         columnWidth=active && [20,25,35,40].indexOf(config.width)>=0 ? config.width : 0;
         let result;
         try {result=original.stage(props);} finally {columnWidth=old;}
-        if(!active || [25,50,75].indexOf(config.opacity)<0) return result;
-        const root=result.beforePlayerRegion, R=owners.react;
-        if(!R.isValidElement(root) || !Array.isArray(root.props.children) || root.props.children.length!==2) return result;
-        const chat=root.props.children[1];
-        if(!R.isValidElement(chat))return result;
-        const style=owners.native.StyleSheet.flatten(chat.props.style)||{}, color=style.backgroundColor;
-        let rgb;
-        if(typeof color==='string' && /^#[0-9a-f]{6}$/i.test(color))rgb=parseInt(color.slice(1),16);
-        else if(typeof owners.native.processColor==='function')rgb=owners.native.processColor(color);
-        if(typeof rgb!=='number')return result;
-        const backgroundColor='rgba('+((rgb>>>16)&255)+','+((rgb>>>8)&255)+','+(rgb&255)+','+(config.opacity/100)+')';
-        const children=root.props.children.slice();
-        children[1]=R.cloneElement(chat,{style:[chat.props.style,{backgroundColor}]});
-        return Object.assign({},result,{beforePlayerRegion:R.cloneElement(root,{children})});
+        const R=owners.react, animated=owners.native.Animated && owners.native.Animated.View;
+        const after=result.afterPlayerRegion;
+        // Pinned foreground: Fragment[Animated.View[header?,chat View], four siblings].
+        if(!R.isValidElement(after) || after.type!==R.Fragment || !Array.isArray(after.props.children) || after.props.children.length!==5)return result;
+        const foreground=after.props.children[0];
+        if(!animated || !R.isValidElement(foreground) || foreground.type!==animated ||
+            !Array.isArray(foreground.props.children) || foreground.props.children.length!==2)return result;
+        const header=foreground.props.children[0], content=foreground.props.children[1];
+        if((header!=null && (!R.isValidElement(header) || header.type!==owners.native.View)) ||
+            !R.isValidElement(content) || content.type!==owners.native.View)return result;
+        const foregroundStyle=owners.native.StyleSheet.flatten(foreground.props.style)||{}, contentStyle=owners.native.StyleSheet.flatten(content.props.style)||{};
+        if(foregroundStyle.flexDirection!=='column' || foregroundStyle.overflow!=='hidden' ||
+            contentStyle.flex!==1 || contentStyle.minHeight!==0 || contentStyle.overflow!=='hidden')return result;
+        const opacity=active && [25,50,75].indexOf(config.opacity)>=0 ? config.opacity : null;
+        let root=result.beforePlayerRegion, color;
+        if(opacity!==null) {
+            // Pinned stage shape: Fragment[column background View[player,chat], optional extra].
+            if(!R.isValidElement(root) || root.type!==R.Fragment || !Array.isArray(root.props.children) || root.props.children.length!==2)return result;
+            const background=root.props.children[0];
+            if(!R.isValidElement(background) || background.type!==owners.native.View || background.props.pointerEvents!=='none' ||
+                background.props.accessibilityElementsHidden!==true || background.props.importantForAccessibility!=='no-hide-descendants' ||
+                !Array.isArray(background.props.children) || background.props.children.length!==2)return result;
+            const player=background.props.children[0],chat=background.props.children[1];
+            if(!R.isValidElement(player) || player.type!==animated || !R.isValidElement(chat) || chat.type!==animated || chat.props.children!=null)return result;
+            const style=owners.native.StyleSheet.flatten(chat.props.style)||{}, bodyColor=style.backgroundColor;
+            if(bodyColor!==foregroundStyle.backgroundColor)return result;
+            let rgb;
+            if(typeof bodyColor==='string' && /^#[0-9a-f]{6}$/i.test(bodyColor))rgb=parseInt(bodyColor.slice(1),16);
+            else if(typeof owners.native.processColor==='function')rgb=owners.native.processColor(bodyColor);
+            if(typeof rgb!=='number')return result;
+            color='rgba('+((rgb>>>16)&255)+','+((rgb>>>8)&255)+','+(rgb&255)+','+(opacity/100)+')';
+            const children=background.props.children.slice();
+            children[1]=R.cloneElement(chat,{style:[chat.props.style,{backgroundColor:'#000000'}]});
+            const regions=root.props.children.slice();regions[0]=R.cloneElement(background,{children});
+            root=R.cloneElement(root,{children:regions});
+        }
+        // Stable neutral Provider preserves chat state across opacity/default/exclusion changes.
+        const children=foreground.props.children.slice();
+        children[1]=R.cloneElement(content,{children:R.createElement(columnContext.Provider,{value:opacity},content.props.children)});
+        const regions=after.props.children.slice();
+        regions[0]=R.cloneElement(foreground,{children,...(opacity===null ? {} : {style:[foreground.props.style,{backgroundColor:color}]})});
+        return Object.assign({},result,{beforePlayerRegion:root,afterPlayerRegion:R.cloneElement(after,{children:regions})});
+    }
+    function classicColumn(props) {
+        const R=owners.react, opacity=R.useContext(columnContext), result=original.classicColumn(props);
+        if([25,50,75].indexOf(opacity)<0 || props.layoutMode!=='landscape-column-chat')return result;
+        // Original column owns these covering fills; fallback/composer/header surfaces stay stock.
+        if(!R.isValidElement(result) || result.type!==owners.native.View || result.props.testID!=='theatre-chat')return result;
+        const boundary=result.props.children;
+        if(!R.isValidElement(boundary) || boundary.props.name!=='RightColumn' || boundary.props.level!=='error' || typeof boundary.props.renderFallback!=='function')return result;
+        const latency=boundary.props.children;
+        if(!R.isValidElement(latency) || latency.props.name!=='TheaterChatArea' || latency.props.reportOnMount!==true)return result;
+        const area=latency.props.children;
+        if(!R.isValidElement(area) || area.type!==owners.chatArea.ChatArea)return result;
+        const rootStyle=owners.native.StyleSheet.flatten(result.props.style)||{}, areaStyle=owners.native.StyleSheet.flatten(area.props.style)||{};
+        if(rootStyle.flex!==1 || areaStyle.flex!==1 || typeof rootStyle.backgroundColor!=='string' || rootStyle.backgroundColor!==areaStyle.backgroundColor)return result;
+        const next=R.cloneElement(area,{style:[area.props.style,{backgroundColor:'transparent'}]});
+        return R.cloneElement(result,{style:[result.props.style,{backgroundColor:'transparent'}],children:
+            R.cloneElement(boundary,{children:R.cloneElement(latency,{children:next})})});
     }
 
     function row(props) {
         config = settings();
-        const R = owners.react, metrics = R.useContext(owners.metrics.ChatTextMetricsContext);
+        const R = owners.react;
+        const context=R.useContext(overlayContext), scoped=context && overlayRow(props,context);
+        if(scoped)props=scoped;
+        const metrics = R.useContext(owners.metrics.ChatTextMetricsContext);
         const fontScale = R.useContext(owners.metrics.ChatFontScaleContext);
-        const line = props.message, origin = originalLine(props), channel = String(props.channelID || '');
+        const line = props.message, origin = context ? scoped && canonicalLine(props) : originalLine(props), channel = String(props.channelID || '');
         let next = props;
         const changes = providers(props,origin);
         if (config.timestamps) { changes.showTimestamp = true; changes.hideTimestamp = false; }
@@ -308,23 +396,31 @@
         owners.time.TimestampPart=original.timestamp;owners.time.formatTimestamp=original.format;
         owners.store.useChatSelector=original.selector;owners.store.useChatStore=original.store;
         owners.stage.useClassicStagePresentation=original.stage;owners.column.useColumnTrackWidth=original.column;
+        owners.classicColumn.ClassicChatColumn=original.classicColumn;
+        owners.overlayHost.OneChatOverlayHost=original.overlayHost;owners.theatreStore.useTheatreChatStore=original.theatreStore;
         installed=false;received.clear();delayed.clear();catalogs.clear();stripes.clear();
     }
     const api = {configure(raw) {
         const contract = JSON.parse(raw);
         if (!owners) {
             const found = {};
-            for (const key of ['react','native','row','body','time','store','metrics','badges','stage','column']) found[key] = global.__r(contract[key]);
-            for (const pair of [['row','ChatMessageRow'],['body','MessageBody'],['time','TimestampPart'],['time','formatTimestamp'],['store','useChatStore'],['store','useChatSelector'],['stage','useClassicStagePresentation'],['column','useColumnTrackWidth']]) {
+            for (const key of ['react','native','row','body','time','store','metrics','badges','stage','column','overlayHost','theatreStore','classicColumn','chatArea']) found[key] = global.__r(contract[key]);
+            for (const pair of [['row','ChatMessageRow'],['body','MessageBody'],['time','TimestampPart'],['time','formatTimestamp'],['store','useChatStore'],['store','useChatSelector'],['stage','useClassicStagePresentation'],['column','useColumnTrackWidth'],['overlayHost','OneChatOverlayHost'],['theatreStore','useTheatreChatStore'],['classicColumn','ClassicChatColumn']]) {
                 const descriptor = Object.getOwnPropertyDescriptor(found[pair[0]],pair[1]);
                 if (!descriptor || !descriptor.writable || !descriptor.value) throw Error('Twitch chat owner contract: '+pair[1]);
             }
             if (typeof found.native.NativeModules.TwitchRNFeedSettings.getLurkChatData !== 'function') throw Error('Twitch chat native contract');
             if (typeof found.badges.badgeKey !== 'function') throw Error('Twitch chat badge contract');
+            for(const name of ['createContext','createElement','useContext','useMemo','useRef','useState','useEffect','useLayoutEffect'])
+                if(typeof found.react[name]!=='function')throw Error('Twitch chat React contract: '+name);
+            if(typeof found.overlayHost.OneChatOverlayHost!=='function' || typeof found.theatreStore.useTheatreChatStore!=='function')throw Error('Twitch overlay owner contract');
+            if(typeof found.classicColumn.ClassicChatColumn!=='function' || typeof found.chatArea.ChatArea!=='function')throw Error('Twitch column owner contract');
             owners=found;
+            overlayContext=owners.react.createContext(null);columnContext=owners.react.createContext(null);
             original={row:owners.row.ChatMessageRow,body:owners.body.MessageBody,timestamp:owners.time.TimestampPart,
                 format:owners.time.formatTimestamp,store:owners.store.useChatStore,selector:owners.store.useChatSelector,
-                stage:owners.stage.useClassicStagePresentation,column:owners.column.useColumnTrackWidth};
+                stage:owners.stage.useClassicStagePresentation,column:owners.column.useColumnTrackWidth,
+                overlayHost:owners.overlayHost.OneChatOverlayHost,theatreStore:owners.theatreStore.useTheatreChatStore,classicColumn:owners.classicColumn.ClassicChatColumn};
         }
         config=settings();
         if (!config.timestamps && !config.deleted && !config.keywords && !config.appearance && !config.providers) {restore();return;}
@@ -333,6 +429,8 @@
         owners.time.TimestampPart=timestamp;owners.time.formatTimestamp=format;
         owners.store.useChatSelector=selected;owners.store.useChatStore=useStore;
         owners.stage.useClassicStagePresentation=stage;owners.column.useColumnTrackWidth=trackWidth;
+        owners.classicColumn.ClassicChatColumn=classicColumn;
+        owners.overlayHost.OneChatOverlayHost=overlayHost;owners.theatreStore.useTheatreChatStore=theatreStore;
         installed=true;
         global.console.log('Lurk Twitch: chat consumers installed');
     }};

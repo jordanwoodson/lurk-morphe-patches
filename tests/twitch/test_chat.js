@@ -2,14 +2,15 @@
 const assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
 const source = process.argv[2];
 assert.ok(fs.existsSync(source), 'compiled RN chat consumer source exists');
+let stageOverride,afterOverride,stockStage;
 let config = {version:1}, rowProps, bodyProps, effects = [], state = {lines:[]}, providerCalls=[];
 const rowRef={current:0};let refreshes=0, catalogRevision=1, providerActive=true;const providerLeases=new Map();const timers=new Map();let timerId=0;
 const tick=()=>{const pending=Array.from(timers.entries());timers.clear();for(const [,f] of pending)f();};
 const element = (type, props, ...children) => ({type, props:{...props, ...(children.length ? {children:children.length===1?children[0]:children}: {})}});
-const React = {createElement:element, cloneElement:(e,p)=>({ ...e,props:{...e.props,...p}}), isValidElement:e=>!!(e&&e.props),
+const React = {Fragment:Symbol('Fragment'),createElement:element, cloneElement:(e,p)=>({ ...e,props:{...e.props,...p}}), isValidElement:e=>!!(e&&e.props),
  useState:initial=>[initial,()=>{refreshes++;}], useRef:()=>rowRef, useMemo:f=>f(), useEffect:f=>effects.push(f), useContext:c=>c.value, createContext:value=>({value,Provider:'Provider'}), memo:f=>({type:f})};
 const modules = {
-  react:React, native:{Text:'Text',View:'View',StyleSheet:{flatten:s=>Object.assign({},...[s].flat(10).filter(Boolean))},
+  react:React, native:{Text:'Text',View:'View',Animated:{View:'AnimatedView'},StyleSheet:{flatten:s=>Object.assign({},...[s].flat(10).filter(Boolean))},
    NativeModules:{TwitchRNFeedSettings:{getLurkChatData:raw=>{const q=JSON.parse(raw);providerCalls.push(q);if(q.op==='acquire')providerLeases.set(q.id,q);if(q.op==='release')providerLeases.delete(q.id);const lease=providerLeases.get(q.id)||{};return JSON.stringify(q.op==='revision'?{active:providerActive&&!!config.providers,token:String(catalogRevision)}:q.op==='catalog'?{id:q.id,channel:lease.channel,user:lease.user,userId:lease.userId,generation:1,emotes:{Kappa:'lurk7s_abc'},badges:[{title:'he/him',url:'data:image/png;base64,AA=='}]}:(q.op==='acquire'||q.op==='watch')?{active:true}:q.op==='config'?config:q.op==='verdict'?{verdict:q.body.includes('hide')?2:q.body.includes('bright')?1:0}:{});}}}},
   row:{ChatMessageRow:React.memo(p=>{rowProps=p;return element('Row',p);})},
   body:{MessageBody:p=>{bodyProps=p;return element('Text',{style:{fontSize:14},children:element('Text',{style:{fontSize:14},children:p.body})});}},
@@ -17,11 +18,14 @@ const modules = {
   store:{useChatStore:()=>store,useChatSelector:(s,select)=>select(s.getState())},
   badges:{badgeKey:(set,v)=>set+'/'+v},
   column:{useColumnTrackWidth:(expanded,collapsed,wide)=>expanded?wide:collapsed},
-  stage:{useClassicStagePresentation:p=>({beforePlayerRegion:element('View',{children:[element('View',{style:{backgroundColor:'#000000'}}),element('View',{style:{backgroundColor:'#181818'}})]}),
-    afterPlayerRegion:element('View',{children:p.chat}),widths:[modules.column.useColumnTrackWidth(false,'66.6667%','50%',true),modules.column.useColumnTrackWidth(false,'33.3333%','50%',true)]})},
+  stage:{useClassicStagePresentation:p=>(stockStage={rootStyle:{backgroundColor:'#181818',paddingBottom:12},beforePlayerRegion:stageOverride||element(React.Fragment,{children:[element('View',{pointerEvents:'none',accessibilityElementsHidden:true,importantForAccessibility:'no-hide-descendants',children:[element('AnimatedView',{style:{width:'75%',backgroundColor:'#000000'}}),element('AnimatedView',{style:[{width:'25%',backgroundColor:'#181818'},null]})]}),element('View',{testID:'unrelated-overlay'})]}),
+    afterPlayerRegion:afterOverride||element(React.Fragment,{children:[element('AnimatedView',{style:{flexDirection:'column',overflow:'hidden',width:'25%',backgroundColor:'#181818'},children:[element('View',{style:{flexShrink:0},children:'header'}),element('View',{style:{flex:1,minHeight:0,overflow:'hidden'},children:p.chat})]}),null,null,element('View',{testID:'foreground-extra'}),null]}),widths:[modules.column.useColumnTrackWidth(false,'66.6667%','50%',true),modules.column.useColumnTrackWidth(false,'33.3333%','50%',true)]})},
   metrics:{ChatTextMetricsContext:{value:{xHeight:7,ascender:12,calibrationSettled:true}},ChatFontScaleContext:{value:1}}
 };
+React.useLayoutEffect=React.useEffect;
+modules.overlayHost={OneChatOverlayHost:()=>null};modules.theatreStore={useTheatreChatStore:()=>store};
 const store = {getState:()=>state,subscribe:()=>()=>{}};
+modules.classicColumn={ClassicChatColumn:()=>null};modules.chatArea={ChatArea:()=>null};
 const originals = Object.fromEntries(Object.entries(modules).map(([k,v])=>[k,{...v}]));
 const global = {console,Date,Map,Set,WeakMap,WeakSet,setTimeout:f=>{const id=++timerId;timers.set(id,f);return id;},clearTimeout:id=>timers.delete(id),__r:id=>modules[id],RN$registerCallableModule:()=>{}};
 global.globalThis=global;
@@ -119,7 +123,36 @@ assert.equal(modules.native.StyleSheet.flatten(render({message:{...msg,id:'strip
  modules.native.StyleSheet.flatten(second.props.style).backgroundColor,'stripe remains stable on rerender');
 const stage=modules.stage.useClassicStagePresentation({mode:'landscape-column-chat',chat:'chat'});
 assert.deepEqual(Array.from(stage.widths),['75%','25%'],'landscape player and chat widths stay complementary');
-assert.equal(modules.native.StyleSheet.flatten(stage.beforePlayerRegion.props.children[1].props.style).backgroundColor,'rgba(24,24,24,0.5)','only background alpha changes');
+const chatBackground=stage.beforePlayerRegion.props.children[0].props.children[1];
+const chatStyle=modules.native.StyleSheet.flatten(chatBackground.props.style);
+assert.equal(chatStyle.backgroundColor,'#000000','chat has opaque black backing so alpha cannot blend over identical root color');
+assert.equal(chatStyle.width,'25%','existing animated width preserved');
+assert.equal(chatBackground.props.children,undefined,'empty background remains empty; no new view');
+const foreground=stage.afterPlayerRegion.props.children[0];
+assert.equal(modules.native.StyleSheet.flatten(foreground.props.style).backgroundColor,'rgba(24,24,24,0.5)','only foreground background color gets alpha');
+assert.equal(foreground.props.children[0],stockStage.afterPlayerRegion.props.children[0].props.children[0],'foreground header unchanged');
+assert.equal(foreground.props.children[1].props.children.props.children,stockStage.afterPlayerRegion.props.children[0].props.children[1].props.children,'original chat element preserved within Provider');
+assert.equal(stage.afterPlayerRegion.props.children[3],stockStage.afterPlayerRegion.props.children[3],'foreground sibling unchanged');
+assert.equal(stage.rootStyle,stockStage.rootStyle,'root color and gutters remain original');
+assert.equal(stage.beforePlayerRegion.props.children[1],stockStage.beforePlayerRegion.props.children[1],'unrelated fragment sibling unchanged');
+assert.equal(stage.beforePlayerRegion.props.children[0].props.children[0],stockStage.beforePlayerRegion.props.children[0].props.children[0],'player background unchanged');
+assert.equal(modules.native.StyleSheet.flatten(stockStage.beforePlayerRegion.props.children[0].props.children[1].props.style).backgroundColor,'#181818','stock tree not mutated');
+const pinnedShape=stockStage.beforePlayerRegion;
+for(const bad of [element('View',pinnedShape.props),element(React.Fragment,{children:[null,null]}),element(React.Fragment,{children:[element('View',{...pinnedShape.props.children[0].props,pointerEvents:'auto'}),null]}),element(React.Fragment,{children:[element('View',{...pinnedShape.props.children[0].props,children:[null,pinnedShape.props.children[0].props.children[1]]}),null]})]){
+ stageOverride=bad;const v=modules.stage.useClassicStagePresentation({mode:'landscape-column-chat'});assert.equal(v.beforePlayerRegion,bad,'unsupported background shape stays stock');
+}
+stageOverride=element(React.Fragment,{children:[element('View',{...pinnedShape.props.children[0].props,children:[pinnedShape.props.children[0].props.children[0],element('AnimatedView',{...pinnedShape.props.children[0].props.children[1].props,children:element('View',{testID:'future-content'})})]}),pinnedShape.props.children[1]]});
+const occupied=modules.stage.useClassicStagePresentation({mode:'landscape-column-chat'});assert.equal(occupied.beforePlayerRegion,stageOverride,'nonempty chat background remains stock');
+stageOverride=undefined;
+const pinnedAfter=stage.afterPlayerRegion;
+for(const bad of [element('View',pinnedAfter.props),element(React.Fragment,{children:[null]}),element(React.Fragment,{children:[element('View',pinnedAfter.props.children[0].props),null,null,null,null]}),element(React.Fragment,{children:[element('AnimatedView',{...pinnedAfter.props.children[0].props,style:{flexDirection:'row',overflow:'hidden'}}),null,null,null,null]})]){
+ afterOverride=bad;const v=modules.stage.useClassicStagePresentation({mode:'landscape-column-chat'});assert.equal(v,stockStage,'unsupported foreground shape preserves entire presentation');
+}
+afterOverride=undefined;
+for(const extra of [{mode:'landscape-one-chat'},{mode:'landscape-no-chat'},{mode:'portrait'},{pipFloatSettled:true},{pipCompactFrame:true},{isTheatreDocked:true}]){
+ const v=modules.stage.useClassicStagePresentation({mode:'landscape-column-chat',...extra});assert.equal(v.beforePlayerRegion,stockStage.beforePlayerRegion,'excluded background stays original');assert.equal(v.afterPlayerRegion.props.children[0].props.style,stockStage.afterPlayerRegion.props.children[0].props.style);assert.equal(v.afterPlayerRegion.props.children[0].props.children[1].props.children.props.value,null,'excluded tree has neutral authority');
+}
+for(const change of [{appearance:false},{opacity:0}]){const old=config;config={...config,...change};const v=modules.stage.useClassicStagePresentation({mode:'landscape-column-chat'});assert.equal(v.beforePlayerRegion,stockStage.beforePlayerRegion,'off/default background stays original');assert.equal(v.afterPlayerRegion.props.children[0].props.style,stockStage.afterPlayerRegion.props.children[0].props.style);assert.equal(v.afterPlayerRegion.props.children[0].props.children[1].props.children.props.value,null);config=old;}
 const portrait=modules.stage.useClassicStagePresentation({mode:'portrait',chat:'chat'});
 assert.deepEqual(Array.from(portrait.widths),['66.6667%','33.3333%']);
 config={version:1,providers:true};providerActive=true;

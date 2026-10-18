@@ -12,3 +12,9 @@ subprocess.run(['node', str(ROOT / 'tests/twitch/test_chat.js'),
 
 subprocess.run(['node', str(ROOT / 'tests/twitch/test_provider_transition.js'),
                 str(ROOT / 'patches/src/main/runtime/twitch/chat.js')], check=True)
+
+subprocess.run(['node', str(ROOT / 'tests/twitch/test_overlay_context.js'),
+                str(ROOT / 'patches/src/main/runtime/twitch/chat.js')], check=True)
+
+subprocess.run(['node', str(ROOT / 'tests/twitch/test_column_opacity.js'),
+                str(ROOT / 'patches/src/main/runtime/twitch/chat.js')], check=True)

@@ -1,7 +1,8 @@
 'use strict';
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const refs=new Map(),leases=new Map(),effects=[],calls=[];let ref,rowProps,stale;
-const R={useRef:()=>ref,useState:()=>[0,()=>{}],useEffect:f=>effects.push(f),useContext:()=>1,memo:f=>({type:f}),isValidElement:()=>false};
+const R={useRef:()=>ref,useState:()=>[0,()=>{}],useEffect:f=>effects.push(f),useContext:c=>c.value,memo:f=>({type:f}),isValidElement:()=>false};
+R.createContext=value=>({value,Provider:"Provider"});R.createElement=()=>null;R.useMemo=f=>f();R.useLayoutEffect=R.useEffect;
 const catalogs={42:{Old:'lurk7s_old'},43:{New:'lurk7s_new'}};
 function data(q){
  calls.push(q);
@@ -12,6 +13,8 @@ function data(q){
  return{};
 }
 const modules={react:R,native:{NativeModules:{TwitchRNFeedSettings:{getLurkChatData:raw=>JSON.stringify(data(JSON.parse(raw)))}}},row:{ChatMessageRow:{type:p=>{rowProps=p;return null;}}},body:{MessageBody:()=>{}},time:{TimestampPart:()=>{},formatTimestamp:()=>{}},store:{useChatStore:()=>{},useChatSelector:()=>{}},metrics:{ChatTextMetricsContext:{},ChatFontScaleContext:{}},badges:{badgeKey:(set,version)=>set+'/'+version},stage:{useClassicStagePresentation:()=>{}},column:{useColumnTrackWidth:()=>{}}};
+modules.overlayHost={OneChatOverlayHost:()=>null};modules.theatreStore={useTheatreChatStore:()=>null};
+modules.classicColumn={ClassicChatColumn:()=>null};modules.chatArea={ChatArea:()=>null};
 const global={console,__r:id=>modules[id],RN$registerCallableModule:()=>{},setTimeout:()=>1,clearTimeout:()=>{}};global.globalThis=global;
 vm.runInNewContext(fs.readFileSync(process.argv[2],'utf8'),global);
 global.LurkTwitchChat.configure(JSON.stringify(Object.fromEntries(Object.keys(modules).map(k=>[k,k]))));

@@ -42,6 +42,10 @@ private val rnChatResources = rawResourcePatch {
             "badges" to listOf("badgeKey", "buildBadgeRegistry"),
             "stage" to listOf("useClassicStagePresentation"),
             "column" to listOf("useColumnTrackWidth", "COLUMN_TRANSITION_MS"),
+            "overlayHost" to listOf("OneChatOverlayHost"),
+            "theatreStore" to listOf("useTheatreChatStore"),
+            "classicColumn" to listOf("ClassicChatColumn"),
+            "chatArea" to listOf("ChatArea"),
         )
         get("assets/lurk-twitch-chat-contract.json").writeText(signatures.entries.joinToString(",", "{", "}") {
             "\"${it.key}\":${twitchHermes.metroModule(it.value, direct = it.key != "native")}" })
