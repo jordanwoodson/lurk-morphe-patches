@@ -27,6 +27,12 @@ stable backmerge retries, advanced dev, checkout restoration, output preservatio
 propagation without calling GitHub or building a bundle. Scratch fixtures are removed on Linux and
 retained on macOS.
 
+The release script also runs the selected source's `bin/test-host` immediately before building a fresh
+release or rebuilding an older release for recovery. A missing source gate or a failed check stops
+publication for the run. This verifies the source actually being released even when the branch has
+advanced since the workflow checkout. A divergent stable backmerge retains every dev generated file
+and combines the stable changelog entry with dev's history.
+
 The remaining checks need a patched APK, decoded output or a Hermes bundle, and for the probes an
 Android emulator; those are separate from the host gate.
 

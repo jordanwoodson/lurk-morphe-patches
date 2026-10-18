@@ -129,6 +129,10 @@ class Progress:
                assets="\n".join(str(path) for path in self.assets))
 
 
+class HostVerificationError(SystemExit):
+    """A source failed its required gate; do not publish any further release this run."""
+
+
 # -------------------------------------------------------------------------------------------------
 # Git and commands
 
@@ -294,6 +298,18 @@ def latest_release(pre: str | None, head: str) -> tuple[str, Version, str] | Non
 # Releasing
 
 
+def verify_source() -> None:
+    """Run the selected source's mandatory gate, including older recovery checkouts."""
+    sha = git("rev-parse", "HEAD")
+    if not (ROOT / "bin/test-host").is_file():
+        raise HostVerificationError(f"{sha[:7]} has no bin/test-host; cannot verify or publish this source")
+    print(f"Verifying release source {sha}", flush=True)
+    try:
+        run("bash", "bin/test-host")
+    except SystemExit as error:
+        raise HostVerificationError(f"Host verification failed for {sha[:7]}: {error}") from error
+
+
 def build(version: Version, *tasks: str) -> Path:
     run("./gradlew", *tasks, ":patches:buildAndroid", "--no-daemon")
     mpp = LIBS / f"patches-{version}.mpp"
@@ -350,6 +366,7 @@ def finish_unpublished(repo: str, branch: str, pre: str | None, head: str, dry_r
         sys.exit(f"{version.tag} points at {tagged[:7]}, not at its release commit {sha[:7]}")
     with restore_checkout():
         git("checkout", "--quiet", "--detach", sha)
+        verify_source()
         mpp = build(version)
     if not tagged:
         git("tag", version.tag, sha)
@@ -404,13 +421,12 @@ def backmerge(release: str, text: str) -> None:
             conflicted = git("diff", "--name-only", "--diff-filter=U").split()
             if not git_ok("rev-parse", "-q", "--verify", "MERGE_HEAD") or set(conflicted) - set(GENERATED):
                 sys.exit(f"{STABLE_BRANCH} doesn't merge cleanly into {target}; merge it by hand, then rerun")
-            for path in conflicted:
-                git("checkout", "--ours", "--", path)
-            if "CHANGELOG.md" in conflicted:
-                changelog = ROOT / "CHANGELOG.md"
-                changelog.write_text(f"{text}\n\n{changelog.read_text(encoding='utf-8')}", encoding="utf-8")
-            if conflicted:
-                git("add", "--", *conflicted)
+            # A generated path can merge cleanly when dev advanced only in source. Always
+            # restore dev's complete generated state, then combine the changelog explicitly.
+            git("restore", "--source=HEAD", "--staged", "--worktree", "--", *GENERATED)
+            changelog = ROOT / "CHANGELOG.md"
+            changelog.write_text(f"{text}\n\n{changelog.read_text(encoding='utf-8')}", encoding="utf-8")
+            git("add", "--", *GENERATED)
             git(*AS_BOT, "commit", "--quiet", "--no-edit", "-m", f"chore: merge {STABLE_BRANCH} into {target} [skip ci]")
             git("push", "origin", f"HEAD:refs/heads/{target}")
         finally:
@@ -436,6 +452,7 @@ def release(repo: str, branch: str, pre: str | None, head: str, dry_run: bool,
     if git("status", "--porcelain", "--untracked-files=all", "--", *GENERATED):
         sys.exit("Generated release files have local changes; commit or stash them before releasing")
     original = git("rev-parse", "HEAD")
+    verify_source()
     try:
         write_files(repo, version, text)
         mpp = build(version, "generatePatchesList")
@@ -495,6 +512,8 @@ def main() -> None:
             unfinished = None
             try:
                 finish_unpublished(repo, branch, pre, head, args.dry_run, progress)
+            except HostVerificationError:
+                raise
             except SystemExit as error:
                 unfinished = error
                 print(f"::error::{error}", flush=True)

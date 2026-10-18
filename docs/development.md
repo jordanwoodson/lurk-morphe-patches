@@ -150,6 +150,9 @@ the offline Kick chat page in headless Chrome,
 and release recovery using local Git fixtures. See [tests/README.md](../tests/README.md) for coverage
 and how to register another host check.
 
+Before each release build, `release.py` reruns the selected source's host gate after checkout,
+including an older release being rebuilt for recovery. A missing or failed gate stops publication.
+
 The other checks need a patched APK, decoded output or a Hermes bundle, and for the probes a device.
 The workspace emulator is `emulator-5580`; every Android `bin/test-*` script uses it unless
 `ANDROID_SERIAL` names another device, so a connected phone is never patched by accident.

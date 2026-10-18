@@ -39,6 +39,8 @@ class ReleaseRecoveryTests(unittest.TestCase):
                            "patches-list.json": '{"version":"1.0.0"}\n', "patches-bundle.json": '{}\n',
                            "README.md": "Release fixture\n", "feature.txt": "base\n"}.items():
             (self.root / name).write_text(text)
+        (self.root / "bin").mkdir()
+        (self.root / "bin/test-host").write_text("#!/bin/bash\nexit 0\n")
         self.commit("chore: initial fixture")
         self.git("branch", "dev")
         self.git("push", "--quiet", "origin", "main", "dev")
@@ -48,6 +50,7 @@ class ReleaseRecoveryTests(unittest.TestCase):
         self.published = set()
         self.builds = []
         self.publications = []
+        self.events = []
         self.stack = contextlib.ExitStack()
         self.addCleanup(self.stack.close)
         self.stack.enter_context(patch.object(release, "ROOT", self.root))
@@ -56,7 +59,7 @@ class ReleaseRecoveryTests(unittest.TestCase):
         self.stack.enter_context(patch.object(release, "release_exists", side_effect=lambda repo, tag: tag in self.published))
         self.stack.enter_context(patch.object(release, "build", side_effect=self.build))
         self.stack.enter_context(patch.object(release, "publish", side_effect=self.publish))
-        self.stack.enter_context(patch.object(release, "run", return_value=None))
+        self.stack.enter_context(patch.object(release, "run", side_effect=self.run_command))
         self.stack.enter_context(patch.dict(os.environ, {"GITHUB_OUTPUT": str(self.output)}))
         # Any unmocked gh/HTTP operation is a test failure, never a real API request.
         actual_run = subprocess.run
@@ -91,6 +94,9 @@ class ReleaseRecoveryTests(unittest.TestCase):
         self.commit("fix: fixture behavior")
         (self.root / "gradle.properties").write_text("version = 1.0.1\n")
         (self.root / "CHANGELOG.md").write_text("## 1.0.1\n\nStable notes\n\n## 1.0.0\n")
+        (self.root / "patches-bundle.json").write_text('{"version":"1.0.1","description":"stable"}\n')
+        (self.root / "patches-list.json").write_text('{"version":"1.0.1","patches":[]}\n')
+        (self.root / "README.md").write_text("Stable patch list\n")
         sha = self.commit("chore: Release v1.0.1 [skip ci]", "## 1.0.1\n\nStable notes")
         self.git("tag", "v1.0.1")
         self.git("push", "--quiet", "origin", "main", "--tags")
@@ -100,6 +106,7 @@ class ReleaseRecoveryTests(unittest.TestCase):
 
     def build(self, version, *tasks):
         self.builds.append((str(version), self.git("rev-parse", "HEAD")))
+        self.events.append(("build", self.git("rev-parse", "HEAD")))
         path = self.assets / f"patches-{version}.mpp"
         path.write_bytes(b"fixture bundle")
         return path
@@ -110,6 +117,11 @@ class ReleaseRecoveryTests(unittest.TestCase):
         self.assertTrue(text.startswith("## "))
         self.published.add(version.tag)
         self.publications.append(version.tag)
+        self.events.append(("publish", version.tag))
+
+    def run_command(self, *command):
+        if command == ("bash", "bin/test-host"):
+            self.events.append(("verify", self.git("rev-parse", "HEAD")))
 
     def invoke(self, branch="main", dry_run=False):
         args = ["release.py", "--branch", branch] + (["--dry-run"] if dry_run else [])
@@ -162,6 +174,72 @@ class ReleaseRecoveryTests(unittest.TestCase):
         self.invoke()
         self.assertEqual(self.git("rev-parse", "origin/dev"), first, "Retry must not create another merge")
         self.assertEqual(self.git("branch", "--show-current"), "main")
+
+    def test_source_only_dev_advancement_preserves_all_dev_generated_files(self):
+        original = {path: self.git("show", f"dev:{path}") for path in release.GENERATED}
+        sha = self.stable(published=True)
+        self.git("checkout", "--quiet", "dev")
+        (self.root / "dev.txt").write_text("source-only advancement\n")
+        self.commit("feat: next development source")
+        self.git("push", "--quiet", "origin", "dev")
+        self.git("checkout", "--quiet", "main")
+        self.invoke()
+        self.assert_merged(sha)
+        for path, expected in original.items():
+            if path != "CHANGELOG.md":
+                self.assertEqual(self.git("show", f"origin/dev:{path}"), expected, path)
+        self.assertEqual(self.git("show", "origin/dev:CHANGELOG.md"),
+                         "## 1.0.1\n\nStable notes\n\n## 1.0.0")
+        before = self.git("rev-parse", "origin/dev")
+        self.invoke()
+        self.assertEqual(self.git("rev-parse", "origin/dev"), before)
+
+    def test_new_release_verifies_remote_tip_after_workflow_checkout_lags(self):
+        original = self.git("rev-parse", "HEAD")
+        self.git("tag", "v1.0.0")
+        self.published.add("v1.0.0")
+        (self.root / "feature.txt").write_text("new remote source\n")
+        selected = self.commit("fix: advance while workflow waits")
+        self.git("push", "--quiet", "origin", "main", "--tags")
+        self.git("checkout", "--quiet", "--detach", original)
+        self.invoke()
+        self.assertEqual(self.events, [("verify", selected), ("build", selected), ("publish", "v1.0.1")])
+
+    def test_recovery_verifies_older_release_source_before_build_and_publication(self):
+        sha = self.stable()
+        (self.root / "later.txt").write_text("later source\n")
+        self.commit("chore: newer branch source")
+        self.git("push", "--quiet", "origin", "main")
+        self.invoke()
+        self.assertEqual(self.events, [("verify", sha), ("build", sha), ("publish", "v1.0.1")])
+
+    def test_failed_recovery_gate_blocks_recovery_and_newer_publication(self):
+        sha = self.stable()
+        (self.root / "later.txt").write_text("newer fix\n")
+        self.commit("fix: newer source")
+        self.git("push", "--quiet", "origin", "main")
+        def fail_gate(*command):
+            self.run_command(*command)
+            if command == ("bash", "bin/test-host"):
+                raise SystemExit("fixture host check failed")
+        with patch.object(release, "run", side_effect=fail_gate):
+            with self.assertRaises(SystemExit):
+                self.invoke()
+        self.assertEqual(self.events, [("verify", sha)])
+        self.assertEqual(self.builds, [])
+        self.assertEqual(self.publications, [])
+        self.assertEqual(self.output_values()["published"], "false")
+
+    def test_missing_source_gate_blocks_publication(self):
+        self.git("tag", "v1.0.0")
+        self.published.add("v1.0.0")
+        self.git("rm", "--quiet", "bin/test-host")
+        self.commit("fix: source without a host gate")
+        self.git("push", "--quiet", "origin", "main", "--tags")
+        with self.assertRaisesRegex(SystemExit, "bin/test-host"):
+            self.invoke()
+        self.assertEqual(self.builds, [])
+        self.assertEqual(self.publications, [])
 
     def test_publication_outputs_survive_backmerge_failure_and_retry(self):
         sha = self.stable()
