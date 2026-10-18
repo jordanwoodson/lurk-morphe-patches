@@ -273,6 +273,65 @@ class ReleaseRecoveryTests(unittest.TestCase):
         self.assert_merged(sha)
         self.assertEqual(self.publications, ["v1.0.1"])
 
+    def test_new_publication_rejects_unrelated_staging_without_publishing_it(self):
+        self.git("tag", "v1.0.0")
+        self.published.add("v1.0.0")
+        (self.root / "feature.txt").write_text("fix to publish\n")
+        self.commit("fix: new release")
+        self.git("push", "--quiet", "origin", "main", "--tags")
+        private = self.root / "private-local.txt"
+        private.write_bytes(b"private staged bytes\x00\n")
+        self.git("add", "private-local.txt")
+        private.write_bytes(b"private unstaged bytes\x00\n")
+        before_head = self.git("rev-parse", "HEAD")
+        before_status = self.git("status", "--porcelain")
+        before_index = self.git("write-tree")
+        before_refs = self.git("ls-remote", "origin")
+
+        rejected = False
+        try:
+            self.invoke()
+        except SystemExit as error:
+            rejected = True
+            self.assertIn("local changes", str(error))
+
+        # Check the actual bare remote, including every branch and tag, before the
+        # rejection assertions so RED exposes publication rather than a missing error.
+        for ref in self.git("--git-dir", str(self.remote), "for-each-ref", "--format=%(refname)").splitlines():
+            self.assertNotIn("private-local.txt", self.git("--git-dir", str(self.remote), "ls-tree", "-r", "--name-only", ref))
+        self.assertTrue(rejected, "Staged work must be rejected")
+        self.assertEqual(self.git("ls-remote", "origin"), before_refs)
+        self.assertEqual(self.git("rev-parse", "HEAD"), before_head)
+        self.assertEqual(self.git("branch", "--show-current"), "main")
+        self.assertEqual(self.git("status", "--porcelain"), before_status)
+        self.assertEqual(self.git("write-tree"), before_index, "Keep the exact staged bytes")
+        self.assertEqual(private.read_bytes(), b"private unstaged bytes\x00\n")
+        self.assertEqual(self.events, [], "Reject before verification, build or publication")
+        self.assertEqual(self.output_values(), {"published": "false", "built": "false", "assets": ""})
+
+    def test_staged_work_blocks_recovery_before_checkout_or_backmerge(self):
+        sha = self.stable()
+        self.git("checkout", "--quiet", "--detach", "dev")
+        (self.root / "private-local.txt").write_text("keep staged recovery work\n")
+        self.git("add", "private-local.txt")
+        before_head = self.git("rev-parse", "HEAD")
+        before_index = self.git("write-tree")
+        before_status = self.git("status", "--porcelain")
+        before_refs = self.git("ls-remote", "origin")
+        for published in (False, True):
+            with self.subTest(published=published):
+                if published:
+                    self.published.add("v1.0.1")
+                with self.assertRaisesRegex(SystemExit, "local changes"):
+                    self.invoke()
+                self.assertEqual(self.git("branch", "--show-current"), "")
+                self.assertEqual(self.git("rev-parse", "HEAD"), before_head)
+                self.assertEqual(self.git("write-tree"), before_index)
+                self.assertEqual(self.git("status", "--porcelain"), before_status)
+                self.assertEqual(self.git("ls-remote", "origin"), before_refs)
+                self.assertEqual(self.events, [])
+                self.assertEqual(self.git("rev-parse", "origin/main"), sha)
+
     def test_recovered_asset_survives_failure_of_a_newer_release(self):
         sha = self.stable()
         (self.root / "feature.txt").write_text("another fix\n")
@@ -342,17 +401,16 @@ class ReleaseRecoveryTests(unittest.TestCase):
                 self.invoke()
         self.assertEqual(self.git("branch", "--show-current"), "dev")
 
-    def test_new_build_failure_restores_generated_files_and_preserves_unrelated_state(self):
+    def test_new_build_failure_restores_generated_files_and_preserves_unstaged_work(self):
         self.git("tag", "v1.0.0")
         self.published.add("v1.0.0")
-        (self.root / "feature.txt").write_text("fix to publish\n")
+        (self.root / "release-fix.txt").write_text("fix to publish\n")
         self.commit("fix: new release")
         self.git("push", "--quiet", "origin", "main", "--tags")
         self.git("checkout", "--quiet", "dev")
         (self.root / "gradle.properties").write_text("version = 1.1.0-dev.1\n")
         self.commit("chore: development version")
-        (self.root / "local.txt").write_text("keep staged changes\n")
-        self.git("add", "local.txt")
+        (self.root / "feature.txt").write_text("keep unstaged changes\n")
         (self.root / "README-local.txt").write_text("keep untracked changes\n")
         before = self.git("status", "--porcelain")
         with patch.object(release, "build", side_effect=SystemExit("fixture new build failure")):
@@ -361,7 +419,7 @@ class ReleaseRecoveryTests(unittest.TestCase):
         self.assertEqual(self.git("branch", "--show-current"), "dev")
         self.assertEqual((self.root / "gradle.properties").read_text(), "version = 1.1.0-dev.1\n")
         self.assertEqual(self.git("status", "--porcelain"), before)
-        self.assertEqual((self.root / "local.txt").read_text(), "keep staged changes\n")
+        self.assertEqual((self.root / "feature.txt").read_text(), "keep unstaged changes\n")
         self.assertEqual((self.root / "README-local.txt").read_text(), "keep untracked changes\n")
 
     def test_dirty_generated_files_are_rejected_before_release_mutation(self):
@@ -386,10 +444,14 @@ class ReleaseRecoveryTests(unittest.TestCase):
     def test_dry_run_does_not_publish_merge_or_checkout(self):
         self.stable()
         self.git("checkout", "--quiet", "dev")
+        (self.root / "private-local.txt").write_text("keep staged dry-run work\n")
+        self.git("add", "private-local.txt")
+        before_index = self.git("write-tree")
         before = self.git("rev-parse", "origin/dev")
         self.invoke(dry_run=True)
         self.assertEqual(self.git("branch", "--show-current"), "dev")
         self.assertEqual(self.git("rev-parse", "origin/dev"), before)
+        self.assertEqual(self.git("write-tree"), before_index)
         self.assertEqual(self.builds, [])
         self.assertEqual(self.publications, [])
 

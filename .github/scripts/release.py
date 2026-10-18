@@ -499,6 +499,10 @@ def main() -> None:
 
     progress = Progress()
     try:
+        # Both release and recovery/backmerge commits consume the index. Refuse
+        # staged local work before any checkout or mutation can include it.
+        if not args.dry_run and not git_ok("diff", "--cached", "--quiet"):
+            sys.exit("The index has local changes; commit or stash them before releasing")
         with restore_checkout() if not args.dry_run else nullcontext():
             if args.dry_run:
                 head = f"origin/{branch}"

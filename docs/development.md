@@ -202,6 +202,8 @@ worth pinning, and say in the pull request what you ran.
   after successful publication, without publishing again or creating duplicate merges. Published asset
   outputs survive later failures so the workflow can still attest them. To preview the next release and its
   notes: `git fetch && python3 .github/scripts/release.py --dry-run --branch dev`.
+- Non-dry release runs require an index with no staged changes, including recovery of an older release.
+  Commit or stash staged work first; the script rejects it before changing the checkout or publishing.
 - Use semantic commit messages: `feat(twitch): ...`, `fix(kick): ...`, `chore: ...`.
 - Don't hand-edit generated files: `patches-list.json`, `patches-bundle.json`, `CHANGELOG.md`, or
   the patch list in `README.md` (written by `.github/scripts/generate_patches_readme.py`). Don't
