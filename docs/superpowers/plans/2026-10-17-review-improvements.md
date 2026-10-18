@@ -98,7 +98,8 @@ catalog/pronoun checks and mounted original RN provider images pass. Current emu
 RN consumer and same-process reload evidence is qualified in the dated verification record.
 The unchecked phone item remains a Task 7 requirement; implementation acceptance does not close it.
 Task 7 subsequently found and fixed the original floating RN path's missing genuine context and
-the measured column opacity composition at `3ba886c`; combined Task 7 review remains pending.
+the measured column opacity composition at `3ba886c`; combined Task 7 scoped implementation
+review is clean after shared test-harness extraction at `f86098f`.
 
 ### Task 7: Full output, phone, account and privacy verification
 
@@ -114,13 +115,20 @@ Task 7 progress and exact artifact/evidence limits are recorded in
 `docs/verification-2026-10-17.md`. The input-staging defect has retained real-command
 RED/GREEN coverage. RN floating canonical context/retention/provider and actual column width/opacity
 fixes are implemented at `3ba886c`; final N Twitch signatures/compiler/source/owner/build checks,
-15-check host gate and qualified L/N actual consumer evidence are recorded. Four Kick/Rumble
-artifacts reuse explicitly unchanged production source and retain their exact prior checks.
+15-check host gate and qualified L/N actual consumer evidence are recorded. Twitch N and Kick J
+retain their exact source-linked artifacts and prior checks. Rumble's final review correction
+changes only the cookie-blocker description and restart/notification summary; its fresh artifacts
+and unchanged-runtime comparisons are recorded in the verification document.
 Same-process Kick reload and final production public playback smokes are supplied. Actual SDK
 synthetic-payload investigation, real Rumble consent/restart
 SDK-state transitions and the Firebase/Airship push dependency trace are supplied; no broad
 SDK block was added. Physical-phone UI and named authenticated flows remain required,
-and combined Task 7 scoped review/full independent branch review are pending. USB final Twitch N
+and final Rumble USB installation remains open. Combined Task 7 scoped implementation review
+is clean at `f86098f`. Whole-branch review of `590ef1e..f86098f` found one Important staged-index
+publication defect and one Minor push-wording overclaim; both are fixed at `4e1aa6e`, with scoped
+re-review pending at this documentation snapshot. The release regression causally fails on the
+old successful path; the fixed focused suite passes 21 cases. One final host gate passes all
+15 checks, including 21 release tests and four staging cases. USB final Twitch N
 and Kick updates succeeded; Rumble retains its previous APK after two bounded install timeouts.
 None of the unavailable phone/account/review stages is a pass; Task 7 as a whole is incomplete.
 

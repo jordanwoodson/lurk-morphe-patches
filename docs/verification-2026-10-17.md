@@ -1,9 +1,12 @@
 # Review-improvements verification, 2026-10-17–18
 
 Task 7 is incomplete. Task 6 was accepted at `3b5330c`; Task 7 fixes input staging at `783e045`
-and measured RN landscape integration at `3ba886c`. This snapshot precedes combined Task 7
-scoped review and whole-branch review. Physical-phone UI and named authenticated flows also
-remain required before release.
+and measured RN landscape integration at `3ba886c`. Combined Task 7 scoped implementation
+review is clean after the shared test-harness extraction at `f86098f`. Independent whole-branch
+review of `590ef1e..f86098f` found one Important release-index defect and one Minor Rumble
+notification-wording defect. Both are fixed at `4e1aa6e`; scoped re-review of that final fix is
+pending at this documentation snapshot. Physical-phone UI, named authenticated flows and final
+Rumble USB installation remain required before release.
 No push, tag, release or merge was performed for this verification. Missing prerequisites are
 recorded as open gates, never as passing tests.
 
@@ -33,8 +36,9 @@ the installed app's current preference value.
 | Kick | 19 / 24 | Bypass VOD ad sessions; Default video quality; Hide Clips; Hide KICKs tipping; Hide subscription upsells |
 | Rumble | 26 / 30 | Default video quality; Disable autoplay; Hide Shorts; Hide tipping and Rants |
 
-Final verification APKs: Twitch N uses `3ba886c`; the four Kick/Rumble J artifacts use
-`3b5330c`, with their production source unchanged by Task 7's Twitch-only integration fix.
+Current verification APKs: Twitch N uses `3ba886c`; Kick J uses `3b5330c` with its production
+source unchanged since then. Fresh Rumble artifacts use `4e1aa6e`; its only production delta
+since N is the two cookie-blocker metadata strings. No fresh device run is implied by that rebuild.
 
 | Selection | Path relative to ROOT | APK SHA-256 |
 |---|---|---|
@@ -42,8 +46,8 @@ Final verification APKs: Twitch N uses `3ba886c`; the four Kick/Rumble J artifac
 | Twitch expanded | `task-7-n-output/twitch-expanded/twitch.apk` | `483839bb3c8843a4a3735bfd29ea73646db52e801e5141d7fdecda05668700d0` |
 | Kick default | `task-7/candidate-task6-fix1/kick-default/kick.apk` | `4dc6226c95a0062ab4d91ab5eabea105deee5eed0c04b0bb4a082973247e163f` |
 | Kick expanded | `task-7/candidate-task6-fix1/kick-expanded/kick.apk` | `b806bf7317c97b50ff17d21e4e9c79046cc5154752bbdd657150184a4bae2957` |
-| Rumble default | `task-7/candidate-task6-fix1/rumble-default/rumble.apk` | `19d1122f10109f90e410fde9a89b24ed060e896f753c2e7021d6ed7f3fbf880a` |
-| Rumble expanded | `task-7/candidate-task6-fix1/rumble-expanded/rumble.apk` | `2cd0a0d5abd986c3180569d45eb7d03d726af13da46bca6273bff32022df9839` |
+| Rumble default | `final-fix-output/rumble-default/rumble.apk` | `c444e2eb979127d9ebc5afdcf02346c2935c1b916ce0fddc92b76e63794755ae` |
+| Rumble expanded | `final-fix-output/rumble-expanded/rumble.apk` | `aa423b4803db8bf863a560e9287701a489407422a0d768fabcb8c4189651b0cc` |
 
 `task-7-n-output/verified-artifacts.json` records successful signature/16 KiB alignment checks
 and compiler/source/bytecode contracts: Hermes compiler `250829098.0.19`, upstream
@@ -55,13 +59,39 @@ HBC98 bytecode SHA-256 is `72fdec40d84347a7f253f32c351adced65de30af763632594ab26
 `b3e51cfde9418572a7cb3cc67c00b525041bf72f521728283e2e0496d777b1b7`.
 The copied `task-7-n-output/patches-1.11.1.mpp` snapshot SHA-256 is
 `8d86a996b154a37533c04506635e2662641700a89cb9270571ea54ff72eda1ed`.
-`task-7/candidate-task6-fix1/verified-artifacts.json` records the other four signature,
+That N MPP is historical evidence and does not include the final Rumble wording correction.
+`task-7/candidate-task6-fix1/verified-artifacts.json` records the four original J signature,
 16 KiB alignment, package/version and successful-selection checks. Adjacent `*-result.json`
 files retain each selected patch name and step. Their adjacent `bundle-source.json` binds the
 earlier J bundle: SHA-256 `ad7fb8bbbdb8d36304eb480382c995df6cccd8f0a7f995548f031ad4e4ea22a7`.
 `task-7-n-output/unchanged-kick-rumble-source.json` proves only Twitch's RN patch/runtime
-production paths changed since J; shared extensions and Kick/Rumble source remain unchanged.
-No new target runs are implied for those four artifacts.
+production paths changed between J and N; shared extensions and Kick/Rumble source were
+unchanged at N. Historical Rumble J default/expanded hashes are respectively
+`19d1122f10109f90e410fde9a89b24ed060e896f753c2e7021d6ed7f3fbf880a` and
+`2cd0a0d5abd986c3180569d45eb7d03d726af13da46bca6273bff32022df9839`.
+
+The current `final-fix-output/patches-1.11.1.mpp`, built at
+`4e1aa6e540b79eadf8c3f516e8a1623d83bd8a75`, has SHA-256
+`52d8100e95a3f29abd3f98ed9464b7482c3edae6ea534fee7324ddc988289948`.
+`final-fix-output/bundle-source.json` binds the Rumble patch source SHA-256
+`00e53c6a2f767073073373d61663a8658bcb7eeae28ac6f1329493ba6b8c39bc`.
+Compared with the N MPP, only that patch class, combined `classes.dex` and manifest timestamp
+change; all other entries match. `final-fix-output/build.log` records the successful
+14-second/46-task build and the existing Gradle 10 deprecation advisory.
+
+`final-fix-output/verified-artifacts.json` records both fresh Rumble selections: 26/30 patches,
+all patch/rebuild/sign steps successful, package `com.rumble.battles`/3.21.0, retained Morphe
+signer and 16 KiB alignment. The MPP contains the narrowed description, and both emitted APKs
+contain “After restarting: no Ketch consent notice and no consent recorded. May affect push
+notifications.” Each APK differs from its matching J selection only in `classes6.dex` outside
+signing metadata. The full default-to-default comparison of 39,077 unique decoded classes
+finds only the Settings summary substitution; every other class text, hook and restart flag
+is identical (`rumble-smali-diff.json`, `rumble-summary.diff` in that directory). The first
+comparison correctly failed against a pre-existing decoded baseline containing optional patch
+effects; freshly decoding the exact J default artifact resolved the baseline mismatch.
+`final-fix-output/evidence.md` retains the commands and limits. Twitch N and Kick J artifacts
+remain unchanged; earlier Rumble behavioral/device evidence applies to the unchanged hooks,
+not a new device run of these text-only artifacts. No new install or notification result is claimed.
 
 The earlier build at tooling commit `783e045` passed 46 tasks in 14 seconds
 (`task-7/final-build.log`, `final-build-source.json`). Its MPP SHA-256 is
@@ -103,7 +133,7 @@ their other decoded classes/resources/runtime assets are byte-identical to H. J 
 provider leases/pronoun completion. Fresh J USB RN and provider probes pass exact catalog
 identity and all seven pronoun response-order/owner cases. Historical unchanged checks are
 reused only with explicit source/byte comparisons; no claim of rerunning every suite on every
-artifact is made. Final Kick/Rumble J comparisons in `candidate-task6-fix1/*-smali-diff.json`
+artifact is made. Historical Kick/Rumble J comparisons in `candidate-task6-fix1/*-smali-diff.json`
 find only TwitchPronouns (including Lookup), TwitchRNChat and TwitchThirdParty changed from I.
 The independent `*-method-diff.json` comparisons establish every other method's instructions
 identical. All non-DEX ZIP payloads are identical. Those unused Twitch helpers do not change
@@ -126,6 +156,19 @@ host command with `MORPHE_WORK=ROOT/task-7/rn-landscape-fix` and the pinned JAVA
 passed all 15 checks, including 19 release tests and four staging cases; `full-host-n.log`
 in that directory retains the warning-clean output. The pinned-original Hermes gate passes
 in `hermes-n.log`, including all new unique-owner assertions and existing restoration checks.
+
+The final release-index regression first reproduced successful publication of an unrelated
+staged binary file to a real local fixture remote (`final-fix-release-red.log`). Non-dry release
+runs now reject staged work before fetch/checkout/recovery or any release mutation, preserving
+the exact index tree and separate working-tree bytes. The retained tests inspect every fixture
+remote branch/tag, cover already-published and unpublished recovery from detached HEAD, and
+retain dry-run, failed-build cleanup and original-checkout restoration coverage. The focused
+suite passes 21 tests (`final-fix-release-green.log`). One final full host run after all source
+and test edits passed all 15 registered checks, including 21 release tests and four staging
+cases (`final-fix-host.log`), with no compiler warnings. Command:
+`JAVA_HOME=~/.local/opt/jdk-21 MORPHE_WORK=ROOT TMPDIR=ROOT/tmp PYTHONDONTWRITEBYTECODE=1 bash bin/test-host`.
+These Git operations used disposable local fixtures; no actual release or remote backmerge
+was performed. `final-fix-report.md` retains exact expanded commands, outputs and commit scope.
 
 ## Installed-app evidence and boundaries
 
@@ -175,7 +218,7 @@ an account action. The failed idle dump is retained and not treated as fresh hie
 not used as a settled PiP visual claim. MediaSession reported NONE, so video frames do not
 imply a playing MediaSession or audible audio.
 
-Rumble final default `19d1122f…` opened Home and BobbyPoffGaming's public video; changing decoded
+Rumble's historical J default `19d1122f…` opened Home and BobbyPoffGaming's public video; changing decoded
 frames, visible PiP with `mode=pinned` and return to the same title are captured. These are
 public playback checks; a video's embedded Premium logo does not prove Premium entitlement.
 App preference values were not changed; both apps were force-stopped after capture.
@@ -286,8 +329,11 @@ observer removed. Wi-Fi/mobile remained 1/1. The evidence records this cache cha
   flows; Kick physical-phone authenticated navigation/playback and stock broadcaster token handoff; Rumble
   authenticated/Premium playback. A read-only/test-channel equivalent must prove the named
   behavior. Sending real chat, spending points/money and subscription changes need specific scope.
-- Complete combined Task 7 scoped review and full independent branch review, then resolve any
-  findings. The landscape implementation/evidence above is recorded before those reviews.
+- Install the final Rumble APK on USB and verify its installed hash. The two historical bounded
+  attempts timed out; no new installation or phone result follows from the wording rebuild.
+- Complete scoped re-review of the final whole-branch fixes. Combined Task 7 scoped implementation
+  review is clean at `f86098f`; whole-branch review is complete with its two findings fixed at
+  `4e1aa6e`, awaiting that re-review. Neither review closes the external verification gates.
 - Task 8 publication/CI/prerelease/stable/backmerge verification after all required evidence.
 
 Real notification delivery, live wire payloads/queue drain, provider-admin mutations and audible
