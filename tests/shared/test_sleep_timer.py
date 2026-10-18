@@ -5,6 +5,7 @@ No APK, Android SDK or network required. Runtime callbacks and entire production
 are compiled unchanged. Only Android/platform boundaries are doubled.
 """
 import sys
+from pathlib import Path
 
 sys.dont_write_bytecode = True
 from host_java import run
@@ -27,6 +28,9 @@ public class SleepTimerProbe {
   static void expire(){Handler.advance(60_000);}
   public static void main(String[] args)throws Exception{
     Settings.values.put("sleep_timer","1");
+    if(args[0].startsWith("concurrency:")){
+      SleepTimerConcurrencyProbe.run(args[0].substring("concurrency:".length()));return;
+    }
     String[] test=args[0].split(":");
     Class<?> type=Class.forName("io.github.jordanwoodson.extension.shared."+test[0]);
     play=type.getMethod("onPlay",Object.class);stop=type.getMethod("onStop",Object.class);
@@ -64,4 +68,7 @@ public class SleepTimerProbe {
 if __name__ == '__main__':
     run('SleepTimerProbe', ['SleepTimer.java', 'kick/KickPlayer.java', 'twitch/TwitchPlayer.java'],
         PROBE, [helper + ':' + scenario for helper in ['kick.KickPlayer', 'twitch.TwitchPlayer']
-                for scenario in ['new', 'resume', 'replay', 'stop', 'repeat', 'disable']])
+                for scenario in ['new', 'resume', 'replay', 'stop', 'repeat', 'disable']]
+        + ['concurrency:' + boundary for boundary in ['initial-expiry', 'initial-runnable', 'fallback', 'executor',
+            'queued-new', 'queued-resume', 'queued-current', 'queued-stock', 'queued-failure', 'queued-disabled']],
+        extra={'SleepTimerConcurrencyProbe.java': Path(__file__).with_name('SleepTimerConcurrencyProbe.java').read_text()})

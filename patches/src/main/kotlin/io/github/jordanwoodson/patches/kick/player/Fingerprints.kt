@@ -32,6 +32,12 @@ internal object PlayerViewPauseFingerprint : Fingerprint(
     definingClass = PLAYER_VIEW, name = "pause", returnType = "V", parameters = emptyList(),
 )
 
+internal object PlayerOperationExecutorFingerprint : Fingerprint(
+    definingClass = PLAYER_VIEW, returnType = "Z",
+    parameters = listOf("Ljava/lang/String;", "Lkotlin/jvm/functions/Function0;"),
+    filters = listOf(string("Player operation rejected")),
+)
+
 internal object SetAutoMaxQualityFingerprint : Fingerprint(
     definingClass = PLAYER_VIEW, name = "setAutoMaxQuality", returnType = "V", parameters = listOf("Ljava/lang/Integer;"),
 )

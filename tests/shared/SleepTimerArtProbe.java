@@ -16,6 +16,14 @@ public final class SleepTimerArtProbe {
 
     public static void main(String[] args) throws Exception {
         Looper.prepareMainLooper();
+        if (args[0].startsWith("concurrency:")) {
+            Class<?> settings = Class.forName("io.github.jordanwoodson.extension.shared.settings.Settings");
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, String> values = (java.util.Map<String, String>) settings.getField("values").get(null);
+            values.put("sleep_timer", "1");
+            run(() -> SleepTimerConcurrencyProbe.run(args[0].substring("concurrency:".length())));
+            System.exit(0);
+        }
         String[] test = args[0].split(":");
         Class<?> helper = Class.forName("io.github.jordanwoodson.extension.shared." + test[0]);
         Method play = helper.getMethod("onPlay", Object.class);

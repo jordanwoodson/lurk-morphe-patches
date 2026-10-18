@@ -28,6 +28,8 @@ public final class SleepTimer {
     private static long generation;
     private static Runnable scheduledSleep;
     private static volatile Consumer<Expiry> pauseAction;
+    /** Scope for app pause commands enqueued by the initial action; always cleared after dispatch. */
+    private static final ThreadLocal<Expiry> DISPATCHING = new ThreadLocal<>();
 
     private SleepTimer() {
     }
@@ -40,6 +42,15 @@ public final class SleepTimer {
     /** An app with a delayed fallback retains this expiry's eligible players and playback generations. */
     public static void setExpiryAction(Consumer<Expiry> action) {
         pauseAction = action;
+    }
+
+    /**
+     * Injection point at an app's player executor enqueue. Stock operations pass through unchanged;
+     * commands enqueued by a sleep action revalidate that expiry when they actually execute.
+     */
+    public static Runnable guardPauseOperation(Runnable operation) {
+        Expiry expiry = DISPATCHING.get();
+        return expiry == null ? operation : () -> expiry.runIfCurrent(operation);
     }
 
     /** A player started or resumed: (re)arms the timer from now. May run on any thread. */
@@ -77,21 +88,27 @@ public final class SleepTimer {
 
     private static void sleep(long playing) {
         if (Settings.getInt(KEY) <= 0) return;
-        Expiry expiry;
         synchronized (STARTED) {
             if (playing != generation) return;
             if (STARTED.isEmpty()) {
                 Logger.d("sleep timer: nothing is playing");
                 return;
             }
-            expiry = new Expiry(new WeakHashMap<>(STARTED));
+            Consumer<Expiry> action = pauseAction;
+            if (action == null) {
+                Logger.d("sleep timer: no pause action");
+                return;
+            }
+            Expiry expiry = new Expiry(playing, new WeakHashMap<>(STARTED));
+            // Initial pause paths can affect every app player. Serialize the actual dispatch with
+            // onPlay, just as the per-player fallback does. IVS's injected onStop reenters this monitor.
+            DISPATCHING.set(expiry);
+            try {
+                action.accept(expiry);
+            } finally {
+                DISPATCHING.remove();
+            }
         }
-        Consumer<Expiry> action = pauseAction;
-        if (action == null) {
-            Logger.d("sleep timer: no pause action");
-            return;
-        }
-        action.accept(expiry);
         toast("Sleep timer: playback paused");
     }
 
@@ -101,11 +118,20 @@ public final class SleepTimer {
      * starting do not exempt an eligible old player that the app's pause path genuinely missed.
      */
     public static final class Expiry {
+        private final long generation;
         private final Map<Object, Long> candidates;
         private boolean consumed;
 
-        private Expiry(Map<Object, Long> candidates) {
+        private Expiry(long generation, Map<Object, Long> candidates) {
+            this.generation = generation;
             this.candidates = candidates;
+        }
+
+        private void runIfCurrent(Runnable operation) {
+            synchronized (STARTED) {
+                if (generation != SleepTimer.generation || Settings.getInt(KEY) <= 0) return;
+                operation.run();
+            }
         }
 
         public void pauseLeftovers(String platform) {

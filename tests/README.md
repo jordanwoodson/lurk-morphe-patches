@@ -31,7 +31,11 @@ retained on macOS.
 `tests/shared/test_sleep_timer.py` compiles the complete production SleepTimer, KickPlayer and
 TwitchPlayer classes against platform stubs and drives their real scheduled callbacks with a virtual
 clock. It covers new players after expiry, resuming the same player, missed old players, stop/release,
-repeated expiry and disabling a pending fallback. `tests/rumble/test_state_transitions.py` runs the
+repeated expiry and disabling a pending fallback. A shared JVM/ART fixture also holds a two-thread
+resume at the initial dispatch, queued executor and fallback boundaries, checks reentrant stop
+callbacks, and covers stale/disabled queues and unchanged ordinary operations. All waits are bounded.
+`tests/kick/verify_sleep_queue.py <apktool-dir>` checks the emitted executor argument flow in a Kick
+APK patched with Sleep timer. `tests/rumble/test_state_transitions.py` runs the
 production chat filter and Rumble helpers for empty and keywords-off joins, account changes, sign-out
 and remember-speed on/off/on. Neither needs an APK, SDK or device.
 

@@ -446,8 +446,19 @@ streams opened afterwards.
 The shared sleep timer arms on IVS `play()` and stops tracking a player on `pause()` and
 `release()`, as on Twitch. When it fires, it pauses through Kick's player view (the one
 React Native last played through), whose `pause()` also updates the audio service and lets
-the player controls show Play. Any IVS player still playing three seconds later is paused
-directly. A notice says the timer paused playback.
+the player controls show Play. That view queues its IVS command on a player executor. The
+injected executor hook wraps only operations enqueued during a sleep dispatch and checks the
+expiry again when the command executes; a new start or resume invalidates queued broad pauses.
+Ordinary player operations keep their original Runnable. The dispatch context is cleared even if
+the action throws. Three seconds later, the fallback pauses only players eligible at expiry whose
+play generation still matches; a genuinely missed old player remains eligible even when a different
+player started afterwards. A notice says the timer paused playback.
+
+The APK-free sleep tests cover both dispatch boundaries and the fallback with bounded two-thread
+fixtures, including reentrant IVS stop callbacks. After decoding a Kick APK patched with Sleep timer,
+run `python3 -I tests/kick/verify_sleep_queue.py <apktool-dir>` to check that the actual executor
+Runnable argument receives the emitted expiry guard. Helper tests establish ordering and exclusion;
+live playback, control state and background transitions still need device UI verification.
 
 ### Quality on mobile data
 
