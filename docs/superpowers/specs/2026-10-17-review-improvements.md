@@ -120,3 +120,40 @@ compiler and emitted bytecode header, and build assets from committed JS source.
 Compiled bytecode avoids relying on unverified native raw-source evaluation support.
 Actual app-runtime smoke tests must establish loader ordering, module contracts,
 normal startup, reload cleanup, picker images and disabled behavior before release.
+
+### Kick pinned hook details (Task 5)
+
+Discover the Metro factory registrations from unique exported names: chatRoomStore /
+useChatroomStore, ImageCacheV2, useSessionStore / AppSessionTiming, and
+getInternalInstanceHandleFromPublicInstance / getNativeTagFromPublicInstance. Validate
+__d factory/id/dependency register flow against the hash-locked HBC99 bundle. The
+composer permission guard reads the current inputRef.getNativeRef() through the latter
+host helper and requires stateNode.canonical.currentProps.editable === true, in addition
+to authenticated session status. That prop is stock canSendMessage && !needToAcceptRules;
+focus is deliberately not a permission test because the picker closes the keyboard.
+Use the pinned AndroidTextInput Commands.setTextAndSelection with the current native
+ref, committed mostRecentEventCount, raw result and UTF-16 cursor, then stock
+setInputContent, store setSelection and ref.focus. Never call send. Wrap setEmotes with the synchronous listener
+suppressed until its nested updateRecents finishes, then merge the provider section once.
+Channel/document changes clear only owned emote data; preserve draft and reply.
+
+Append the compiled bootstrap directly after native main-bundle load in the asset
+(default and prepared-file) and file delegate branches. Preserve the original sourceURL.
+The extra asset uses the native ReactInstance asset method directly, avoiding recursive
+delegate loading. A weak instance registry is cleared on destroy; configure and catalog
+calls use NativeArray data through the bridgeless callable-module API.
+
+Runtime verification refined the stock image boundary to the exact `files.kick.com`
+and `files.cdn.kick.com` hosts. Preserve provider animated metadata: a stock PNG/static
+request maps animated sources to `2x_static.webp`, while naturally static sources retain
+`2x.webp`. The picker section needs the supported `global` icon as well as its 7TV name.
+Android's updateExtraData preserves the collapsed cursor's distance from the old text end.
+A null-text selection command before replacement clamps against the old length; a later
+span replacement can move it to the new end. Discover the unique Commands /
+__INTERNAL_VIEW_CONFIG / AndroidTextInput Metro factory (pinned module58), verify its
+view name and callable command, and require a nonnegative integral current host event
+counter. Set new text and cursor atomically through Commands.setTextAndSelection before
+the stock setter commits its children/spans. The subsequent same-length replacement
+preserves both the insertion cursor and later deliberate cursor movements. Do not keep
+a timed correction or pending selection override. Native target checks must prove this
+ordering, manual end/old-length movement, and mixed native-emote draft preservation.

@@ -535,33 +535,71 @@ copy of the page's structure.
 
 ### Third-party emotes
 
-"7TV emotes" (`emotes_7tv`, the same key as on Twitch) starts off. When on, the chat page
-script loads the channel's 7TV set and 7TV's global set from 7tv.io, then turns every word of
-a message that is exactly an emote's name into that emote's image from cdn.7tv.app, in
-messages already on the page once the sets load and in new ones as they arrive. A channel
-emote wins over a global one with the same name, and text inside links and Kick's own emotes
-stays. The images use the page's emote style, so they're sized like Kick's; zero-width
-emotes show as ordinary ones. Neither request carries cookies or a referrer, so 7TV sees the
-channel, not the page's URL with Kick's config.
+"7TV emotes" (`emotes_7tv`) starts off and requires restart. Enabling it adds channel
+and global emotes to messages, the existing native picker and native `:query`
+autocomplete. A channel alias wins over a global alias; native Kick names win in the
+picker so name-only native callbacks remain unambiguous. Selecting 7TV inserts the raw
+word in the existing draft at its UTF-16 selection, preserving replies and stock send
+handling. It requires the authenticated session and the current native composer's
+committed `editable` permission/rules prop. It never sends a message itself.
 
-7TV knows a Kick channel by its owner's Kick user ID, which the chat page doesn't have: its
-config only has the channel ID. Every HTTP client Kick makes starts from React Native's
-`OkHttpClientProvider.createClientBuilder()`, and while the switch is on (restart required)
-`KickHttp` adds an interceptor there that reads, without changing, Kick's own channel
-responses (`/api/v1|v2/channels/<slug>` and the channel screen's `/api/v2/channels/<slug>/info`)
-and remembers each channel ID's slug. The `/info` response has no owner, so the script asks
-Kick's channel API for the slug once per page (`kick.com/api/v2/channels/<slug>`, which the
-page may call) and gives 7TV the `user_id` it returns. A channel the app hasn't fetched gets
-global emotes only. OkHttp ships unrenamed in Kick; the patch checks every class and method
-the interceptor uses and fails instead of crashing later if one is gone.
+The page independently fetches globals and the channel owner's set from 7tv.io. Each
+request has a 10-second header/body deadline, a 2 MiB response limit and at most three
+transient attempts; 429 honors a capped Retry-After. Successful globals render while
+owner lookup stalls. Failed refreshes retain the last valid catalog. When needed, the
+owner lookup uses `kick.com/api/v2/channels/<slug>` without credentials. Native channel
+lookup maps hold at most 256 entries. A channel not yet observed gets globals only.
 
-Not included: the emote picker and autocomplete (the app's own React Native UI), 7TV badges
-and paints, and live set updates. Earlier the app's Pusher and Centrifugo listeners were
-considered as hooks; they never see what the page draws, because the page has its own
-realtime connection, and its emote pattern (`\[emote:(\d+):[^\]]+\]`) only accepts Kick's
-numeric IDs. Checked on the emulator, signed out, on a large live channel: on the stream
-screen and the Chat tab the page loaded the channel's 988 and the 45 global emotes after the
-owner lookup, and 7TV images showed in live messages.
+Active-set and emote-data zero-width flags layer over the adjacent emote, including a
+native Kick image; layers never cross text, links, newlines or messages. A standalone
+overlay renders normally. Live refresh restores only Lurk-owned nodes and preserves
+existing native/link handlers. Catalog changes update existing messages and native
+suggestions without replacing draft/reply state.
+
+The feature subscribes to current set IDs at **wss://events.7tv.io/v3**, debounces
+validated set updates into refetches, watches heartbeats, and reconnects with capped
+backoff (at most eight attempts per burst). Visible pages revalidate every five minutes
+to find changed channel sets. Hidden pages abort requests and close sockets; page
+teardown cancels observers, timers, sockets and fetches. Provider GETs omit cookies and
+referrers; images use no-referrer. 7TV receives the channel owner's Kick ID, set IDs and
+normal request IP metadata; it receives no Kick credentials or chat draft. Images load
+from **cdn.7tv.app**. With the patch excluded or the switch off, Lurk makes no provider
+requests. 7TV badges and paints are not included.
+
+The WebView sends only bounded catalog snapshots for its current native document token
+and channel. Native validation strips unknown fields, rejects foreign origins/stale
+documents and allows only 7TV CDN emote URLs. The stock WebView bridge continues to
+handle ordinary messages. A separately compiled HBC99 bootstrap extends chatRoomStore,
+ImageCacheV2.getImage and the existing picker/autocomplete actions. Module IDs come
+from unique export/Metro registration signatures in the hash-locked stock bundle.
+Native images use Kick's cache. Exact `files.kick.com` and `files.cdn.kick.com` image
+requests are mapped to 7TV. Static requests use `2x_static.webp` for animated sources;
+naturally static sources retain `2x.webp`. The native section supplies Kick's supported
+globe tab icon and an accessible 7TV label.
+
+Builds compile committed `patches/src/main/runtime/{kick,twitch}/*.js` through
+`bin/lib/compile-hermes.py`, using official mise-managed `hermes-compiler` packages
+`260318099.0.4` (HBC99) and `250829098.0.19` (HBC98). The packages have no executable shim;
+the script resolves their package location with Node and verifies package provenance,
+compiler version and emitted header. Generated resource metadata records source,
+compiler-binary and bytecode SHA-256. Gradle regenerates resources and removes obsolete
+outputs; CI installs the same pins before host checks and build. No generated HBC is
+checked in. The reusable Java loader validates metadata and queues the compiled bundle
+after either main-loader branch, retaining only weak runtime references cleared on
+destroy.
+
+`tests/kick/test_chat_page.py` executes the real page script in offline Chrome;
+`test_composer.js` is a boundary fixture, not proof of the native UI. `bin/test-kick-modules <stock index.android.bundle>` checks the pinned HBC export/registration discovery, and `bin/test-kick-catalog` exercises
+the APK's Java data validator on ART. Actual runtime loader ordering, image rendering,
+composer insertion and sourceURL preservation are checked separately in the target app.
+The emulator smoke rendered the native 7TV picker and suggestions, inserted raw words
+into a middle-of-draft selection and proved its native caret by subsequent typing. It
+uses the documented ARM translation workaround, so it is not physical-phone UI proof.
+Insertion uses the pinned AndroidTextInput Commands.setTextAndSelection with the current
+host event counter, followed by stock draft/selection setters. Text and caret change
+atomically, so the later native span replacement preserves the caret's distance from
+the new end. There is no delayed correction to overwrite later user movement. Authenticated
+send correctness requires a separately authorized send test.
 
 ## Implementation contracts and verification
 

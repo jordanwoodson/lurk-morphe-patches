@@ -37,7 +37,7 @@ internal val kickChatPagePatch = bytecodePatch {
                     val call = implementation!!.instructions.indexOfFirst { it.opcode == Opcode.INVOKE_SUPER }
                     if (call < 0) throw PatchException("Kick: RNCWebViewClient.$name no longer calls super")
                     addInstructions(call + 1, "invoke-static/range { p1 .. p2 }, " +
-                        "Lio/github/jordanwoodson/extension/shared/kick/KickChat;->onPage(Landroid/webkit/WebView;Ljava/lang/String;)V")
+                        "Lio/github/jordanwoodson/extension/shared/kick/KickChat;->${if (name == "onPageStarted") "onPageStarted" else "onPage"}(Landroid/webkit/WebView;Ljava/lang/String;)V")
                 }
             }
     }

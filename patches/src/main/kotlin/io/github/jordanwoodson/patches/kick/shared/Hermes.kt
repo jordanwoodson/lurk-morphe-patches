@@ -96,6 +96,34 @@ internal class HermesBundle(input: ByteArray) {
         }
     }
 
+    /** Discover a Metro registration from unique export signatures in its factory, never a portable ID. */
+    fun metroModule(exports: List<String>, direct: Boolean = false): Int {
+        ensure(exports.isNotEmpty(), "empty Metro signature")
+        val exportIds = exports.map(::stringId)
+        val global = instructions(function("global"))
+        val candidates = mutableListOf<Int>()
+        for (index in 0 until global.size - 4) {
+            val load = global[index]
+            if (load.propertyId() != stringId("__d")) continue
+            val id = global[index + 1]
+            val deps = global[index + 2]
+            val closure = global[index + 3]
+            val call = global[index + 4]
+            if (id.opcode !in setOf(0x8b, 0x8c) || deps.opcode !in setOf(0x07, 0x08, 0x09) ||
+                closure.opcode != 0x84 || call.opcode != 0x70) continue
+            // __d(factory, numericId, dependencies): require exact register flow.
+            if (call.u8(2) != load.u8(1) || call.u8(4) != closure.u8(1) ||
+                call.u8(5) != id.u8(1) || call.u8(6) != deps.u8(1)) continue
+            val factory = functions.getOrNull(closure.u16(3)) ?: continue
+            val body = instructions(factory)
+            if (exportIds.all { expected -> body.any { instruction ->
+                    (!direct && instruction.stringLoaded() == expected) ||
+                        (instruction.opcode == 0x4b && instruction.u16(4) == expected)
+                } }) candidates += if (id.opcode == 0x8b) id.u8(2) else id.u32(2)
+        }
+        return candidates.singleOrNull() ?: fail("expected one Metro factory exporting ${exports.joinToString()}")
+    }
+
     fun stringId(value: String): Int = strings.indexOf(value).also { ensure(it >= 0, "missing string $value") }
 
     fun function(name: String): HermesFunction = functions.filter { it.name == name }.singleOrNull()

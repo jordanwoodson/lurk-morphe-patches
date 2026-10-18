@@ -45,6 +45,11 @@ jobs:
           google-chrome --version
 
       # A failed host check stops the job before any release commit, tag or publication.
+      - name: Setup pinned Hermes compilers
+        uses: jdx/mise-action@v3
+        with:
+          install_args: npm:hermes-compiler@250829098.0.19 npm:hermes-compiler@260318099.0.4
+
       - name: Verify host checks
         run: bin/test-host
 
