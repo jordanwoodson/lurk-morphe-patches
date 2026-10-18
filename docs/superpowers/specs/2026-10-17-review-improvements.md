@@ -70,3 +70,53 @@ JDK 21 and Android SDK. Temporary output belongs in `~/scratch/morphe/`. Runtime
 stays Java and fingerprints use strings/signatures/patterns with unique-match checks.
 All settings must act only when their patch is included. Preserve opt-in provider
 privacy and disclose any added external requests.
+
+## Pinned chat integration design
+
+Inspection of the original bundles established the following implementation contracts.
+Module numbers below identify evidence in the pinned versions; patch-time discovery
+must use unique exports/signatures and the existing bundle hash checks, rather than
+assuming that a number is portable to another app version.
+
+Kick uses the global `chatRoomStore` (module 3232) for its composer, picker and
+autocomplete. Extend its existing `emotesSections`/`allowedEmotes` catalogs and wrap
+the stock insertion actions for 7TV names, preserving draft, UTF-16 selection,
+authentication, editability, replies and native-emote behavior. Synthetic emote IDs
+map through the mutable `ImageCacheV2.getImage` class method (module 2716) to validated
+7TV CDN URLs. Preserve stock-name precedence so name-only insertion callbacks remain
+unambiguous. The context-only `useChatStore` hook is not a global store.
+
+The Kick WebView supplies catalog snapshots to a narrowly scoped native receiver;
+validate source origin, document generation, channel identity, size and URL allowlists.
+Forward only catalog/configuration data to an RN callable module. Do not pass chat,
+drafts, credentials or arbitrary executable code through this bridge. Navigation and
+disable transitions remove the old catalog and close timers, fetches and event sockets.
+Live changes use the 7TV EventAPI plus bounded revalidation/refetch, preserving the last
+valid catalog during transient errors. Rendering supports active-set and emote-data
+zero-width flags and never crosses text, link, newline or message boundaries.
+
+Twitch's live RN surface is `ChatMessageRow` (module 3425), backed by the shared chat
+store (3446) and `ChatArea` (4587). Timestamp formatting, deleted-message state,
+keyword filtering/highlighting and nested message appearance must integrate at their
+actual row/store/body boundaries. Detailed moderation state alone does not establish
+ordinary-viewer retention: verify that path and preserve unavailable AutoMod content.
+Reuse existing provider caches and the RN IRC/ImageSource emote path; the pinned
+message segmenter uses Unicode code points. Provider/badge adapters expose bounded
+cached snapshots and perform no network operations on the JS thread. Existing VOD
+navigation reaches native replay; no separate RN VOD renderer has been established.
+
+Both apps load a small additional compiled Hermes bundle after the main bundle,
+through their existing bridgeless `ReactInstance` loader hooks. Cover embedded and
+prepared-file paths, preserve source URL, avoid recursive loading, and scope native
+runtime references to the instance lifetime. Verify execution before initial chat
+consumers capture exports; replacing global `__r` alone cannot intercept captured
+Metro imports. Mutate supported writable exports/class methods or use narrowly
+fingerprinted hooks where exports cannot safely be wrapped.
+
+Pin official `hermes-compiler` packages separately: Twitch HBC98 uses
+`250829098.0.19`; Kick HBC99 uses `260318099.0.4`. Resolve the actual platform binary
+inside the mise-managed package (the package has no npm executable shim), verify the
+compiler and emitted bytecode header, and build assets from committed JS source.
+Compiled bytecode avoids relying on unverified native raw-source evaluation support.
+Actual app-runtime smoke tests must establish loader ordering, module contracts,
+normal startup, reload cleanup, picker images and disabled behavior before release.

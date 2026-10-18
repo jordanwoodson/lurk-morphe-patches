@@ -33,11 +33,11 @@
 
 **Interfaces:** `bin/test-host` exits nonzero for any failed registered APK-free check; supports the repository's JAVA_HOME/MORPHE_WORK conventions. Release script keeps existing CLI and generated output formats.
 
-- [ ] Reproduce interface compilation failure; repair doubles and assert startup destinations, Home tabs, explicit Clips routing and disabled behavior.
-- [ ] Write failing release tests for publication recovery, no new commits, advanced dev, retry after successful publication/failed backmerge, and checkout restoration.
-- [ ] Make stable finalization shared and idempotent; preserve release assets/output even when subsequent finalization fails.
-- [ ] Add host command with the five existing JVM helper scripts and release tests. Other workers will supply additional commands for registration.
-- [ ] Gate PR/release publishing with the host command; update test documentation. Run host checks, then commit owned paths.
+- [x] Reproduce interface compilation failure; repair doubles and assert startup destinations, Home tabs, explicit Clips routing and disabled behavior.
+- [x] Write failing release tests for publication recovery, no new commits, advanced dev, retry after successful publication/failed backmerge, and checkout restoration.
+- [x] Make stable finalization shared and idempotent; preserve release assets/output even when subsequent finalization fails.
+- [x] Add host command with the five existing JVM helper scripts and release tests. Other workers will supply additional commands for registration.
+- [x] Gate PR/release publishing with the host command; update test documentation. Run host checks, then commit owned paths.
 
 ### Task 2: Sleep generations and Rumble state transitions
 
