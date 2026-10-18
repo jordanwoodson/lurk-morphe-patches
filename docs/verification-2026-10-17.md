@@ -452,32 +452,103 @@ Volume is 3/15, the latest measured pre-gesture baseline; system brightness vari
 under auto-brightness and was not written. Earlier visible-UI captures verify Twitch skip/swipe
 defaults restored, with no Kick/Rumble preference changes. Twitch was force-stopped at
 15:49:23 UTC with sessions empty (`twitch-test-stopped.json`); Kick and Rumble were stopped,
-and Go Live remains unlaunched. The phone is securely locked again after the test and requires
-normal user unlock for future account UI work. Installed APKs and reviewed production source
-are unchanged. No accounts were created and the email/audio questions remain unanswered.
+and Go Live remained unlaunched. At the end of that 15:49 UTC phase the phone was locked again;
+the later user unlock and terminal state are recorded below. Installed APKs and reviewed
+production source were unchanged. No accounts were created, and the email/audio questions
+were unanswered at that checkpoint.
 
 ### Authorized test-account preparation, 16:00–16:05 UTC
 
 A dedicated [Mail.tm](https://mail.tm/) inbox was created and ownership/active status verified
-through its official API at 16:00 UTC; a personal email address is no longer a prerequisite.
+through its official API at 16:00 UTC, allowing signup attempts without a personal address.
+Later explicit domain rejections below supersede that early prerequisite assessment.
 This establishes an inbox, not a Twitch, Kick or Rumble account. Official host-browser signup
 attempts created no platform accounts: Twitch's email-first form returned to an empty email field
 after Continue (cause unconfirmed); Kick's visible form requires a birthday, which was not
 provided or submitted; Rumble's web route stopped at security verification without challenge
-interaction or bypass. The asynchronous date-of-birth/on-device-entry question remains unanswered.
+interaction or bypass. The asynchronous date-of-birth/on-device-entry question was unanswered then.
 Evidence: `task-7/test-accounts/{outcome.md,inbox-evidence.json,final-prerequisites.json}`.
 At 16:04:56 UTC the phone is locked and all four packages (Twitch, Kick, Rumble and Go Live)
 have no application PIDs. Account creation/sign-in, paid entitlements, physical authenticated
 flows and audible-output confirmation remain open; no prior gate is passed by this preparation.
+
+### Account and physical continuation after 16:39 UTC
+
+The user supplied the missing date of birth and unlocked the phone. Subsequent actual Twitch
+signup and Rumble's official app authentication route explicitly rejected the temporary inbox
+domain. These are later explicit responses, separate from the earlier undiagnosed form reset
+and security-verification page. Kick's native email step reported “The email has already been
+taken”; that response does not establish an existing account. Its corrected official host form
+produced no captured successful signup/authentication response, with cause still unconfirmed.
+No platform account was created. A regular email address or existing signed-in device session
+is now needed; that question remains pending. No disposable-domain rotation or existing-credential
+access was attempted. Safe evidence: `task-7/test-accounts/phone-session-notes.md`; no supplied
+birth date or account identifier is recorded here.
+
+Rumble's actual visible fullscreen button now establishes physical landscape rendering:
+settled 2712×1220 screenshots show moving live video/countdown 01:35:34→01:35:13; the
+16:55:00 UTC state records Rumble focus and ROTATION_90. Android Back returned to the portrait
+player/chat with continuing video. This supersedes the earlier unsuccessful orientation-input
+attempt, without adding an authenticated, audio or RN pass. The initial rotation-animation capture
+is not settled landscape evidence; a playing UIAutomator timeout supplies no hierarchy proof
+and does not invalidate the settled screenshots. Rumble was
+stopped after capture, with no account, settings, network or global orientation change for this run.
+
+Twitch's later public live channels supplied real incoming native-chat rows with timestamps,
+badges and stock emotes. Temporary actual Lurk UI changes (Use native player off, text size 130%,
+alternating rows on, highlight word “the”, timestamps off) produced visibly larger text, alternate shading,
+purple highlighting on “Win the game predictions” and absent timestamps in
+`phone/twitch-changed-live-settled.png`. That capture's XML timed out, so the visual result is not
+an XML pass. After force-stop/reopen and normal Browse→Live Channels navigation to a public
+channel with Use native player still off, the 17:08:43 UTC activity-component capture identifies original native
+`AppCompatTextView`/`app:id/chat_message_item`. This proves the observed production route stayed
+native: that switch removes Lurk's refusal, while the original server rollout still determines RN.
+Physical RN is still open, and earlier controlled RN-route evidence is not relabeled. Visible
+badges/emotes do not establish third-party-provider events or authenticated behavior.
+
+Navigating to another public channel replaced the settled incoming chat with that channel's
+messages. Temporary Android orientation settings established 2712×1220 full native video, then
+portrait return showed current incoming styled chat; landscape chat was collapsed, so this is
+not a column/transcript or RN pass. Earlier unsuccessful rotate-button inputs remain unproven.
+Home and normal launcher return preserved the current channel and setting effects
+(`phone/twitch-chat-after-background.png`). No old-channel overlay was visible in these bounded
+captures; no exhaustive ownership/leak claim follows. No chat was sent and no account-mention,
+moderation, physical vibration, blocking or provider-event behavior was newly established.
+
+Fresh actual Lurk UI verifies all five changed preferences restored: Use native player=true,
+text size=Twitch default, alternating rows=false, highlight words empty/Not set, timestamps=true.
+Timestamp format stayed 24h; keyword/appearance parents and blocked-word/user/vibration/provider
+controls were unchanged. The settled `phone/twitch-chat-restored-live-settled.png` shows current
+incoming rows with smaller default text and timestamps, no alternating shading and no highlight
+on a recurring automated row containing “the”. The earlier unsuffixed restored screenshot shows
+Browse, so it is not the restoration's chat evidence.
+
+At 17:16:03 UTC, device settings matched this resume's baseline: USB stay-on=0,
+accelerometer=1, user rotation=0, timeout=1800000 ms. The user's newer timeout was preserved;
+the earlier phase's 300000 ms was not reapplied. This continuation made no brightness, media
+volume or network/VPN writes. At 17:17:20 UTC the phone was USB-authorized and unlocked
+(deviceLocked=0), all four packages had no PIDs, and tested playback was stopped. Go Live has
+never been launched. No intentional relock, platform account creation, source/APK/build/review
+change or publication occurred. Regular email/existing-session, verification/entitlement, audio
+and physical RN/authenticated gates remain open.
+
+One normal permanent-inbox attempt at Proton Mail Free reached
+[Human Verification](https://proton.me/support/human-verification). The paid upsell was declined;
+the offered Email alternative using the owned test inbox returned to the same form after loading,
+with no code-input/success state and no received message in bounded checks. Cause is unconfirmed,
+not an explicit Proton domain rejection. CAPTCHA was not interacted with or bypassed. No permanent
+inbox or platform account was created. The dedicated browser exited and its profile was removed;
+this host-only attempt changed no phone settings or sessions. Regular email/existing sessions or
+normal user-completed verification remain prerequisites; other open gates are unchanged.
 
 ## Required remaining gates
 
 - Complete remaining physical native/RN/composer/gesture, audible playback and lock-screen
   checks on final APKs. The bounded guest native/transport/PiP evidence above does not establish
   every required physical path or named account behavior.
-- Establish named account sessions through normal on-device flows, including authorized
-  test-account creation using the dedicated inbox once the date-of-birth/on-device-entry and
-  required verification prerequisites are resolved:
+- Establish named account sessions through normal on-device flows using a regular email for
+  authorized test-account creation or an existing signed-in device session, resolving required
+  verification prerequisites:
   Twitch authenticated chat/points/Amazon/member flows; Kick physical authenticated navigation/
   playback and stock broadcaster token handoff; Rumble authenticated/Premium playback. Required
   entitlements remain unavailable. A read-only/test-channel equivalent must prove the named

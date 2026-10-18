@@ -107,7 +107,7 @@ review is clean after shared test-harness extraction at `f86098f`.
 
 - [x] Build the bundle and patch all three pinned APKs; verify emitted extension calls, resources, settings and Hermes edits. Record hashes and selected patches.
 - [ ] Install on authorized USB phone and run relevant ART/UI probes; background/foreground, Wi-Fi/mobile, lock-screen and PiP transitions.
-- [ ] Establish account sessions through normal on-device flows, including authorized test-account creation using the dedicated inbox once date-of-birth/on-device-entry and required verification prerequisites are resolved, and validate named authenticated flows. Do not send real chat, spend points/money, or change subscriptions without explicit scope for the specific action; use read-only/test-channel equivalents where they prove the behavior, and record remaining input/entitlement needs.
+- [ ] Establish account sessions through normal on-device flows using a regular email for authorized test-account creation or an existing signed-in device session; resolve required verification and validate named authenticated flows. Do not send real chat, spend points/money, or change subscriptions without explicit scope for the specific action; use read-only/test-channel equivalents where they prove the behavior, and record remaining input/entitlement needs.
 - [x] Inspect residual telemetry payloads/dependencies and compare relevant switch transitions, including Rumble consent restart and push consequences.
 - [x] Fix failures and rerun affected plus full host/build gates; have independent review of completed diff and resolve findings.
 
@@ -177,18 +177,53 @@ No audible-output or security-bypass claim. `device-settings-restored.json` veri
 device settings restored (stay-on 0, accelerometer 1/rotation 0, timeout 300000, auto-brightness 1,
 Wi-Fi/mobile 1/1); volume is latest pre-gesture 3/15, system brightness was not written.
 Twitch was stopped with no sessions at 15:49:23 UTC, Kick/Rumble stopped, Go Live unlaunched.
-The phone is securely locked again and needs normal user unlock for remaining account UI.
+At the end of that 15:49 UTC phase the phone was locked again; later unlock/state is recorded below.
 Remaining physical/account requirements stay open; no waiver or Task 7 completion is claimed.
 
 #### Authorized test-account preparation, 16:00–16:05 UTC
 
-A dedicated [Mail.tm](https://mail.tm/) inbox is active and ownership verified; personal email is
-no longer required. Official host-browser attempts created no platform accounts: Twitch's
+A dedicated [Mail.tm](https://mail.tm/) inbox was active and ownership verified for signup
+attempts without a personal address; later domain rejections below supersede that assessment.
+Official host-browser attempts created no platform accounts: Twitch's
 email-first form reset after Continue (cause unconfirmed), Kick requires an unprovided birthday,
-and Rumble stopped at security verification. The date-of-birth/on-device-entry question remains
-unanswered. `task-7/test-accounts/outcome.md` and safe JSON record the limits. At 16:04:56 UTC
+and Rumble stopped at security verification. The date-of-birth/on-device-entry question was
+unanswered then. `task-7/test-accounts/outcome.md` and safe JSON record the limits. At 16:04:56 UTC
 the phone is locked and all four app packages are stopped. Paid entitlements, audio confirmation
 and actual signed-in physical flows remain open; Task 7 and Task 8 remain incomplete.
+
+#### Account and physical continuation after 16:39 UTC
+
+The user supplied the missing date of birth and unlocked the phone. Actual Twitch and Rumble
+signup explicitly rejected the temporary inbox domain. Kick's native email-taken response does
+not establish an existing account; its corrected official host form produced no captured successful
+signup/authentication response, with cause unconfirmed. No platform accounts were created.
+A regular email address or existing signed-in device session is now needed; that question is
+pending. Rumble's settled 2712×1220 fullscreen video and portrait return now pass within their
+recorded scope, superseding earlier unproven orientation inputs. Safe evidence:
+`task-7/test-accounts/phone-session-notes.md`. Account, entitlement, audio and remaining physical
+gates stay open; no completion/publication claim.
+
+Later actual Twitch live native-chat rows visibly respond to paired text-size/alternating-row/
+keyword-highlight/timestamp changes. The paired screenshot's XML timed out; no XML pass.
+Normal cold navigation with Use native player off still produced original native message components
+at 17:08:43 UTC, so physical RN remains open; controlled earlier RN evidence is not relabeled.
+Two-channel navigation replaced settled incoming rows, wide full native video returned to current
+portrait styled chat, and Home/return preserved the channel/settings. Landscape chat was collapsed;
+no column/RN, exhaustive ownership, authenticated moderation/provider-event or chat-send pass.
+All five modified preferences were freshly verified restored, with settled live rows showing
+default smaller text/timestamps and no alternation/highlight. At 17:16:03 UTC the captured new
+device baseline was restored: stay-on=0, accelerometer=1, rotation=0, timeout=1800000 ms;
+the user's newer timeout was preserved, not reset to the earlier 300000 ms. At 17:17:20 UTC the phone was unlocked,
+all four packages stopped, Go Live unlaunched. No intentional relock or account creation.
+Regular email/existing-session, verification/paid entitlement, audio and actual physical RN/
+authenticated gates remain open. Final technical review remains complete; Task 7/8 incomplete.
+
+One normal Proton Mail Free permanent-inbox signup reached Human Verification. The offered
+Email alternative returned to the same form with no code-input/success or message in bounded
+checks; cause unconfirmed, no explicit Proton domain rejection. CAPTCHA was untouched, paid
+upsell declined, no permanent inbox/platform account created. Browser exited/profile removed;
+phone restoration unchanged. Normal email/session or user-completed verification prerequisites
+and all remaining entitlement/audio/physical RN/account gates stay open.
 
 ### Task 8: Push and stable release
 
