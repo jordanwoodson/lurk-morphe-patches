@@ -6,8 +6,9 @@ review is clean after the shared test-harness extraction at `f86098f`. Independe
 review of `590ef1e..f86098f` found one Important release-index defect and one Minor Rumble
 notification-wording defect. Both are fixed at `4e1aa6e`; final scoped re-review through
 `b252644` is clean (`final-fix-review.md`). Final technical review and installation of all three
-current default APKs are complete. Physical-phone UI and named authenticated flows remain
-required before release.
+current default APKs are complete. The user unlocked the phone at 15:01 UTC on 2026-10-18;
+bounded physical checks are recorded below. Remaining physical-phone and named authenticated
+flows are still required before release.
 No push, tag, release or merge was performed for this verification. Missing prerequisites are
 recorded as open gates, never as passing tests.
 
@@ -91,8 +92,8 @@ is identical (`rumble-smali-diff.json`, `rumble-summary.diff` in that directory)
 comparison correctly failed against a pre-existing decoded baseline containing optional patch
 effects; freshly decoding the exact J default artifact resolved the baseline mismatch.
 `final-fix-output/evidence.md` retains the commands and limits. Twitch N and Kick J artifacts
-remain unchanged; earlier Rumble behavioral/device evidence applies to the unchanged hooks,
-not a new runtime test of these text-only artifacts. The later USB installation is recorded below;
+remain unchanged; earlier Rumble behavioral/device evidence applies to the unchanged hooks.
+The later USB installation and subsequent physical checks are recorded separately below;
 no notification-delivery result is claimed.
 
 The earlier build at tooling commit `783e045` passed 46 tasks in 14 seconds
@@ -176,7 +177,8 @@ was performed. `final-fix-report.md` retains exact expanded commands, outputs an
 
 The emulator is Android 36 `emulator-5580`, launched without audio. No audible-output or
 physical-carrier claim follows from playback state/frames. The USB Motorola edge 2025
-`ZA2234BBJ8` remains securely locked. Earlier ART probes did not install/launch phone apps.
+`ZA2234BBJ8` was securely locked during the earlier ART and installation work. Earlier ART probes
+did not install/launch phone apps; the subsequent unlocked physical checks are recorded separately below.
 Task 7 subsequently updated final default Twitch N and Kick with `adb install -r`, after verifying
 their existing signer equals the candidate signer; both installed APK hashes match exactly.
 N's 11:01:04 UTC readback records deviceLocked=1, UNTRUSTED, showing=true and secure=true
@@ -197,9 +199,9 @@ command (exec session `86696`) exited 0 with `Success`. The operation was monito
 completion, with no duplicate or abandoned install; no installer or observer job remains.
 Fresh read-only package-path/SHA-256 checks at 12:45:44 UTC confirm all three current default
 APKs in the table above are installed exactly: Twitch N, Kick J and Rumble final-fix `c444e2eb…`.
-The 12:45:43 UTC readback still reports deviceLocked=1 and UNTRUSTED. Installation is complete;
-physical UI/transitions and authenticated flows remain untested on the locked phone.
-The later 12:54:54 UTC refresh confirms the same locked state.
+The 12:45:43 UTC readback reports deviceLocked=1 and UNTRUSTED; the 12:54:54 UTC refresh
+confirmed the same state. Those are historical lock observations, before the user's 15:01 UTC
+unlock. Installation alone did not establish physical UI/transitions or authenticated flows.
 
 Evidence is under `task-7/phone-preparation/`: `current-install-evidence.md`,
 `current-installed-artifacts.json`, `rumble-final-install-session.json`,
@@ -214,21 +216,33 @@ credential/token read, account entry, app launch or UI action was performed for 
 Kick's stock broadcaster handoff has an additional prerequisite: the separate Go Live companion,
 identified by [KICK's Android help](https://help.kick.com/en/articles/16536331-getting-started-with-the-kick-go-live-app-for-android)
 and [Google Play](https://play.google.com/store/apps/details?id=com.kick.streaming) as
-`com.kick.streaming`, is absent from the phone's current profile (`pm path` exit 1 at
-12:54:16 UTC). Bounded approved-source preparation obtained no complete APK/XAPK and started
-no companion install or launch; no cause for the missing complete artifact is established. Companion
-manifest/certificate/caller inspection and authenticated handoff remain unverified. Once the
-phone is unlocked, the normal official Play UI can prepare that prerequisite. Evidence:
+`com.kick.streaming`, was absent at 12:54:16 UTC (`pm path` exit 1). Earlier bounded approved-source
+preparation obtained no complete APK/XAPK and started no companion install or launch; no cause
+for the missing complete artifact is established. Historical evidence:
 `task-7/kick-account-preparation/stock-companion/{evidence.md,preparation-result.json}`.
-This does not change the three verified patched-app installations or pass any account/UI gate.
+After unlock, the normal official Play UI installed stock Go Live 2.5.0/code 99. The 15:04:28 UTC
+acquisition manifest records base plus arm64-v8a/xxhdpi splits under that directory's
+`play-installed/`. Base APK SHA-256 is
+`b6eb6edc8ab8ffdec0563d4b18bafc918f5eb7469d2069315e0da76197bba578`; APK signer SHA-256 is
+`f016e8519887a75ca1f93aff0e47e4f0393e179117b916e4913754bf70d920fd`.
+`play-installed/companion-static.md` inspects the original manifest and DEX: the incoming
+broadcaster path directly calls the viewer's `getToken` provider without a query or signature
+preflight in that sequence. The separate reverse viewer query requests a different permission
+name from the companion's declared read permission. This is a static mismatch, not a measured
+reverse denial; differing signer digests do not establish categorical handoff blocking.
+The companion has not been launched and no live provider/token/account action was performed.
+Its acquisition and static caller inspection supersede the earlier missing-companion prerequisite;
+authenticated handoff and server acceptance remain unverified.
+
+Earlier emulator and controlled-route observations (later physical checks are recorded separately):
 
 | Flow | Evidence supplied | Boundary / remaining proof |
 |---|---|---|
-| Twitch native public VOD, replay and chapters | Production I APK `1eaadae6a6ab299a6d516ae0787096e3409187ebfa0dfca71e07c6b641caf6b4`; real four-chapter response/dialog; selected second chapter reached 4:25:09 | Emulator guest, before J provider fix. `task-7/twitch-i-ui/evidence.md`; physical/account proof remains |
-| Twitch PiP/background/network/screen sleep | Actual pinned PiP, system Expand return, Wi-Fi→emulated mobile→Wi-Fi; no-tap sleep/wake control retained PLAYING with increasing position | Emulator transports use host networking; no physical carrier/audio proof. Settings/network restored |
+| Twitch native public VOD, replay and chapters | Production I APK `1eaadae6a6ab299a6d516ae0787096e3409187ebfa0dfca71e07c6b641caf6b4`; real four-chapter response/dialog; selected second chapter reached 4:25:09 | Emulator guest, before J provider fix. `task-7/twitch-i-ui/evidence.md`; later guest physical evidence below, account proof separate |
+| Twitch PiP/background/network/screen sleep | Actual pinned PiP, system Expand return, Wi-Fi→emulated mobile→Wi-Fi; no-tap sleep/wake control retained PLAYING with increasing position | Emulator transports use host networking; later physical transport evidence below, audible output separate. Settings/network restored |
 | Twitch RN consumer, moderation and reload | Original Fragment/ReactSurface and actual store/action controls; default/prepared/off execution and same-PID cleanup/rebootstrap in Task 6 | Explicit isolated route/observer fixture; production chooses native theatre in this guest session. No authenticated sending gate inferred from keyboard focus |
 | Twitch provider images / pronouns | J mounted original RN provider images and real Android parser/Canvas/PNG pronoun cases; L adds actual post-rotation floating original row with genuine store/channel and three real CDN image decodes | L floating context/row code is byte-identical in N. Badge/pronoun consumer phase uses explicitly controlled cached metadata; no real-network badge/pronoun claim |
-| Twitch overlay/gesture | Fourteen ART cases with real MotionEvent/View/Handler, owner retirement and pointer/off/cancel controls | Controlled Activity/window boundaries; visible physical gestures, vibration and volume remain open |
+| Twitch overlay/gesture | Fourteen ART cases with real MotionEvent/View/Handler, owner retirement and pointer/off/cancel controls | Controlled Activity/window boundaries; later physical volume/brightness gestures below, other gesture/vibration paths separate |
 | Kick picker/autocomplete/lifecycle | Task 5 actual native first mount/leave/reentry, cursor/manual moves, mixed stock span, autocomplete and follower-only restrictions | Emulator ARM-library extraction workaround only; no APK modification. Physical UI and feature-specific account compatibility remain open |
 | Kick live provider sets / zero-width | Production-source EventAPI add/update/remove/gap/heartbeat/retry/resubscription and offline browser layering regressions | Controlled provider/browser boundaries; live provider-admin mutation not claimed |
 | Kick same-process reload | Final default `4dc6226c…` plus two-call-through observer: original host.reload, same PID 8454, original release removes old registry, new instance/context on same host, bootstrap/configure/sourceURL twice, Home renders | `task-7/kick-reload/evidence.md`; default path proven. No prepared-main reload, GC/leak, mounted WebView disposal or broadcaster handoff claim; exact production APK/settings restored |
@@ -241,8 +255,8 @@ and historical J reinstall are recorded in Task 6 fix1; final N restoration is r
 Original user sessions/data were
 retained. No chat was sent, points/money spent, or follow/subscription changed. Kick's original
 viewer provider is retained; a signature mismatch alone does not prove an incoming
-`ContentProvider.call` is denied. Stock companion caller behavior and authenticated token handoff
-remain unverified; no token was read or permission weakened.
+`ContentProvider.call` is denied. Stock companion caller behavior is now statically inspected
+above; authenticated token handoff remains unverified. No token was read or permission weakened.
 
 Final production emulator smokes under `task-7/final-device-smoke/` additionally establish
 Kick default `4dc6226c…` preserved the existing test-account profile and opened Sliggy's real
@@ -357,13 +371,101 @@ the restored default-on cookie blocker. Both privacy keys were restored to their
 implicit defaults, other settings checked unchanged, exact production APK/hash restored and
 observer removed. Wi-Fi/mobile remained 1/1. The evidence records this cache change explicitly.
 
+## Physical phone checks, 2026-10-18
+
+The user unlocked the authorized phone at 15:01 UTC and authorized creating test accounts if
+needed. Twitch, Kick and Rumble were physically observed signed out. The asynchronous account-email
+and audible-output questions remain unanswered; no account creation or authenticated result is
+claimed. Evidence root: `task-7/phone-validation-2026-10-18/`, especially `evidence.md` and its
+named screenshots/XML/state captures. Screenshots are authoritative where UIAutomator reports
+an underlying feed or fails to idle; those XML results are not treated as player hierarchy proof.
+
+Twitch N's native public VOD/replay rendered in portrait and landscape. With a temporary custom
+15-second interval, paused positions 271000→286000→271000 ms prove exact forward/back seeks.
+Actual right-down volume swipe changed 3→1 with the 7% overlay; left-up brightness showed a
+16% overlay and window override while global brightness stayed 13. Hardware volume-up later
+restored 3/15, the immediate pre-gesture baseline. Audible output remains unverified.
+Wi-Fi→validated cellular→Wi-Fi is observed with the existing VPN unchanged; selecting the real
+second chapter while Wi-Fi was off reached PLAYING at 4:25:12 with a newly rendered game frame.
+This establishes that bounded transition, not packet-level, gapless or audible behavior.
+Actual system PiP had a pinned task; Android Expand returned to the native player with playback
+progression. Refresh-gear long-press was followed by progression, but the filtered hook log was
+empty: no callback/new-request success is inferred. The custom seek interval and swipe switch
+were restored through visible UI to defaults (-10/+30 and off); sleep Off and refresh switches
+remained unchanged, and Twitch was force-stopped after capture.
+
+Kick J's guest public GMHikaru VOD rendered real replay messages/emotes. An earlier selected
+VOD's mature gate was cancelled without acceptance. Real Wi-Fi→validated cellular→Wi-Fi and
+progressing video/miniplayer frames establish bounded playback continuity; the attempted drag
+left the player and does not prove an unbuffered seek or new segment fetch. Actual system PiP
+was pinned, and Expand returned to Kick's original miniplayer. Later Home featured live playback
+with real chat and a follower-only disabled composer; tapping it produced no editable keyboard.
+No chat was entered/sent and no authenticated picker/autocomplete result is claimed. A transient
+loading screen is not classified as a crash; retained exit metadata shows no new crash. No Kick
+settings or account changes were made.
+
+Rumble final-fix's account screen showed Sign In/Create Account; a featured public live stream
+rendered with the guest Sign in to join gate. Video rendered on validated cellular with Wi-Fi
+off, but the Wi-Fi return produced a natural “Something went wrong” player/chat error. This is
+not a seamless-return pass; MediaSession still said PLAYING during the error and is insufficient
+proof of playback. Tapping the actual clickable error panel at 15:41:47 UTC emitted the exact
+`refresh: reloaded` line under the `lurk` tag and restored visibly changing live-video frames
+(`rumble-natural-error.xml`, `rumble-natural-error-safe-log.json`,
+`rumble-natural-refresh-after.png`). No classification fixture or new instrumentation was used.
+This proves actual player recovery from the natural failure, not precise live/VOD position,
+quality preservation or chat reconnection; chat still showed No Messages Yet. Home while errored
+produced no PiP. After recovery, actual system PiP had a pinned Rumble task and Android Expand
+returned to the playing original stream (`rumble-recovered-pip*`, `rumble-pip-menu/expanded`).
+Rumble preferences, consent, accounts and entitlements were unchanged; Wi-Fi/mobile data were
+restored to 1/1 with the existing VPN unchanged.
+
+`rumble-chat-after-network-observation.md` records the unresolved chat continuity/history
+observation with moderate usability impact for this session. Static comparison finds the player
+owner and chat hooks unchanged; branch chat changes concern identity learning rather than
+reconnect/history requests. This does not establish a branch regression or prove reproduction
+in the untouched APK. Explicit disposition in `ROOT/progress.md`: keep the limitation visible,
+without expanding player-only refresh into automatic chat/history recovery. An affected session
+may need reopening and later focused transport/history investigation. No all-chat/network pass
+is inferred. Rumble's attempted landscape inputs produced portrait captures, so landscape
+rendering is not established by this run.
+
+The custom Twitch seek exposed an inherited metadata/accessibility limitation: MediaSession
+actions still say “Rewind 10 seconds / Forward 30 seconds” while the measured seeks are ±15
+seconds and visible controls are arrow-only. `media-skip-label-observation.md` establishes the
+unchanged baseline `590ef1e..2b9b75b` and original fixed-label construction. Explicit disposition
+in `ROOT/progress.md`: low severity, outside the current explicit requirements, retained for
+future focused repair rather than counted as a pass. The limitation can misstate duration to
+media-control clients; actual TalkBack or lock-screen announcements were not tested. No runtime
+source change follows from this ruled disposition.
+
+Twitch's final native guest VOD check pairs actual MediaSession and trust state:
+15:47:38 UTC PLAYING/speed 1 at 64672 ms, Awake and unlocked; 15:47:47 UTC at 72928 ms,
+Dozing and deviceLocked=1; 15:47:50 UTC at 75914 ms, Awake after wake key but still locked.
+`twitch-lock-{before,asleep,awake}.json` and `phone-lock-{before,asleep,awake}.json` establish
+bounded physical screen-off/secure-lock/wake position progression. No security bypass or
+unlock attempt was used. Audible output remains unconfirmed; AudioTrack configuration metadata
+is not hearing evidence.
+
+Final `device-settings-restored.json` verifies stay-on-while-plugged-in=0, accelerometer=1,
+user rotation=0, screen-off timeout=300000 ms, auto-brightness=1 and Wi-Fi/mobile data=1/1.
+Volume is 3/15, the latest measured pre-gesture baseline; system brightness varied naturally
+under auto-brightness and was not written. Earlier visible-UI captures verify Twitch skip/swipe
+defaults restored, with no Kick/Rumble preference changes. Twitch was force-stopped at
+15:49:23 UTC with sessions empty (`twitch-test-stopped.json`); Kick and Rumble were stopped,
+and Go Live remains unlaunched. The phone is securely locked again after the test and requires
+normal user unlock for future account UI work. Installed APKs and reviewed production source
+are unchanged. No accounts were created and the email/audio questions remain unanswered.
+
 ## Required remaining gates
 
-- User unlock of the authorized physical phone, then visible native/RN/composer/gesture and
-  playback background/foreground, real Wi-Fi/mobile, lock-screen and PiP checks on final APKs.
-- User-entered account sessions on device only: Twitch authenticated chat/points/Amazon/member
-  flows; Kick physical-phone authenticated navigation/playback and stock broadcaster token handoff; Rumble
-  authenticated/Premium playback. A read-only/test-channel equivalent must prove the named
+- Complete remaining physical native/RN/composer/gesture, audible playback and lock-screen
+  checks on final APKs. The bounded guest native/transport/PiP evidence above does not establish
+  every required physical path or named account behavior.
+- Establish named account sessions through normal on-device flows, including authorized
+  test-account creation once the email identifier and required verification are available:
+  Twitch authenticated chat/points/Amazon/member flows; Kick physical authenticated navigation/
+  playback and stock broadcaster token handoff; Rumble authenticated/Premium playback. Required
+  entitlements remain unavailable. A read-only/test-channel equivalent must prove the named
   behavior. Sending real chat, spending points/money and subscription changes need specific scope.
 - Task 8 publication/CI/prerelease/stable/backmerge verification after all required evidence.
 

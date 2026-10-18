@@ -107,7 +107,7 @@ review is clean after shared test-harness extraction at `f86098f`.
 
 - [x] Build the bundle and patch all three pinned APKs; verify emitted extension calls, resources, settings and Hermes edits. Record hashes and selected patches.
 - [ ] Install on authorized USB phone and run relevant ART/UI probes; background/foreground, Wi-Fi/mobile, lock-screen and PiP transitions.
-- [ ] Obtain user-entered account sessions and validate named authenticated flows. Do not send real chat, spend points/money, or change subscriptions without explicit scope for the specific action; use read-only/test-channel equivalents where they prove the behavior, and record remaining input needs.
+- [ ] Establish account sessions through normal on-device flows, including authorized test-account creation once the email identifier and required verification are available, and validate named authenticated flows. Do not send real chat, spend points/money, or change subscriptions without explicit scope for the specific action; use read-only/test-channel equivalents where they prove the behavior, and record remaining input/entitlement needs.
 - [x] Inspect residual telemetry payloads/dependencies and compare relevant switch transitions, including Rumble consent restart and push consequences.
 - [x] Fix failures and rerun affected plus full host/build gates; have independent review of completed diff and resolve findings.
 
@@ -134,18 +134,51 @@ APKs are installed with exact hashes verified at 12:45:44 UTC on 2026-10-18: Twi
 and final-fix Rumble. Rumble session `720042754` completed successfully at 12:45:27 UTC after
 3604.112 seconds; the original command exited 0 with `Success`, and no install job remains.
 The earlier bounded waits and old-APK observations are retained as history, superseded by
-later terminal success and installed-hash readbacks; the delay's cause is unknown. The phone
-remains securely locked at 12:45:43 UTC, so installation does not pass physical UI or account
-checks; the 12:54:54 UTC refresh confirms the same locked state. The mixed installation/UI
-checkbox above stays unchecked for those remaining behaviors.
+later terminal success and installed-hash readbacks; the delay's cause is unknown. Lock readbacks
+at 12:45:43 and 12:54:54 UTC describe the earlier state, before the user unlocked at 15:01 UTC.
+Installation alone does not pass physical UI or account checks. The mixed installation/UI
+checkbox above stays unchecked for remaining physical behaviors.
 `task-7/phone-preparation/current-install-evidence.md` records the exact evidence. No push,
 CI publication, release or backmerge occurred. Task 7 as a whole remains incomplete.
-Kick's separate Go Live companion (`com.kick.streaming`) is absent from the current phone
-profile; bounded approved-source preparation obtained no complete APK/XAPK and started no
-companion install. Its manifest/certificate/caller and authenticated handoff remain unverified.
-The normal official Play UI after unlock can prepare that prerequisite; retained evidence is
-`task-7/kick-account-preparation/stock-companion/evidence.md`. The three patched-app installations
-remain complete; physical UI/account gates remain open.
+Kick's separate Go Live companion (`com.kick.streaming`) was absent during earlier bounded
+preparation, which obtained no complete APK/XAPK. After unlock the official Play phone UI
+installed stock 2.5.0/code 99; exact base/splits and static manifest/caller evidence are retained
+in `task-7/kick-account-preparation/stock-companion/play-installed/`. The incoming caller directly
+uses the viewer provider without a query/signature preflight in that path. The reverse permission-name
+mismatch is static evidence, not an actual denial or categorical signature blocker. The companion
+has not been launched; authenticated handoff remains unverified.
+
+Bounded physical guest checks are recorded in `task-7/phone-validation-2026-10-18/evidence.md`.
+All three apps were seen signed out. Twitch N's native portrait/landscape VOD/replay, exact ±15s
+paused seeks, volume/brightness gestures, real Wi-Fi/cellular transition with chapter selection
+and system PiP/Expand passed within their recorded scope. Temporary Twitch seek/swipe settings
+were restored. Kick J's guest public VOD/replay chat, live chat with disabled composer, system
+PiP/miniplayer return and bounded real-network continuity were observed; no unbuffered seek or
+authenticated composer/handoff success is inferred. User authorization permits test-account
+creation, but account-email and audible-output questions remain unanswered; no account pass.
+Rumble's guest live video rendered on cellular, then Wi-Fi return produced a natural player/chat
+error. Actual error-panel tap emitted `refresh: reloaded` and restored moving video without a
+fixture; subsequent real PiP/Expand returned to the stream. This is player recovery, not seamless
+transport return, precise position/quality or chat-reconnection proof; stale PLAYING state alone
+was insufficient. No Rumble settings/account changes were made.
+Rumble's unresolved chat continuity/history observation is explicitly ruled a moderate affected-session
+limitation outside the player-only refresh requirement, which does not promise automatic chat/history
+recovery. No branch regression or untouched-APK reproduction is confirmed. No chat/network pass
+is claimed; reopening/focused follow-up may be needed. See
+`rumble-chat-after-network-observation.md` and ROOT/progress.md.
+Attempted Rumble landscape inputs left portrait captures and do not establish landscape rendering.
+The inherited MediaSession 10/30-second labels under custom ±15s seek are explicitly ruled a
+low-severity metadata/accessibility limitation outside current explicit requirements, unchanged
+from `590ef1e..2b9b75b`; measured seeks pass, actual TalkBack/lock-screen announcements are
+unverified. See `media-skip-label-observation.md` and the ruling in ROOT/progress.md.
+Final Twitch physical secure-lock/wake check records PLAYING/speed 1 positions
+64672→72928→75914 ms at 15:47:38/47/50 UTC, Awake/unlocked→Dozing/locked→Awake/still locked.
+No audible-output or security-bypass claim. `device-settings-restored.json` verifies temporary
+device settings restored (stay-on 0, accelerometer 1/rotation 0, timeout 300000, auto-brightness 1,
+Wi-Fi/mobile 1/1); volume is latest pre-gesture 3/15, system brightness was not written.
+Twitch was stopped with no sessions at 15:49:23 UTC, Kick/Rumble stopped, Go Live unlaunched.
+The phone is securely locked again and needs normal user unlock for remaining account UI.
+Remaining physical/account requirements stay open; no waiver or Task 7 completion is claimed.
 
 ### Task 8: Push and stable release
 
