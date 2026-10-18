@@ -157,3 +157,14 @@ the stock setter commits its children/spans. The subsequent same-length replacem
 preserves both the insertion cursor and later deliberate cursor movements. Do not keep
 a timed correction or pending selection override. Native target checks must prove this
 ordering, manual end/old-length movement, and mixed native-emote draft preservation.
+
+
+Task 5 lifecycle refinement after review: successful explicit no-set responses, or a valid
+provider identity with an omitted optional set, clear the channel catalog. A valid set
+identity with an omitted empty emote vector normalizes to an empty catalog. Transient and
+malformed responses retain the last valid data. Subscription reconciliation removes only
+retired set IDs. Bind native augmentation to the input-ref container and mounted instance
+at the current page association; stock reset or ref replacement retires that generation.
+The initial ref may attach after association within the same container. Ordinary native
+catalog rebuilds preserve this authority. Validated pagehide and the exact pinned
+RNCWebView.destroy boundary end only their own document's native catalog authority.

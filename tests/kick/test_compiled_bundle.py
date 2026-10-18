@@ -29,4 +29,5 @@ with tempfile.TemporaryDirectory(prefix='compiled-hermes-', dir=work) as directo
         assert output.read_bytes() != data, 'changed source must replace the compiled resource'
         source.write_text('global.lurkCompilerSmoke = 1;\n')
 subprocess.run(['node', str(ROOT / 'tests/kick/test_composer.js')], cwd=ROOT, check=True)
+subprocess.run(['node', str(ROOT / 'tests/kick/test_page_lifecycle.js')], cwd=ROOT, check=True)
 print('PASS: pinned compiler families and fresh-source provenance')

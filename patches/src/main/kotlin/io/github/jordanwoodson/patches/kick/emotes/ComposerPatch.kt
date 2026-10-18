@@ -72,6 +72,9 @@ internal val kickComposerPatch = bytecodePatch {
         Fingerprint(definingClass = "Lcom/facebook/react/runtime/ReactInstance;", name = "destroy", returnType = "V", parameters = emptyList())
             .kickMatch("ReactInstance.destroy").method.addInstructions(0,
                 "invoke-static/range { p0 .. p0 }, Lio/github/jordanwoodson/extension/shared/CompiledBundle;->release(Ljava/lang/Object;)V")
+        Fingerprint(definingClass = "Lcom/reactnativecommunity/webview/RNCWebView;", name = "destroy", returnType = "V", parameters = emptyList())
+            .kickMatch("WebView catalog disposal").method.addInstructions(0,
+                "invoke-static { p0 }, Lio/github/jordanwoodson/extension/shared/kick/KickChat;->onPageDisposed(Landroid/webkit/WebView;)V")
         Fingerprint(definingClass = "Lcom/reactnativecommunity/webview/RNCWebView;", name = "onMessage", returnType = "V",
             parameters = listOf("Ljava/lang/String;", "Ljava/lang/String;"))
             .kickMatch("WebView catalog message boundary").method.apply {

@@ -68,12 +68,17 @@ public final class KickChat {
      * applies itself once per page.
      */
     public static synchronized void onPageStarted(WebView view, String url) {
+        onPageDisposed(view);
+        onPage(view, url);
+    }
+
+    /** End only this WebView's authority, even when no replacement page starts. */
+    public static synchronized void onPageDisposed(WebView view) {
         PAGES.remove(view);
         if (active.get() == view) {
             active.clear();
             KickComposer.send("channel", "{\"enabled\":false}");
         }
-        onPage(view, url);
     }
 
     public static synchronized void onPage(WebView view, String url) {
@@ -108,13 +113,18 @@ public final class KickChat {
         JSONObject data;
         try { data = new JSONObject(message); }
         catch (JSONException e) { return false; }
-        if (!"lurk7tvCatalog".equals(data.optString("type"))) return false;
+        String type = data.optString("type");
+        if (!"lurk7tvCatalog".equals(type) && !"lurk7tvDispose".equals(type)) return false;
         try {
             Page page = PAGES.get(view);
             if (!on(SEVEN_TV) || page == null || active.get() != view || !chatOrigin(sourceUrl) ||
                     !chatOrigin(view.getUrl()) || !page.generation.equals(data.optString("generation")) ||
                     !java.util.Objects.equals(page.channel, data.opt("channelId")) ||
                     !java.util.Objects.equals(page.slug, data.opt("slug"))) return true;
+            if ("lurk7tvDispose".equals(type)) {
+                onPageDisposed(view);
+                return true;
+            }
             JSONObject clean = KickCatalog.sanitize(data, page.generation, page.channel, page.slug);
             if (clean == null) return true;
             KickComposer.send("catalog", clean.toString());

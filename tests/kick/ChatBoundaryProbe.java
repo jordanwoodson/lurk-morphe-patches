@@ -13,9 +13,10 @@ public final class ChatBoundaryProbe {
     static final String CHAT="io.github.jordanwoodson.extension.shared.kick.KickChat";
     static final String HTTP="io.github.jordanwoodson.extension.shared.kick.KickHttp";
     public static final class Capture extends WebView {
-        String source;
+        String source, url;
         public Capture(Context c){super(c);}
         @Override public void evaluateJavascript(String js,ValueCallback<String> callback){source=js;}
+        @Override public String getUrl(){return url;}
     }
     static Class<?> c(String s)throws Exception{return Class.forName(s);}
     static Object call(Object target,String name,Class<?>[] types,Object...args)throws Exception {
@@ -24,6 +25,36 @@ public final class ChatBoundaryProbe {
     }
     static void setting(String key,boolean value)throws Exception{ProbeSupport.setting(key,String.valueOf(value));}
     static String page(String config){return "https://chat.mobile.kick.com/?config="+android.net.Uri.encode(config);}
+    static void lifecycle()throws Exception {
+        setting("emotes_7tv",true);
+        Capture old=(Capture)ProbeSupport.allocate(Capture.class), current=(Capture)ProbeSupport.allocate(Capture.class);
+        old.url=current.url=page("{\"channelId\":668}");
+        Class<?> chat=c(CHAT);Class<?>[] pageTypes={WebView.class,String.class};
+        call(chat,"onPage",pageTypes,old,old.url);
+        call(chat,"onPage",pageTypes,current,current.url);
+        Map<?,?> pages=(Map<?,?>)ProbeSupport.field(chat,"PAGES").get(null);
+        call(chat,"onPageDisposed",new Class<?>[]{WebView.class},old);
+        ProbeSupport.check(!pages.containsKey(old) && pages.containsKey(current),"old WebView disposal preserves current page");
+        ProbeSupport.check(((java.lang.ref.WeakReference<?>)ProbeSupport.field(chat,"active").get(null)).get()==current,"old disposal preserves current native authority");
+        JSONObject options=new JSONObject(current.source.substring(current.source.lastIndexOf("\n(")+2,current.source.length()-2));
+        JSONObject end=new JSONObject().put("type","lurk7tvDispose").put("generation","stale")
+                .put("channelId",options.get("channelId")).put("slug",options.get("sevenTvChannel"));
+        Class<?>[] messageTypes={WebView.class,String.class,String.class};
+        call(chat,"onMessage",messageTypes,current,end.toString(),current.url);
+        ProbeSupport.check(pages.containsKey(current),"stale disposal cannot invalidate current generation");
+        end.put("generation",options.get("generation"));
+        call(chat,"onMessage",messageTypes,current,end.toString(),"https://example.invalid/");
+        ProbeSupport.check(pages.containsKey(current),"foreign disposal cannot invalidate current generation");
+        call(chat,"onMessage",messageTypes,current,end.toString(),current.url);
+        ProbeSupport.check(!pages.containsKey(current) && ((java.lang.ref.WeakReference<?>)ProbeSupport.field(chat,"active").get(null)).get()==null,"valid pagehide ends native authority");
+        end.put("type","lurk7tvCatalog");call(chat,"onMessage",messageTypes,current,end.toString(),current.url);
+        ProbeSupport.check(!pages.containsKey(current),"late catalog cannot resurrect disposed page");
+        ProbeSupport.check(Boolean.FALSE.equals(call(chat,"onMessage",messageTypes,current,"{\"type\":\"stock\"}",current.url)),"ordinary stock bridge message falls through");
+        call(chat,"onPage",pageTypes,current,current.url);
+        call(chat,"onPageDisposed",new Class<?>[]{WebView.class},current);
+        ProbeSupport.check(!pages.containsKey(current) && ((java.lang.ref.WeakReference<?>)ProbeSupport.field(chat,"active").get(null)).get()==null,"native destroy ends authority without next page");
+        System.out.println("PASS: native WebView lifecycle, scoped disposal and late catalog guards");
+    }
     static JSONObject emit(String name,String url)throws Exception {
         Capture capture=(Capture)ProbeSupport.allocate(Capture.class);
         call(c(CHAT),"onPage",new Class<?>[]{WebView.class,String.class},capture,url);
@@ -104,5 +135,6 @@ public final class ChatBoundaryProbe {
             ProbeSupport.check((options.has("hide")?options.getJSONArray("hide").length():0)==selectors[i],"independent hide selectors " + names[i]);
             setting(keys[i],false);
         }
+        lifecycle();
     });}
 }

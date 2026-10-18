@@ -143,16 +143,28 @@
             }));
         }
         function currentIds() { return Array.from(new Set(['channel', 'global'].map((k) => sets[k] && sets[k].id).filter(idOK))); }
+        function normalizedSet(set) {
+            if (!set || typeof set !== 'object' || Array.isArray(set)) return null;
+            if (Array.isArray(set.emotes)) return set;
+            // The provider omits an empty emote vector. Require a valid set identity
+            // before treating an omitted vector as authoritative rather than malformed.
+            if (!Object.prototype.hasOwnProperty.call(set, 'emotes') && idOK(set.id)) return {...set, emotes:[]};
+            return null;
+        }
         async function loadGlobal() {
-            const set = await get(API + 'emote-sets/global');
-            if (!stopped && set && Array.isArray(set.emotes)) { sets.global = set; publish(); connect(); }
+            const set = normalizedSet(await get(API + 'emote-sets/global'));
+            if (!stopped && set) { sets.global = set; publish(); connect(); }
         }
         async function loadChannel() {
             const owner = user || (slug && await get('https://kick.com/api/v2/channels/' + encodeURIComponent(slug)) || {}).user_id;
             if (!owner || stopped) return;
             const result = await get(API + 'users/kick/' + encodeURIComponent(owner));
-            if (!stopped && result && result.emote_set && Array.isArray(result.emote_set.emotes)) {
-                sets.channel = result.emote_set; publish(); connect();
+            if (stopped || !result || typeof result !== 'object' || Array.isArray(result)) return;
+            const set = normalizedSet(result.emote_set);
+            const noSet = result.emote_set === null ||
+                (!Object.prototype.hasOwnProperty.call(result, 'emote_set') && idOK(result.id));
+            if (set || noSet) {
+                sets.channel = set; publish(); connect();
             }
         }
         const refreshes = new Map();
@@ -160,8 +172,8 @@
             if (!currentIds().includes(id) || refreshes.has(id)) return;
             refreshes.set(id, later(async () => {
                 refreshes.delete(id);
-                const set = await get(API + 'emote-sets/' + id);
-                if (stopped || !set || set.id !== id || !Array.isArray(set.emotes)) return;
+                const set = normalizedSet(await get(API + 'emote-sets/' + id));
+                if (stopped || !set || set.id !== id) return;
                 for (const key of ['channel', 'global']) if (sets[key] && sets[key].id === id) sets[key] = set;
                 publish();
             }, 250));
@@ -170,9 +182,11 @@
         function connect() {
             if (stopped || document.hidden) return;
             const ids = currentIds(), signature = ids.join(',');
-            if (!ids.length || (socket && subscribed === signature)) return;
+            if (socket && subscribed === signature) return;
             if (socket) { socket.onclose = null; socket.close(); }
+            socket = null; cancel(heartbeat); lastSequence = null;
             subscribed = signature;
+            if (!ids.length) return;
             const ws = socket = new WebSocket('wss://events.7tv.io/v3');
             let interval = 30000;
             const watchdog = () => { cancel(heartbeat); heartbeat = later(() => ws.close(), interval * 2 + 1000); };
@@ -284,6 +298,9 @@
             else { loadGlobal(); loadChannel(); currentIds().forEach(refetch); connect(); }
         });
         window.addEventListener('pagehide', () => {
+            if (options.generation && window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({
+                type:'lurk7tvDispose', generation:options.generation, channelId:options.channelId || null, slug:slug || null,
+            }));
             stopped = true; controllers.forEach((c) => c.abort()); timers.forEach(clearTimeout); timers.clear();
             if (socket) socket.close(); if (observer) observer.disconnect();
         }, {once:true});

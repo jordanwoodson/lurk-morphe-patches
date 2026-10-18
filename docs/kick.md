@@ -546,7 +546,8 @@ committed `editable` permission/rules prop. It never sends a message itself.
 The page independently fetches globals and the channel owner's set from 7tv.io. Each
 request has a 10-second header/body deadline, a 2 MiB response limit and at most three
 transient attempts; 429 honors a capped Retry-After. Successful globals render while
-owner lookup stalls. Failed refreshes retain the last valid catalog. When needed, the
+owner lookup stalls. Failed or malformed refreshes retain the last valid catalog. Authoritative no-set responses
+and omitted empty emote vectors clear the removed entries and reconcile set subscriptions. When needed, the
 owner lookup uses `kick.com/api/v2/channels/<slug>` without credentials. Native channel
 lookup maps hold at most 256 entries. A channel not yet observed gets globals only.
 
@@ -568,7 +569,9 @@ requests. 7TV badges and paints are not included.
 
 The WebView sends only bounded catalog snapshots for its current native document token
 and channel. Native validation strips unknown fields, rejects foreign origins/stale
-documents and allows only 7TV CDN emote URLs. The stock WebView bridge continues to
+documents and allows only 7TV CDN emote URLs. Input-ref reset/remount retires the native
+catalog generation; a fresh page association is required before augmentation resumes.
+Pagehide and native WebView destruction invalidate only that page’s authority. The stock WebView bridge continues to
 handle ordinary messages. A separately compiled HBC99 bootstrap extends chatRoomStore,
 ImageCacheV2.getImage and the existing picker/autocomplete actions. Module IDs come
 from unique export/Metro registration signatures in the hash-locked stock bundle.
@@ -589,7 +592,10 @@ after either main-loader branch, retaining only weak runtime references cleared 
 destroy.
 
 `tests/kick/test_chat_page.py` executes the real page script in offline Chrome;
-`test_composer.js` is a boundary fixture, not proof of the native UI. `bin/test-kick-modules <stock index.android.bundle>` checks the pinned HBC export/registration discovery, and `bin/test-kick-catalog` exercises
+`test_composer.js` is a boundary fixture, not proof of the native UI.
+`test_page_lifecycle.js` drives the production page function with controlled provider
+responses and timers to verify authoritative removals, sequence-gap refetch, heartbeat
+expiry, retry exhaustion, set-ID resubscription and disposal. `bin/test-kick-modules <stock index.android.bundle>` checks the pinned HBC export/registration discovery, and `bin/test-kick-catalog` exercises
 the APK's Java data validator on ART. Actual runtime loader ordering, image rendering,
 composer insertion and sourceURL preservation are checked separately in the target app.
 The emulator smoke rendered the native 7TV picker and suggestions, inserted raw words

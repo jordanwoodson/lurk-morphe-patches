@@ -57,6 +57,33 @@ for(const move of [0,1,12,18]){
  fabric.splice(0).forEach(commitSpans);assert.equal(nativeCursor,desired,'later manual movement wins');
  assert.equal(timers.length,0,'no callback can undo movement or keyboard dismissal');deferFabric=false;
 }
+// Stock reset replaces inputRef before clearing sections. Old document authority must end immediately.
+const catalog = generation => JSON.stringify({generation,channelId:'668',emotes:[entry]});
+const associate = generation => api.channel(JSON.stringify({generation,channelId:'668',enabled:true}));
+const commandCount = () => calls.filter(c=>c[0]==='atomic').length;
+store.setState({inputRef:{current:null}});
+store.setState({emotesSections:[],emoteBeingTyped:''});
+assert.equal(state.emotesSections.some(s=>s.id==='lurk7tv'),false,'reset must not resurrect old section');
+const resetDraft=state.inputContent, resetReply=state.reply, resetCommands=commandCount();
+store.setState({inputRef:{current:ref}});
+api.catalog(catalog('one'));state.insertEmote('EZ');
+assert.equal(state.inputContent,resetDraft);assert.equal(commandCount(),resetCommands,'fresh ref cannot use prior page catalog');
+associate('one');api.catalog(catalog('one'));state.insertEmote('EZ');
+assert.equal(commandCount(),resetCommands,'retired generation cannot be reactivated');
+associate('fresh');api.catalog(catalog('fresh'));state.setEmotes();
+assert.equal(state.allowedEmotes.length,2,'fresh page and ordinary same-channel rebuild restore catalog');
+assert.equal(state.reply,resetReply);assert.equal(state.inputContent,resetDraft);
+// Ref.current can change without a Zustand write. Insertion must revalidate the actual ref lifetime.
+state.inputRef.current={...ref};state.insertEmote('EZ');
+assert.equal(commandCount(),resetCommands,'silent remount cannot inherit old authority');
+state.inputRef.current=ref;associate('remount');api.catalog(catalog('remount'));
+api.channel(JSON.stringify({enabled:false}));api.catalog(catalog('remount'));state.insertEmote('EZ');
+assert.equal(commandCount(),resetCommands,'disposed page rejects late catalog and insertion');
+assert.equal(state.allowedEmotes.length,1,'disposal retains only native emotes');
+// Initial mount may attach to the same ref container after a fresh page association.
+store.setState({inputRef:{current:null}});associate('initial-mount');api.catalog(catalog('initial-mount'));
+state.inputRef.current=ref;state.insertEmote('EZ');
+assert.equal(commandCount(),resetCommands+1,'fresh association permits first mount of its own ref');
 props.mostRecentEventCount=undefined;const invalid=state.inputContent;state.insertEmote('EZ');
 assert.equal(state.inputContent,invalid,'missing native event counter fails closed');props.mostRecentEventCount=42;
 const before=state.inputContent;

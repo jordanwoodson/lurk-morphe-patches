@@ -4,13 +4,31 @@
     if (global.LurkKickChat) return;
     let store, session, host, commands, files, installed = false, enabled = false, generation, channelId;
     let current = [], names = new Map(), images = new Map(), merging = false;
+    let inputOwner, inputInstance, retiredGeneration;
     const seen = new Set();
     const owned = (entry) => entry && typeof entry.id === 'string' && entry.id.indexOf('lurk7tv_') === 0;
+    function retire() {
+        if (generation) retiredGeneration = generation;
+        enabled = false; generation = undefined; current = [];
+        inputOwner = inputInstance = undefined;
+    }
+    function ownsInput(state) {
+        if (!enabled || !generation) return false;
+        const ref = state.inputRef && state.inputRef.current;
+        if (state.inputRef !== inputOwner || (inputInstance && ref !== inputInstance)) {
+            retire(); return false;
+        }
+        // React may attach the first input after the page association. The ref
+        // container must still be the one that association authorized.
+        if (!inputInstance && ref) inputInstance = ref;
+        return true;
+    }
     function merge() {
         if (!installed || merging) return;
         merging = true;
         try {
             const state = store.getState();
+            ownsInput(state);
             const native = (state.emotes || []).filter((e) => !owned(e));
             const nativeNames = new Set(native.map((e) => e.name));
             const additions = enabled ? current.filter((e) => !nativeNames.has(e.name)) : [];
@@ -28,6 +46,7 @@
         } finally { merging = false; }
     }
     function insert(name, autocomplete, receiver, args, original) {
+        if (enabled && !ownsInput(store.getState())) merge();
         const entry = names.get(name);
         if (!entry) {
             if (seen.has(name) && !store.getState().emotes.some((e) => !owned(e) && e.name === name)) return;
@@ -120,6 +139,7 @@
                     finally { merging = false; merge(); }
                 }});
             store.subscribe((next, previous) => {
+                if (enabled && !ownsInput(next)) { merge(); return; }
                 if (!merging && (next.emotes !== previous.emotes || next.emotesSections !== previous.emotesSections || next.allowedEmotes !== previous.allowedEmotes)) merge();
             });
             if (typeof state.updateRecents === 'function') {
@@ -133,12 +153,18 @@
         },
         channel(value) {
             const next = JSON.parse(value);
-            enabled = next.enabled === true;
+            if (next.enabled !== true) { retire(); merge(); return; }
+            if (!next.generation || next.generation === retiredGeneration) return;
+            if (enabled && generation === next.generation && channelId === next.channelId) return;
+            enabled = true;
             generation = next.generation; channelId = next.channelId;
+            inputOwner = store.getState().inputRef;
+            inputInstance = inputOwner && inputOwner.current;
             current = []; merge();
         },
         catalog(value) {
             if (!installed || !enabled) return;
+            if (!ownsInput(store.getState())) { merge(); return; }
             const data = JSON.parse(value);
             if (data.generation !== generation || data.channelId !== channelId || !Array.isArray(data.emotes) || data.emotes.length > 2000) return;
             current = data.emotes.filter((e) => e && typeof e.name === 'string' && /^[^\s:<>&"'\\]{1,100}$/.test(e.name) &&
