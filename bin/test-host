@@ -19,6 +19,7 @@ checks=(
     tests/kick/test_chat_page.py
     tests/kick/test_compiled_bundle.py
     tests/test_release.py
+    tests/test_patch.py
 )
 
 failed=0

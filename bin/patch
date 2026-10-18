@@ -29,8 +29,15 @@ else
 fi
 
 mkdir -p "$WORK/out" "$WORK/tmp" "$MORPHE_DATA_DIR"
+# Morphe extracts APKM components beside its input even with -t. Isolate both
+# that extraction and its explicit temporary files, including overlapping runs.
+run="$(mktemp -d "$WORK/tmp/patch.XXXXXXXX")"
+trap 'rm -rf "$run"' EXIT
+mkdir -p "$run/input" "$run/tmp"
+staged="$run/input/$(basename "$input")"
+cp "$input" "$staged"
 out="$WORK/out/$slug-$version-patched.apk"
 note "patching $(basename "$input") with $(basename "$mpp")"
 java -jar "$MORPHE_DESKTOP_JAR" patch "${install[@]}" \
-    -p "$mpp" -o "$out" -t "$WORK/tmp" "${extra[@]}" "$input"
+    -p "$mpp" -o "$out" -t "$run/tmp" "${extra[@]}" "$staged"
 echo "$out"
