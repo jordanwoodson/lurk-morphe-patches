@@ -394,6 +394,16 @@ public final class TwitchPlayer {
                 return false;
             }
             if (swipe != CLAIMED) return false;
+            if (!Settings.isEnabled("swipe_controls") || event.getPointerCount() != 1 ||
+                    event.findPointerIndex(swipePointer) < 0 || action == MotionEvent.ACTION_POINTER_UP ||
+                    action == MotionEvent.ACTION_POINTER_DOWN) {
+                swipe = IDLE;
+                ViewParent parent = container.getParent();
+                if (parent != null) parent.requestDisallowInterceptTouchEvent(false);
+                MAIN.removeCallbacks(HIDE_INDICATOR);
+                hideIndicator();
+                return false;
+            }
             if (action == MotionEvent.ACTION_MOVE) {
                 int index = event.findPointerIndex(swipePointer);
                 if (index >= 0) apply(container, (swipeDownY - event.getY(index)) / swipeHeight);
@@ -413,7 +423,7 @@ public final class TwitchPlayer {
     private static boolean moveCandidate(ViewGroup container, MotionEvent event) {
         if (swipe != CANDIDATE || container != swipeContainer.get()) return false;
         int index = event.findPointerIndex(swipePointer);
-        if (index < 0 || event.getPointerCount() > 1) {
+        if (index < 0 || event.getPointerCount() > 1 || !Settings.isEnabled("swipe_controls")) {
             swipe = IDLE;
             return false;
         }

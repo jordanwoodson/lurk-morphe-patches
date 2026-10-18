@@ -335,7 +335,11 @@ login. The input shows Twitch's log-in restriction relabelled "read only", and t
 mutation returns Twitch's own failure result, so nothing posts under the account.
 
 *Show deleted messages* keeps the text of deleted or timed-out messages, struck through. It covers
-lines already shown and messages that arrive deleted. *Ignore chat clears* treats a `CLEARCHAT`
+native lines already shown and messages that arrive deleted. React Native retention is limited to
+verified received, ordinary chat bodies, including lines still waiting in the original chat-delay queue.
+It preserves deleted flags and timing, suppresses content actions on newly retained rows, and leaves
+hidden, unpublished, masked, AutoMod and low-trust content protected. Missing or invalid runtime helpers
+use the original delayed-drop predicate. The setting requires restart. *Ignore chat clears* treats a `CLEARCHAT`
 without a target user as a no-op, in native and React Native chat; timeouts and bans still apply.
 
 *Chat timestamps* turns on Twitch's own history timestamp for live channel chat, not whispers, with a
@@ -345,7 +349,7 @@ chest's own claim action once per claim ID.
 `bin/test-twitch-chat <apk>` runs the real classes with each switch on and off. Signed-in IRC login
 and bonus claims are verified only through bytecode and the probe.
 
-*Chat keywords* highlights native chat lines that mention you (your signed-in login) or contain one
+*Chat keywords* highlights native and React Native chat lines that mention you (your signed-in login) or contain one
 of your highlight words, with a tinted row and an optional vibration. It hides lines with blocked
 words or from blocked users. The word and user lists are Lurk's first text settings: a `TextSetting`
 in the registry JSON, edited in a dialog on the settings screen. Words match as whole words in any
@@ -359,8 +363,25 @@ collapsed by the row binders.
 - plain /me messages;
 - the landscape chat column's width (the theatre guideline) and background opacity.
 
-React Native chat is not covered. `bin/test-twitch-chat-style` checks both patches on ART, including
-mentions with a fake signed-in account.
+React Native wrappers use the actual row, body, timestamp, text-metrics, selector and landscape-column
+exports. History filtering preserves the original store and stable snapshots. Live keyword vibration
+subscribes only while its store is mounted; history, deleted lines and rerenders do not notify.
+All-off restores the original exports. `bin/test-twitch-chat-style` checks native styling on ART,
+including mentions with a fixture account; `bin/test-twitch-rn` checks native RN bridge ownership.
+
+The pinned live RN owners are discovered by unique exports in Hermes98, with an additional compiled
+bundle installed before consumers render. Both embedded and prepared main bundles retain
+`assets://index.android.bundle`; ReactInstance and native-module teardown retire their own state.
+The source/deleted-predicate bundles use the pinned official compiler. The original122-byte delayed
+callback cannot hold the guarded fallback, so a verified241-byte compiled body is appended with its
+full37-byte header and exception metadata. Off restores the original header, length and checksum.
+
+VOD navigation is positively native: `TwitchRNHostNavigationModule.openVodInternal` constructs a
+`PartialVodModel` and invokes the native theatre router. Native replay token/binder hooks apply there;
+no separate RN replay renderer was established. Signed-out RN smoke uses an isolated final rollout
+routing override, preserving earlier route/auth gates, followed by exact production restoration.
+Actual guest Fabric rows and actual-store local moderation fixtures establish consumer integration;
+these fixtures do not establish authenticated server moderation, sending, or physical-phone rendering.
 
 ### Third-party emotes and badges
 
@@ -371,8 +392,15 @@ those IDs to each provider's CDN. Animated emotes use GIF; static ones, or all o
 animated-emotes setting is off, use PNG.
 
 VOD replay splits its named message tokens. React Native chat gets `emotes=` ranges added to incoming
-IRC frames, and its `ImageSource` maps the same URLs, with no Hermes edit. Lists are fetched per
-channel in the background and cached in memory; if a fetch fails, codes stay as text.
+IRC frames, and its `ImageSource` maps the same URLs. Compiled RN row wrappers additionally enrich
+history with cached emote/badge/pronoun snapshots. Offsets use Unicode code points, matching Twitch's
+segmenter, and native emotes retain precedence. Provider effects explicitly acquire/release demand;
+reading a catalog or IRC frame never schedules requests. One runtime timer polls a small native
+revision token every two seconds while committed provider rows exist; unchanged tokens do not refresh
+rows or fetch catalogs. Cache publication, badge/pronoun image availability and switch changes invalidate
+mounted rows. Last release, all-off and module disposal stop polling. Lists are fetched in background workers;
+failed/missing data leaves codes as text. Queues, per-room caches and snapshots are bounded. Queued
+work rechecks switches and surviving owners before each new request, preserving shared native demand.
 
 Badges download FrankerFaceZ's and Chatterino's public lists of badge holders and match them on the
 device, so no chatter is looked up. The exception is *pronouns* (`badges_pronouns`, off by default):
@@ -388,7 +416,11 @@ danmaku. It's fed from the native chat list feeder, found through the `LiveChatM
 toString. The overlay is a plain view on `android.R.id.content` that ignores all touches. It attaches
 only in landscape outside picture-in-picture while a video surface covers at least half the width,
 and detaches in portrait, in picture-in-picture, when the video goes away, or after 15 s without
-chat. React Native chat, VODs and chat replay don't pass through that feeder.
+chat. The exact viewer feeder owns posted messages. Its stream-model observer retires the former
+destination without waiting for another message, and onDestroyView retires that feeder without removing
+a newer viewer's overlay. A recreated view can reuse the feeder with fresh state. This takes effect at
+the measured model emission or teardown, not before a navigation intent reaches either boundary.
+React Native chat, VODs and chat replay don't pass through that feeder.
 
 Twitch already loads recent chat history on join (native
 `ChatHistory`, RN preload) and replays VOD chat, so a third-party history service isn't used.

@@ -168,3 +168,55 @@ at the current page association; stock reset or ref replacement retires that gen
 The initial ref may attach after association within the same container. Ordinary native
 catalog rebuilds preserve this authority. Validated pagehide and the exact pinned
 RNCWebView.destroy boundary end only their own document's native catalog authority.
+
+### Twitch delayed-moderation boundary (Task 6)
+
+The pinned ordinary-viewer store already preserves received bodies when it marks visible
+normal chat lines deleted. Its row chooses the placeholder without moderation attribution;
+the RN consumer must change presentation only for verified received, unmasked content,
+keeping `deleted:true` and all stock account/action restrictions. A separate private
+122-byte predicate removes received-but-delayed messages before that visible-row path.
+Its clear-chat predicate is independent and must remain independent.
+
+A guarded helper plus the exact original fallback does not fit those 122 bytes. The
+approved bounded extension compiles one predicate with the pinned HBC98 compiler,
+widens string operands into the original string table, recalculates its own branches and
+exception boundaries, and appends only its body/full header/exception table. It preserves
+the original function ID and parent environment slot zero (the moderation event), and
+redirects that function's compact header. No nested functions, new strings, switch tables,
+or other external-table dependencies are supported. Missing helpers, a throwing global
+getter/function, unmarked colliding globals, and invalid results execute the stock predicate.
+The bootstrap must collision-check the private numeric global and install the exact marker.
+
+HBC98's full header is 37 bytes with flags at +36; HBC99's is 36 bytes with flags at +35.
+Retained fixtures compile with both pinned families to distinguish these layouts. The
+HBC98 transplant drops donor debug offsets, leaves original global debug data in place,
+and updates file length and SHA-1. Disabling retention restores the original compact
+header, truncates the appended storage, and restores the original file length/footer;
+with all settings off the complete file must equal the pinned stock bytes. A helper-only
+or disassembler-only pass does not close actual target store and Fabric rendering gates.
+
+
+### Twitch RN consumers and ownership (Task6)
+
+Direct writable owners now include rows3425, body3626, timestamp3619, store3446, metrics3426,
+badge registry3621, stage5010 and column5013, discovered by unique export signatures. Scope keyword
+vibration to the original store's newly delivered line handlers with native owner/channel validation;
+never trigger it during history rendering or retained deletion. Native snapshots remain passive,
+provider acquisition is explicit and disposed interests prevent queued new requests. Preserve shared
+native demand. Bounds include50 queued provider jobs,1000 row leases,16 rooms/stores,2000 snapshot
+emotes and8192 wide-emote ratios.
+
+Native overlay ownership uses the measured viewer feeder field, stream-model destination emission
+and onDestroyView. The observer branch's complete two-successor tail proves v2/v3 dead while preserving
+v0/v1/v6 and has no exception handlers; unsupported shapes fail patching. Same-feeder view recreation
+uses a new owner state so stale callbacks stay retired. Quiet navigation is observable at model emission
+or view teardown; no earlier navigation-intent timing claim is made.
+
+
+Provider completion uses one runtime-scoped, cache-only2s revision poll while committed row owners
+exist, not one timer/bridge call per row. The small token combines emote generation, badge/pronoun
+cache publication and opt-in state. Changes refresh mounted subscribers; unchanged polls perform
+no catalog fetch, acquisition or network. The last release, off and native module disposal stop it.
+Display latency is bounded by the polling interval after publication; existing provider TTL/retry
+refresh still occurs on explicit acquisition, retaining last valid data between requests.

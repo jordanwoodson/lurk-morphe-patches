@@ -26,6 +26,8 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 import io.github.jordanwoodson.extension.shared.Logger;
@@ -53,6 +55,12 @@ public final class TwitchChatOverlay {
     private static volatile Class<?> nameClass;
     /** The attached overlay. Main thread only. */
     private static Overlay overlay;
+    private static final Map<Object,Owner> OWNERS = new WeakHashMap<>();
+    private static final class Owner {
+        String room = "";
+        long generation;
+        boolean authoritative, retired;
+    }
     private static boolean loggedFailure;
 
     static {
@@ -73,27 +81,84 @@ public final class TwitchChatOverlay {
      * context, the message's sender and its tokens.
      */
     public static void onMessage(Context context, Object sender, List tokens) {
+        onMessage(context, sender, tokens, null);
+    }
+
+    /** Destination room-id owns the overlay; source-room-id only identifies a shared-chat sender. */
+    public static void onMessage(Context context, Object sender, List tokens, Map tags) {
+        onMessage(context, sender, tokens, tags, context);
+    }
+
+    public static void onMessage(Context context, Object sender, List tokens, Map tags, Object feeder) {
         try {
             if (!Settings.isEnabled(KEY)) {
-                if (overlay != null) MAIN.post(TwitchChatOverlay::detach);
+                MAIN.post(() -> { if (!Settings.isEnabled(KEY)) detach(); });
                 return;
             }
             Activity activity = activity(context);
             if (activity == null || tokens == null) return;
+            Object tagged = tags == null ? null : tags.get("room-id");
+            String room = tagged instanceof String && ((String) tagged).matches("[0-9]{1,12}") ? (String) tagged : "";
+            final Owner owner;
+            final long generation;
+            synchronized (OWNERS) {
+                owner = OWNERS.computeIfAbsent(feeder, key -> new Owner());
+                if (owner.retired || owner.authoritative && !room.equals(owner.room)) return;
+                if (!room.equals(owner.room)) { owner.room = room; owner.generation++; }
+                generation = owner.generation;
+            }
             if (!isLandscape(activity)) {
-                if (overlay != null) MAIN.post(TwitchChatOverlay::detach);
+                detach(owner);
                 return;
             }
+            if (TwitchChatKeywords.hiddenLive(sender, tokens)) return;
             String text = text(tokens);
             if (text.isEmpty()) return;
             String name = name(sender);
-            MAIN.post(() -> show(activity, name, text));
+            MAIN.post(() -> {
+                synchronized (OWNERS) { if (owner.retired || generation != owner.generation) return; }
+                show(activity, name, text, owner);
+            });
         } catch (ReflectiveOperationException | RuntimeException e) {
             if (!loggedFailure) {
                 loggedFailure = true;
                 Logger.d("chat overlay: failed: " + e);
             }
         }
+    }
+
+    /** The measured viewer stream-model observer supplies the destination before chat arrives. */
+    public static void channel(Object feeder, Object channelId) {
+        if (feeder == null) return;
+        String room = channelId == null ? "" : channelId.toString();
+        if (!room.isEmpty() && !room.matches("[0-9]{1,12}")) return;
+        synchronized (OWNERS) {
+            Owner owner = OWNERS.computeIfAbsent(feeder, key -> new Owner());
+            if (owner.retired) {
+                // A recreated viewer can reuse its injected feeder. Keep the old state retired so
+                // already queued messages and teardown callbacks cannot affect this new view.
+                owner = new Owner();
+                OWNERS.put(feeder, owner);
+            }
+            owner.authoritative = true;
+            if (room.equals(owner.room)) return;
+            owner.room = room;owner.generation++;
+            detach(owner);
+        }
+    }
+
+    /** View teardown retires only its feeder; a late old callback cannot detach a newer viewer. */
+    public static void dispose(Object feeder) {
+        if (feeder == null) return;
+        synchronized (OWNERS) {
+            Owner owner = OWNERS.computeIfAbsent(feeder, key -> new Owner());
+            owner.retired = true;owner.generation++;
+            detach(owner);
+        }
+    }
+
+    private static void detach(Owner owner) {
+        MAIN.post(() -> { if (overlay != null && overlay.owner == owner) detach(); });
     }
 
     private static Activity activity(Context context) {
@@ -112,17 +177,24 @@ public final class TwitchChatOverlay {
 
     /** Main thread: shows a message, attaching the overlay if the activity is showing landscape video. */
     private static void show(Activity activity, String name, String text) {
-        if (activity.isFinishing() || activity.isDestroyed() || !isLandscape(activity)) {
-            detach();
+        final Owner owner;
+        synchronized (OWNERS) { owner = OWNERS.computeIfAbsent(activity, key -> new Owner()); }
+        show(activity, name, text, owner);
+    }
+
+    private static void show(Activity activity, String name, String text, Owner owner) {
+        if (!Settings.isEnabled(KEY) || activity.isFinishing() || activity.isDestroyed() || !isLandscape(activity)) {
+            if (overlay != null && overlay.owner == owner) detach();
             return;
         }
         Overlay current = overlay;
-        if (current == null || current.activity != activity || !current.isAttachedToWindow()) {
+        if (current == null || current.activity != activity || current.owner != owner ||
+                !current.room.equals(owner.room) || !current.isAttachedToWindow()) {
             detach();
             View content = activity.findViewById(android.R.id.content);
             if (!(content instanceof FrameLayout)) return;
             if (video(content.getRootView()) == null) return;
-            current = new Overlay(activity);
+            current = new Overlay(activity, owner);
             ((FrameLayout) content).addView(current, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             overlay = current;
@@ -199,7 +271,8 @@ public final class TwitchChatOverlay {
             if (out.length() > MAX_TEXT) break;
         }
         String text = out.toString().replace('\n', ' ').trim();
-        return text.length() > MAX_TEXT ? text.substring(0, MAX_TEXT) + "…" : text;
+        return text.codePointCount(0, text.length()) > MAX_TEXT
+                ? text.substring(0, text.offsetByCodePoints(0, MAX_TEXT)) + "…" : text;
     }
 
     /** The String field of {@code model} whose value its toString prints after {@code label}. */
@@ -234,6 +307,8 @@ public final class TwitchChatOverlay {
         private static final long CHECK_MS = 1_000;
 
         final Activity activity;
+        final Owner owner;
+        final String room;
         private final List<Item> items = new ArrayList<>();
         private final ArrayDeque<Item> waiting = new ArrayDeque<>();
         private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -248,9 +323,11 @@ public final class TwitchChatOverlay {
         private boolean running = true;
         private final Runnable check = this::check;
 
-        Overlay(Activity activity) {
+        Overlay(Activity activity, Owner owner) {
             super(activity);
             this.activity = activity;
+            this.owner = owner;
+            synchronized (OWNERS) { room = owner.room; }
             setClickable(false);
             setLongClickable(false);
             setFocusable(false);

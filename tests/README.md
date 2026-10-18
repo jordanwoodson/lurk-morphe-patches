@@ -101,3 +101,29 @@ quality changes are controls. A caught player Exception, escaping logger Runtime
 Error check callback restoration. These are synthetic boundaries, not observed playback failures.
 `verify_refresh.py` additionally checks the emitted fatal-state/mobile-panel branch and catch metadata.
 Real fatal-stream failure, resumed network playback and visible position remain installed-app verification.
+
+
+Twitch RN and provider checks:
+
+```sh
+bin/test-host
+bin/test-twitch-chat-hermes stock/index.android.bundle
+ANDROID_SERIAL=emulator-5580 bin/test-twitch-rn patched/twitch.apk
+ANDROID_SERIAL=emulator-5580 bin/test-twitch-providers patched/twitch.apk
+ANDROID_SERIAL=emulator-5580 bin/test-twitch-ui patched/twitch.apk
+```
+
+The Hermes check runs the production scanner/transplant on the pinned stock bundle, validates
+branch/exception/register/header bounds and rejected donor artifacts, then independently reconstructs
+stock bytes for off. The host consumer fixtures cover store identity, protected/retained rows and action
+suppression, timestamps, appearance, Unicode provider spans, ownership and off export identity.
+Provider host fixtures execute production Java with controlled clocks/network/platform edges; real
+Android JsonReader payload tests are separate. Native RN bridge probes use isolated preferences and
+no vibration service; they verify eligibility/dedup ownership without vibrating the device.
+
+The UI probe uses actual MotionEvent, View trees and Handler queues in app_process, with controlled
+Activity visibility/Window geometry. It covers quiet feeder navigation/recreation, stale-owner/off
+callbacks, blocked text, Unicode truncation, queue bounds/pass-through, pointer/off/cancel behavior,
+edge exclusions and brightness clamp/restoration. It does not claim a visible Activity, physical volume,
+authenticated account, or real server event. Guest RN consumer/default/prepared/reload smoke and actual
+store moderation require the separately prepared installed-app fixture and exact restoration afterward.
