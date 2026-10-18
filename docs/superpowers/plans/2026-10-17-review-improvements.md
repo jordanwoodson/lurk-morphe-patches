@@ -57,10 +57,10 @@
 
 **Interfaces:** keep existing injected public signatures. Network deadlines must use monotonic elapsed time throughout each operation. Request-sharing helper exposes one result per VOD to all waiting callers.
 
-- [ ] Reproduce deadline overruns with delayed headers and trickling bodies; reproduce delayed old-source/all-stale playlist behavior.
-- [ ] Bound body bytes, absolute duration and cancellation; preserve correct source/sequence transitions and existing ad fallback.
-- [ ] Test repeated chapter prefetch/open, failure retry, eviction, queue bounds and navigation before response.
-- [ ] Add bounded request sharing, failure backoff and stale-dialog suppression; run focused and host checks; commit.
+- [x] Reproduce deadline overruns with delayed headers and trickling bodies; reproduce delayed old-source/all-stale playlist behavior.
+- [x] Bound body bytes, absolute duration and cancellation; preserve correct source/sequence transitions and existing ad fallback.
+- [x] Test repeated chapter prefetch/open, failure retry, eviction, queue bounds and navigation before response.
+- [x] Add bounded request sharing, failure backoff and stale-dialog suppression; run focused and host checks; commit.
 
 ### Task 4: Kick and Rumble patch-integration regressions
 
