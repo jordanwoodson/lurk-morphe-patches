@@ -9,3 +9,6 @@ subprocess.run(['node', str(ROOT / 'tests/twitch/test_delayed.js'),
 
 subprocess.run(['node', str(ROOT / 'tests/twitch/test_chat.js'),
                 str(ROOT / 'patches/src/main/runtime/twitch/chat.js')], check=True)
+
+subprocess.run(['node', str(ROOT / 'tests/twitch/test_provider_transition.js'),
+                str(ROOT / 'patches/src/main/runtime/twitch/chat.js')], check=True)

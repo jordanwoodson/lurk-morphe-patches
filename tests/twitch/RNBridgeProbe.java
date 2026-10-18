@@ -34,6 +34,11 @@ public final class RNBridgeProbe {
   check("{}".equals(exchange.invoke(null,owner,"x".repeat(20001))),"oversized request rejected");
   JSONObject lease=new JSONObject((String)exchange.invoke(null,owner,"{\"op\":\"acquire\",\"id\":\"row1\",\"channel\":\"42\",\"user\":\"viewer\",\"userId\":\"1\"}"));
   check(lease.optBoolean("active"),"RN row owner acquired");
+  for(String[] identity:new String[][]{{"42","viewer","1"},{"43","viewer","1"},{"43","other","1"},{"43","other","2"}}){
+   exchange.invoke(null,owner,new JSONObject().put("op","acquire").put("id","row1").put("channel",identity[0]).put("user",identity[1]).put("userId",identity[2]).toString());
+   JSONObject catalog=new JSONObject((String)exchange.invoke(null,owner,"{\"op\":\"catalog\",\"id\":\"row1\"}"));
+   check(catalog.optString("id").equals("row1")&&catalog.optString("channel").equals(identity[0])&&catalog.optString("user").equals(identity[1])&&catalog.optString("userId").equals(identity[2]),"catalog is bound to exact current channel/user/userId lease");
+  }
   exchange.invoke(null,owner,"{\"op\":\"release\",\"id\":\"row1\"}");
   check("{}".equals(exchange.invoke(null,owner,"{\"op\":\"catalog\",\"id\":\"row1\"}")),"disposed owner cannot read/schedule catalogs");
   exchange.invoke(null,owner,"{\"op\":\"acquire\",\"id\":\"row2\",\"channel\":\"42\",\"user\":\"viewer\"}");

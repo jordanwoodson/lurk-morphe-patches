@@ -51,3 +51,24 @@ if __name__ == '__main__':
         Path(__file__).with_name('TwitchProvidersProbe.java').read_text(),
         sys.argv[1:] or ['unicode', 'multiline', 'queued-disable', 'badges-disable', 'pronouns-disable', 'rn-dispose', 'rn-native-demand', 'rn-badges-dispose',
             'rn-pronouns-dispose', 'rn-frame-passive', 'rn-passive', 'cache-bound', 'demand-reacquire', 'queue-rejection'], extra=PLATFORM)
+
+    # Completion ordering uses tokenized HTTP bodies and a drawing boundary; cache/scheduling code is production.
+    completion=dict(PLATFORM)
+    completion['android/util/JsonReader.java']='''package android.util;
+    public class JsonReader implements AutoCloseable {
+     String[] tokens;int at;
+     public JsonReader(java.io.Reader r)throws java.io.IOException {
+     int c=r.read(); tokens=(c=='U'?"BEGIN_OBJECT,NAME,pronoun_id,STRING,hehim,END_OBJECT":"BEGIN_OBJECT,NAME,hehim,BEGIN_OBJECT,NAME,subject,STRING,He,NAME,object,STRING,Him,END_OBJECT,END_OBJECT").split(",");
+     }
+     public void setLenient(boolean b){} public JsonToken peek(){return at<tokens.length?JsonToken.valueOf(tokens[at]):JsonToken.END_DOCUMENT;}
+     public String nextString(){at++;return tokens[at++];} public String nextName(){at++;return tokens[at++];}
+     public boolean nextBoolean(){throw new AssertionError();} public long nextLong(){throw new AssertionError();}
+     public void skipValue(){throw new AssertionError();} public void beginObject(){at++;} public void endObject(){at++;}
+     public void beginArray(){throw new AssertionError();} public void endArray(){throw new AssertionError();}
+     public boolean hasNext(){return peek()!=JsonToken.END_OBJECT;} public void close(){} }
+    '''
+    completion['android/graphics/Bitmap.java']=completion['android/graphics/Bitmap.java'].replace('throw new AssertionError("unexpected image rendering");','return new Bitmap();')
+    run('PronounCompletionProbe', ['twitch/TwitchEmotes.java', 'twitch/TwitchThirdParty.java',
+        'twitch/TwitchBadges.java', 'twitch/TwitchPronouns.java'],
+        Path(__file__).with_name('PronounCompletionProbe.java').read_text(),
+        ['user-live','names-live','user-retired','names-retired','user-off','names-off','user-native'],extra=completion)

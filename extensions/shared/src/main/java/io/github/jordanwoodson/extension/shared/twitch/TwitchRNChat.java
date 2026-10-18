@@ -119,7 +119,7 @@ public final class TwitchRNChat {
         Scope scope=OWNERS.get(owner);
         if (scope==null) { scope=new Scope();OWNERS.put(owner,scope); }
         Lease current=scope.rows.get(id);
-        if (current!=null && current.room.equals(room) && current.user.equals(user)) return "{\"active\":true}";
+        if (current!=null && current.room.equals(room) && current.user.equals(user) && current.userId.equals(userId)) return "{\"active\":true}";
         release(owner,id);
         if (scope.rows.size()>=1000 || (!scope.rooms.containsKey(room) && scope.rooms.size()>=16)) return "{}";
         Interest roomInterest=scope.rooms.computeIfAbsent(room,key->new Interest());
@@ -162,6 +162,7 @@ public final class TwitchRNChat {
         Scope scope=OWNERS.get(owner);Lease lease=scope==null?null:scope.rows.get(request.optString("id"));
         if(lease==null)return "{}";
         JSONObject out=new JSONObject();int generation=TwitchEmotes.rnRevision();
+        out.put("id",request.optString("id")).put("channel",lease.room).put("user",lease.user).put("userId",lease.userId);
         out.put("generation",generation);
         if(request.optInt("generation",-1)!=generation) {
             JSONObject emotes=new JSONObject();int count=0;

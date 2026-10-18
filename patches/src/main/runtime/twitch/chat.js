@@ -113,21 +113,24 @@
 
     function providers(props, origin) {
         const R = owners.react, ref = R.useRef(null), refresh = R.useState(0)[1];
-        if (!ref.current) ref.current = {id:String(++nextOwner),active:false};
         const owner = ref.current, line = props.message;
         const channel = String(line.sourceRoomID || props.channelID || '');
         const enabled = !!config.providers && normal(origin,props.maskedRanges) && !line.deleted;
-        const user = line.user, userId = String(line.userId || '');
+        const user = String(line.user || '').toLowerCase(), userId = String(line.userId || '');
         R.useEffect(()=>{
             if (!enabled) return;
-            owner.active = data({op:'acquire',id:owner.id,channel,user,userId}).active === true;
-            const unsubscribe=owner.active ? subscribeProvider(owner,refresh) : ()=>{};
-            if (owner.active) refresh(value=>value+1);
-            return ()=>{unsubscribe();owner.active=false;data({op:'release',id:owner.id});};
+            // Each committed identity owns a distinct lease; retired effects cannot release its replacement.
+            const lease={id:String(++nextOwner),channel,user,userId,active:false};
+            lease.active = data({op:'acquire',id:lease.id,channel,user,userId}).active === true;
+            ref.current=lease;
+            const unsubscribe=lease.active ? subscribeProvider(lease,refresh) : ()=>{};
+            if (lease.active) refresh(value=>value+1);
+            return ()=>{unsubscribe();lease.active=false;data({op:'release',id:lease.id});if(ref.current===lease)ref.current=null;};
         },[enabled,channel,user,userId,config.revision]);
-        if (!enabled || !owner.active) return {};
+        if (!enabled || !owner || !owner.active || owner.channel!==channel || owner.user!==user || owner.userId!==userId) return {};
         let cached = catalogs.get(channel);
         const snapshot = data({op:'catalog',id:owner.id,generation:cached ? cached.generation : -1});
+        if(snapshot.id!==owner.id || snapshot.channel!==channel || snapshot.user!==user || snapshot.userId!==userId) return {};
         if (snapshot.emotes && typeof snapshot.emotes === 'object') {
             cached = {generation:snapshot.generation,emotes:snapshot.emotes};
             catalogs.delete(channel);catalogs.set(channel,cached);

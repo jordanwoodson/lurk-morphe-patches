@@ -23,7 +23,9 @@ public final class TwitchProvidersProbe {
         Constructor<?> c = emote.getDeclaredConstructors()[0]; c.setAccessible(true);
         Object array = Array.newInstance(emote, 1); Array.set(array,0,c.newInstance(code,id));
         Constructor<?> e = Class.forName(ROOT + "TwitchEmotes$Entry").getDeclaredConstructors()[0]; e.setAccessible(true);
-        ((Map)field("TwitchEmotes","SETS")).put("7:" + scope,e.newInstance(array,Long.MAX_VALUE));
+        // Reflection reaches a private Entry type; only this known String-keyed cache write needs the cast.
+        @SuppressWarnings("unchecked") Map<String,Object> sets = (Map<String,Object>)field("TwitchEmotes","SETS");
+        sets.put("7:" + scope,e.newInstance(array,Long.MAX_VALUE));
     }
     public static void main(String[] args) throws Exception {
         switch (args[0]) {

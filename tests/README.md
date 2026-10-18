@@ -127,3 +127,9 @@ callbacks, blocked text, Unicode truncation, queue bounds/pass-through, pointer/
 edge exclusions and brightness clamp/restoration. It does not claim a visible Activity, physical volume,
 authenticated account, or real server event. Guest RN consumer/default/prepared/reload smoke and actual
 store moderation require the separately prepared installed-app fixture and exact restoration afterward.
+
+Twitch provider ownership regressions include reused RN rows across channel/source-room, user and user-ID
+changes, retired effects and mismatched native catalog identities. Pronoun completion runs in both HTTP
+response orders, including owner retirement, opt-out and shared native demand. The host check controls
+JSON tokens/drawing; `bin/test-twitch-providers` repeats those completion assertions on ART with real
+JsonReader/Canvas/PNG, controlled HTTP responses and isolated preferences (no provider traffic or app data).

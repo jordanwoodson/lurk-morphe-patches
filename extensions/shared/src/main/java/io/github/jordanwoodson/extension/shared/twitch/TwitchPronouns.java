@@ -117,7 +117,13 @@ final class TwitchPronouns {
                 }
                 demand.add(wanted);
             }
+            // A cached user may precede the names response. Retain only bounded cache-entry demand.
+            if (entry != null && entry.primary != null && names == null) {
+                if (entry.waitingForNames == null) entry.waitingForNames = new TwitchThirdParty.Demand();
+                entry.waitingForNames.add(wanted);
+            }
         }
+        list = names;
         if (scheduled != null) schedule(key,scheduled);
         if (entry == null || entry.primary == null || list == null) return null;
         String label = label(list, entry.primary, entry.alt);
@@ -180,6 +186,7 @@ final class TwitchPronouns {
             entry = new Lookup(null, null, SystemClock.elapsedRealtime() + ERROR_TTL_MS);
         }
         synchronized (LOCK) {
+            if (entry.primary != null && names == null) entry.waitingForNames = demand;
             USERS.put(login, entry);
             TwitchThirdParty.catalogChanged();
             PENDING.remove(login); DEMAND.remove(login);
@@ -218,13 +225,36 @@ final class TwitchPronouns {
                 names = TwitchThirdParty.getJson(API + "pronouns", TwitchPronouns::parseNames, null);
                 TwitchThirdParty.catalogChanged();
                 if (names == null) namesRetryAt = SystemClock.elapsedRealtime() + LIST_RETRY_MS;
-                else Logger.d("badges: pronouns: " + names.size());
+                else {
+                    completeWaitingImages(names);
+                    Logger.d("badges: pronouns: " + names.size());
+                }
             } catch (IOException | RuntimeException e) {
                 namesRetryAt = SystemClock.elapsedRealtime() + LIST_RETRY_MS;
                 Logger.d("badges: pronoun list unavailable: " + e);
             }
         }, () -> { synchronized (TwitchPronouns.class) { namesDemand = null; NAMES_LOADING.set(false); } });
         return null;
+    }
+
+    /** Names completion resumes already requested image work, without involving passive catalog reads. */
+    private static void completeWaitingImages(Map<String,String[]> list) {
+        Map<Lookup,TwitchThirdParty.Demand> waiting = new LinkedHashMap<>();
+        synchronized (LOCK) {
+            for (Lookup entry : USERS.values()) {
+                if (entry.waitingForNames != null) {
+                    waiting.put(entry,entry.waitingForNames);
+                    entry.waitingForNames = null;
+                }
+            }
+        }
+        // USERS bounds this batch. Recheck each owner/setting and draw each distinct label at most once.
+        for (Map.Entry<Lookup,TwitchThirdParty.Demand> item : waiting.entrySet()) {
+            if (!Settings.isEnabled(TwitchBadges.KEY_PRONOUNS) || !item.getValue().getAsBoolean()) continue;
+            Lookup entry = item.getKey();
+            String label = label(list,entry.primary,entry.alt);
+            if (label != null && !IMAGES.containsKey(label)) image(label);
+        }
     }
 
     /** /v1/pronouns: { "hehim": { "name", "subject": "He", "object": "Him", "singular": false }, ... }. */
@@ -303,6 +333,8 @@ final class TwitchPronouns {
         final String primary;
         final String alt;
         final long expires;
+        /** Guarded by LOCK; discarded when names complete or this bounded cache entry is evicted. */
+        TwitchThirdParty.Demand waitingForNames;
 
         Lookup(String primary, String alt, long expires) {
             this.primary = primary;

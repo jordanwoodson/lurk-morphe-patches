@@ -3,14 +3,14 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), vm = requ
 const source = process.argv[2];
 assert.ok(fs.existsSync(source), 'compiled RN chat consumer source exists');
 let config = {version:1}, rowProps, bodyProps, effects = [], state = {lines:[]}, providerCalls=[];
-const rowRef={current:0};let refreshes=0, catalogRevision=1, providerActive=true;const timers=new Map();let timerId=0;
+const rowRef={current:0};let refreshes=0, catalogRevision=1, providerActive=true;const providerLeases=new Map();const timers=new Map();let timerId=0;
 const tick=()=>{const pending=Array.from(timers.entries());timers.clear();for(const [,f] of pending)f();};
 const element = (type, props, ...children) => ({type, props:{...props, ...(children.length ? {children:children.length===1?children[0]:children}: {})}});
 const React = {createElement:element, cloneElement:(e,p)=>({ ...e,props:{...e.props,...p}}), isValidElement:e=>!!(e&&e.props),
  useState:initial=>[initial,()=>{refreshes++;}], useRef:()=>rowRef, useMemo:f=>f(), useEffect:f=>effects.push(f), useContext:c=>c.value, createContext:value=>({value,Provider:'Provider'}), memo:f=>({type:f})};
 const modules = {
   react:React, native:{Text:'Text',View:'View',StyleSheet:{flatten:s=>Object.assign({},...[s].flat(10).filter(Boolean))},
-   NativeModules:{TwitchRNFeedSettings:{getLurkChatData:raw=>{const q=JSON.parse(raw);providerCalls.push(q);return JSON.stringify(q.op==='revision'?{active:providerActive&&!!config.providers,token:String(catalogRevision)}:q.op==='catalog'?{generation:1,emotes:{Kappa:'lurk7s_abc'},badges:[{title:'he/him',url:'data:image/png;base64,AA=='}]}:(q.op==='acquire'||q.op==='watch')?{active:true}:q.op==='config'?config:q.op==='verdict'?{verdict:q.body.includes('hide')?2:q.body.includes('bright')?1:0}:{});}}}},
+   NativeModules:{TwitchRNFeedSettings:{getLurkChatData:raw=>{const q=JSON.parse(raw);providerCalls.push(q);if(q.op==='acquire')providerLeases.set(q.id,q);if(q.op==='release')providerLeases.delete(q.id);const lease=providerLeases.get(q.id)||{};return JSON.stringify(q.op==='revision'?{active:providerActive&&!!config.providers,token:String(catalogRevision)}:q.op==='catalog'?{id:q.id,channel:lease.channel,user:lease.user,userId:lease.userId,generation:1,emotes:{Kappa:'lurk7s_abc'},badges:[{title:'he/him',url:'data:image/png;base64,AA=='}]}:(q.op==='acquire'||q.op==='watch')?{active:true}:q.op==='config'?config:q.op==='verdict'?{verdict:q.body.includes('hide')?2:q.body.includes('bright')?1:0}:{});}}}},
   row:{ChatMessageRow:React.memo(p=>{rowProps=p;return element('Row',p);})},
   body:{MessageBody:p=>{bodyProps=p;return element('Text',{style:{fontSize:14},children:element('Text',{style:{fontSize:14},children:p.body})});}},
   time:{formatTimestamp:()=> '13:05',TimestampPart:p=>element('Text',{style:{fontSize:12},children:['13:05','\u00a0']})},
@@ -105,7 +105,7 @@ render({message:stockEmote,channelID:'42',chatStore:store,badgeRegistry:{}});
 assert.equal(rowProps.message.emotes,stockEmote.emotes,'native emote keeps precedence and array identity');
 const nativeBridge=modules.native.NativeModules.TwitchRNFeedSettings.getLurkChatData;
 modules.native.NativeModules.TwitchRNFeedSettings.getLurkChatData=raw=>JSON.parse(raw).op==='catalog'?
- JSON.stringify({generation:2,emotes:{Kappa:'lurk7a_a',BTTV:'lurkbs_b',FFZ:'lurkfs_c'}}):nativeBridge(raw);
+ JSON.stringify({...JSON.parse(nativeBridge(raw)),generation:2,emotes:{Kappa:'lurk7a_a',BTTV:'lurkbs_b',FFZ:'lurkfs_c'}}):nativeBridge(raw);
 render({message:{...providerMessage,body:'😀 Kappa BTTV FFZ Kappa!'},channelID:'42',chatStore:store,badgeRegistry:{}});
 assert.deepEqual(Array.from(rowProps.message.emotes,e=>e.id),['lurk7a_a','lurkbs_b','lurkfs_c'],'all providers and animation preserve whole-token boundaries');
 modules.native.NativeModules.TwitchRNFeedSettings.getLurkChatData=nativeBridge;
