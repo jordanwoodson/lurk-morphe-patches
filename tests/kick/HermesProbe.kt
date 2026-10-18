@@ -77,7 +77,9 @@ fun main(args: Array<String>) {
         loads = listOf("/stream", "/clip", "/vod"))
     rejects { bundle.skipGuard(hostEnd, "invalid") } // Its first JmpTrue isn't a return guard.
     bundle.returnAtEntry(hostEnd, "host_end", Constant.UNDEFINED, defaultEnabled = false)
-    // Stay on channel edits the host dialog's countdown options instead: Watch now relies on hostEnd too.
+    // This is decoder/helper coverage only, not a Stay on channel execution test.
+    // verify_hosting.py executes the APK manifest's real countdown edit, retained React caches,
+    // actual JSX handlers/countdown callbacks and stock/off/mutated bytecode controls.
     check(bundle.instructions(bundle.function("JoinHostDialogContent")).count {
         (it.opcode == 1 || it.opcode == 2) && bundle.objectKeys(it) == listOf("duration", "startOnMount", "onEnd")
     } == 1)

@@ -11,6 +11,7 @@ only, links and Kick emotes untouched), the owner lookup, and that no request ca
 The Chrome profile lives under $MORPHE_WORK (default ~/scratch/morphe) and is removed.
 """
 import asyncio
+import argparse
 import base64
 import json
 import os
@@ -210,7 +211,47 @@ async def scenario(page):
     check(not page.unexpected, "no other requests: " + ", ".join(page.unexpected))
 
 
+async def native_scenario(page, captures):
+    """Run exactly the strings captured from production WebView.evaluateJavascript on ART."""
+    expected = {"full", "info", "unknown", "provider-off", "malformed", "provider-only",
+                "missing-config", "invalid-id", "clears-only", "subs-only", "hosts-only", "rewards-only"}
+    check(set(captures) == expected, "complete native capture scenarios")
+    for name, script in captures.items():
+        page.requests.clear()
+        await page.go(PAGE)
+        await page.eval(script)
+        single = name in ("clears-only", "subs-only", "hosts-only", "rewards-only")
+        provider = name != "provider-off" and not single
+        clears = name not in ("provider-only", "subs-only", "hosts-only", "rewards-only")
+        display = ["block", "none", "none", "none", "none"]
+        if name in ("provider-only", "clears-only"):
+            display = ["block"] * 5
+        elif single:
+            display = ["block"] * 5
+            for index in {"subs-only": [1, 2], "hosts-only": [3], "rewards-only": [4]}[name]:
+                display[index] = "none"
+        if provider:
+            await page.until("window.lurkChat.sevenTvCount")
+            expected_count = [0, 3] if name in ("unknown", "malformed", "missing-config", "invalid-id") else [2, 3]
+            check(await page.eval("window.lurkChat.sevenTvCount") == expected_count,
+                  f"native {name}: actual response/config selects expected emotes")
+        else:
+            check(not any("7tv" in r["url"] for r in page.requests),
+                  f"native {name}: no provider requests")
+        hidden = await page.eval("Array.from(document.querySelectorAll('#app > div')).map(e => getComputedStyle(e).display)")
+        check(hidden == display,
+              f"native {name}: independent hide switches")
+        remaining = await page.eval("(() => {const app=document.getElementById('app'); app.innerHTML=''; return app.children.length;})()")
+        check(remaining == (5 if clears else 0), f"native {name}: independent clear switch")
+        check(not any(r["url"].startswith("https://kick.com/") for r in page.requests),
+              f"native {name}: known owner or globals require no owner lookup")
+    check(not page.unexpected, "native captures make no unexpected requests")
+
+
 async def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--native-captures", type=Path, help="bin/test-kick-chat ART capture log")
+    args = parser.parse_args()
     work = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe"))
     work.mkdir(parents=True, exist_ok=True)
     profile = Path(tempfile.mkdtemp(prefix="chat-page-", dir=work))
@@ -235,6 +276,14 @@ async def main():
             reader = asyncio.create_task(page.run())
             try:
                 await scenario(page)
+                if args.native_captures:
+                    captures = {}
+                    for line in args.native_captures.read_text().splitlines():
+                        if line.startswith("CAPTURE "):
+                            _, name, encoded = line.split()
+                            check(name not in captures, f"unique native capture {name}")
+                            captures[name] = base64.b64decode(encoded).decode()
+                    await native_scenario(page, captures)
             finally:
                 reader.cancel()
     finally:

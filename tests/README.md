@@ -67,3 +67,37 @@ Android emulator; those are separate from the host gate.
 
 See [docs/development.md](../docs/development.md#testing) for the workflow and the
 per-app pages under `docs/` for what each check pins and why.
+
+Kick patch integration regressions use the actual emitted APK and its Hermes manifest:
+
+```sh
+# hermes-dec must be installed in this Python environment.
+python tests/kick/verify_hosting.py stock/index.android.bundle patched/kick.apk
+ANDROID_SERIAL=emulator-5580 bin/test-kick-chat patched/kick.apk
+ANDROID_SERIAL=emulator-5580 bin/test-rumble patched/rumble.apk RefreshProbe
+python tests/rumble/verify_refresh.py patched/rumble-apktool
+```
+
+`verify_hosting.py` first verifies the stock hash, embedded bundle and manifest, then applies the
+actual `stay_on_host` edit. It executes the host content, JSX callbacks, countdown hook and timer
+callbacks, with React state/effect boundaries and persistent compiler caches. It executes the parent's
+actual event-to-child output branch to unmount between hosts. Random duration alone is seeded at its
+memo slot. Stock/off and three bytecode mutations check waiting, memo invalidation and manual routing.
+It rejects unsupported executed instructions. Pusher delivery, React Native rendering and real routing
+remain device integration work.
+
+`test-kick-chat` needs SDK 36, a JDK, adb, an ART device and the host browser prerequisites above.
+It runs production KickHttp/KickChat from the APK with real OkHttp responses and Android JSON/URI,
+captures the WebView JavaScript boundary, then executes those exact scripts in offline Chrome.
+Full/info responses, numeric/string IDs, malformed JSON/config, unknown channels, previews, independent
+switches and unchanged response bodies are covered. It writes capture logs under `$MORPHE_WORK/tests/kick-chat`.
+The APK-free page scenarios remain registered in `bin/test-host`; native captures require this separate command.
+
+`RefreshProbe` executes the injected video-load registration, error-panel prefix, click callback,
+reload bridge and real stock player `x4` on ART. ExoPlayer, Compose and state edges are supplied;
+normal reloads retain source URL and 0/123456/4294967400 ms positions without persisting quality, with
+per-video mapping and repeated taps. Null sources, disabled refresh, absent players and direct stock
+quality changes are controls. A caught player Exception, escaping logger RuntimeException and escaping
+Error check callback restoration. These are synthetic boundaries, not observed playback failures.
+`verify_refresh.py` additionally checks the emitted fatal-state/mobile-panel branch and catch metadata.
+Real fatal-stream failure, resumed network playback and visible position remain installed-app verification.

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Capture actual patched Kick native chat output on ART, then run it in offline Chrome.
+# Usage: ANDROID_SERIAL=<serial> bin/test-kick-chat <patched.apk>
+source "$(dirname "$0")/lib/common.sh"
+[[ $# == 1 && -f "$1" ]] || die "usage: bin/test-kick-chat <patched.apk>"
+apk="$1"
+serial=${ANDROID_SERIAL:-emulator-5580}
+out="$WORK/tests/kick-chat"
+remote=/data/local/tmp/lurk-kick-chat-test
+mkdir -p "$out/classes" "$out/dex" "$WORK/tmp"
+export TMPDIR="$WORK/tmp"
+javac --release 11 -classpath "$ANDROID_HOME/platforms/android-36/android.jar" -d "$out/classes" \
+    "$ROOT/tests/rumble/ProbeSupport.java" "$ROOT/tests/kick/ChatBoundaryProbe.java"
+"$(build_tool d8)" --min-api 26 --output "$out/dex" "$out"/classes/*.class
+(cd "$out/dex" && jar cf "$out/probe.jar" classes.dex)
+adb -s "$serial" shell mkdir -p "$remote"
+trap 'adb -s "$serial" shell rm -rf "$remote" >/dev/null 2>&1 || true' EXIT
+adb -s "$serial" push "$apk" "$remote/app.apk" >/dev/null
+adb -s "$serial" push "$out/probe.jar" "$remote/probe.jar" >/dev/null
+adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin ChatBoundaryProbe $remote/app.apk" > "$out/captures.log"
+python3 "$ROOT/tests/kick/test_chat_page.py" --native-captures "$out/captures.log"

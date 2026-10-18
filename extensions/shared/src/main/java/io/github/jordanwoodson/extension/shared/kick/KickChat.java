@@ -94,7 +94,13 @@ public final class KickChat {
         if (on(SEVEN_TV)) {
             // The app passes the page a JSON config with the channel ID; 7TV knows channels by their owner.
             String config = uri.getQueryParameter("config");
-            String channelId = config == null ? null : id(new JSONObject(config).opt("channelId"));
+            String channelId = null;
+            try {
+                channelId = config == null ? null : id(new JSONObject(config).opt("channelId"));
+            } catch (JSONException e) {
+                // A malformed channel config must not disable independent chat controls.
+                Logger.d("7tv: unreadable chat config, global emotes only");
+            }
             String slug = channelId == null ? null : SLUGS.get(channelId);
             String owner = channelId == null ? null : OWNERS.get(channelId);
             if (slug == null) Logger.d("7tv: channel " + channelId + " unknown, global emotes only");

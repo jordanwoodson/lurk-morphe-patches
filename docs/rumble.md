@@ -772,3 +772,13 @@ that app code calls every new extension method.
 - **Twitch, after the shared ChatFilter and SleepTimer:** `bin/test-twitch`, `test-twitch-chat`,
   `test-twitch-chat-style` and `test-twitch-playback` pass, and Twitch's app code patches byte-identically
   to before.
+
+Retained refresh integration regression: `bin/test-rumble <patched.apk> RefreshProbe` executes the
+actual emitted video-load hook, error-panel prefix, click/reload bridge and stock `x4` on ART.
+Player/state/Compose boundaries verify source URL, full-width seek position, per-video mapping,
+repeated taps, disabled/null cases and preserved quality callbacks. The generated reload now restores
+its callback in a catch-all handler too: stock `x4` catches ordinary Exceptions, but an escaping Error
+or failure inside its logger previously left the no-op callback installed. These exceptions are
+synthetic regression inputs; no live occurrence is claimed. `tests/rumble/verify_refresh.py` checks
+emitted catch metadata and the fatal-state branch to the mobile panel. A real failed stream followed
+by recovered playback and visible position still requires installed-app verification.

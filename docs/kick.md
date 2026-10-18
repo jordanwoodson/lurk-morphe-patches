@@ -659,3 +659,12 @@ still turns collection back on.
 Authenticated flows, broadcaster token sharing and every server ad configuration
 need device/account coverage. Do not interpret SDK suppression or static VOD fallback
 validation as verified removal of every video ad.
+
+Retained patch-integration regressions: `tests/kick/verify_hosting.py` executes the emitted
+`stay_on_host` manifest edit, actual JSX handlers/countdown and persistent React compiler caches.
+It covers waiting, Watch now, Cancel/close, stock/off behavior, route guards and consecutive events,
+with three failing bytecode mutations. `bin/test-kick-chat <patched.apk>` captures production
+KickHttp/KickChat JavaScript on ART and runs it in offline Chrome, covering response preservation,
+full/info channel IDs, malformed and missing config, globals, previews and independent switches.
+Malformed config now falls back to global emotes while retaining hide/ignore-clear options.
+See `tests/README.md` for prerequisites and the exact boundary limitations.
