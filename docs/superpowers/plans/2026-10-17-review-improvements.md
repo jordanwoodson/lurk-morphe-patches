@@ -109,7 +109,7 @@ review is clean after shared test-harness extraction at `f86098f`.
 - [ ] Install on authorized USB phone and run relevant ART/UI probes; background/foreground, Wi-Fi/mobile, lock-screen and PiP transitions.
 - [ ] Obtain user-entered account sessions and validate named authenticated flows. Do not send real chat, spend points/money, or change subscriptions without explicit scope for the specific action; use read-only/test-channel equivalents where they prove the behavior, and record remaining input needs.
 - [x] Inspect residual telemetry payloads/dependencies and compare relevant switch transitions, including Rumble consent restart and push consequences.
-- [ ] Fix failures and rerun affected plus full host/build gates; have independent review of completed diff and resolve findings.
+- [x] Fix failures and rerun affected plus full host/build gates; have independent review of completed diff and resolve findings.
 
 Task 7 progress and exact artifact/evidence limits are recorded in
 `docs/verification-2026-10-17.md`. The input-staging defect has retained real-command
@@ -122,15 +122,30 @@ and unchanged-runtime comparisons are recorded in the verification document.
 Same-process Kick reload and final production public playback smokes are supplied. Actual SDK
 synthetic-payload investigation, real Rumble consent/restart
 SDK-state transitions and the Firebase/Airship push dependency trace are supplied; no broad
-SDK block was added. Physical-phone UI and named authenticated flows remain required,
-and final Rumble USB installation remains open. Combined Task 7 scoped implementation review
+SDK block was added. Physical-phone UI and named authenticated flows remain required.
+Combined Task 7 scoped implementation review
 is clean at `f86098f`. Whole-branch review of `590ef1e..f86098f` found one Important staged-index
 publication defect and one Minor push-wording overclaim; both are fixed at `4e1aa6e`, with scoped
-re-review pending at this documentation snapshot. The release regression causally fails on the
+re-review clean through `b252644` (`final-fix-review.md`). Final technical review is complete.
+The release regression causally fails on the
 old successful path; the fixed focused suite passes 21 cases. One final host gate passes all
-15 checks, including 21 release tests and four staging cases. USB final Twitch N
-and Kick updates succeeded; Rumble retains its previous APK after two bounded install timeouts.
-None of the unavailable phone/account/review stages is a pass; Task 7 as a whole is incomplete.
+15 checks, including 21 release tests and four staging cases. All three current default USB
+APKs are installed with exact hashes verified at 12:45:44 UTC on 2026-10-18: Twitch N, Kick J
+and final-fix Rumble. Rumble session `720042754` completed successfully at 12:45:27 UTC after
+3604.112 seconds; the original command exited 0 with `Success`, and no install job remains.
+The earlier bounded waits and old-APK observations are retained as history, superseded by
+later terminal success and installed-hash readbacks; the delay's cause is unknown. The phone
+remains securely locked at 12:45:43 UTC, so installation does not pass physical UI or account
+checks; the 12:54:54 UTC refresh confirms the same locked state. The mixed installation/UI
+checkbox above stays unchecked for those remaining behaviors.
+`task-7/phone-preparation/current-install-evidence.md` records the exact evidence. No push,
+CI publication, release or backmerge occurred. Task 7 as a whole remains incomplete.
+Kick's separate Go Live companion (`com.kick.streaming`) is absent from the current phone
+profile; bounded approved-source preparation obtained no complete APK/XAPK and started no
+companion install. Its manifest/certificate/caller and authenticated handoff remain unverified.
+The normal official Play UI after unlock can prepare that prerequisite; retained evidence is
+`task-7/kick-account-preparation/stock-companion/evidence.md`. The three patched-app installations
+remain complete; physical UI/account gates remain open.
 
 ### Task 8: Push and stable release
 

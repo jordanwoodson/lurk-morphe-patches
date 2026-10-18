@@ -4,9 +4,10 @@ Task 7 is incomplete. Task 6 was accepted at `3b5330c`; Task 7 fixes input stagi
 and measured RN landscape integration at `3ba886c`. Combined Task 7 scoped implementation
 review is clean after the shared test-harness extraction at `f86098f`. Independent whole-branch
 review of `590ef1e..f86098f` found one Important release-index defect and one Minor Rumble
-notification-wording defect. Both are fixed at `4e1aa6e`; scoped re-review of that final fix is
-pending at this documentation snapshot. Physical-phone UI, named authenticated flows and final
-Rumble USB installation remain required before release.
+notification-wording defect. Both are fixed at `4e1aa6e`; final scoped re-review through
+`b252644` is clean (`final-fix-review.md`). Final technical review and installation of all three
+current default APKs are complete. Physical-phone UI and named authenticated flows remain
+required before release.
 No push, tag, release or merge was performed for this verification. Missing prerequisites are
 recorded as open gates, never as passing tests.
 
@@ -91,7 +92,8 @@ comparison correctly failed against a pre-existing decoded baseline containing o
 effects; freshly decoding the exact J default artifact resolved the baseline mismatch.
 `final-fix-output/evidence.md` retains the commands and limits. Twitch N and Kick J artifacts
 remain unchanged; earlier Rumble behavioral/device evidence applies to the unchanged hooks,
-not a new device run of these text-only artifacts. No new install or notification result is claimed.
+not a new runtime test of these text-only artifacts. The later USB installation is recorded below;
+no notification-delivery result is claimed.
 
 The earlier build at tooling commit `783e045` passed 46 tasks in 14 seconds
 (`task-7/final-build.log`, `final-build-source.json`). Its MPP SHA-256 is
@@ -179,12 +181,46 @@ Task 7 subsequently updated final default Twitch N and Kick with `adb install -r
 their existing signer equals the candidate signer; both installed APK hashes match exactly.
 N's 11:01:04 UTC readback records deviceLocked=1, UNTRUSTED, showing=true and secure=true
 (`task-7/rn-landscape-fix/phone-install-n.json`).
-No data wipe, account entry, phone app launch or security change was attempted. Rumble's
-same-signer USB update timed out after 240 seconds streaming and a target-only retry after
-90 seconds via pushed APK/`pm install -r`. Querying its installed path/hash afterward confirms
+No data wipe, account entry, phone app launch or security change was attempted. The earlier
+Rumble same-signer update caller waits timed out after 240 seconds streaming and 90 seconds
+via pushed APK/`pm install -r`. Their immediate installed-path/hash readbacks still showed
 the previous `7beeaa46f7dcd3ee755a445b355aaca9a3fd00ffbdd0911e8824f47dca530918`
-APK remains installed. Logs and target-only state are retained in `task-7/final-device-smoke/`;
-no global adb restart or further retry was made.
+APK (`task-7/final-device-smoke/`). Later Android history marks both sessions `236658952`
+and `1559316142` installed after about an hour each; the 11:44:33 UTC readback confirms J's
+`19d1122f…` installed. Those terminal results supersede the earlier old-APK observations;
+the bounded caller timeouts were not terminal installation failures. No delay cause is established.
+
+The current final Rumble default update, explicit Android session `720042754`, completed at
+12:45:27 UTC on 2026-10-18 after 3604.112 seconds from commit to terminal completion.
+Android reports applied=true, failed=false and finalStatus=1; the original `pm install-commit`
+command (exec session `86696`) exited 0 with `Success`. The operation was monitored through
+completion, with no duplicate or abandoned install; no installer or observer job remains.
+Fresh read-only package-path/SHA-256 checks at 12:45:44 UTC confirm all three current default
+APKs in the table above are installed exactly: Twitch N, Kick J and Rumble final-fix `c444e2eb…`.
+The 12:45:43 UTC readback still reports deviceLocked=1 and UNTRUSTED. Installation is complete;
+physical UI/transitions and authenticated flows remain untested on the locked phone.
+The later 12:54:54 UTC refresh confirms the same locked state.
+
+Evidence is under `task-7/phone-preparation/`: `current-install-evidence.md`,
+`current-installed-artifacts.json`, `rumble-final-install-session.json`,
+`rumble-final-install-status.json`, `rumble-final-install-commit.log` and
+`phone-status-during-install.json`. Earlier late completions and readback are retained in
+`rumble-install-session-status.json` and `rumble-late-install-readback.json`.
+`rumble-final-install-diagnostic.json` records verifier configuration but does not establish
+why completion took an hour. Normal replace preserved data; the owned remote input was
+removed after successful install-write. No data wipe, security/verification setting change,
+credential/token read, account entry, app launch or UI action was performed for this update.
+
+Kick's stock broadcaster handoff has an additional prerequisite: the separate Go Live companion,
+identified by [KICK's Android help](https://help.kick.com/en/articles/16536331-getting-started-with-the-kick-go-live-app-for-android)
+and [Google Play](https://play.google.com/store/apps/details?id=com.kick.streaming) as
+`com.kick.streaming`, is absent from the phone's current profile (`pm path` exit 1 at
+12:54:16 UTC). Bounded approved-source preparation obtained no complete APK/XAPK and started
+no companion install or launch; no cause for the missing complete artifact is established. Companion
+manifest/certificate/caller inspection and authenticated handoff remain unverified. Once the
+phone is unlocked, the normal official Play UI can prepare that prerequisite. Evidence:
+`task-7/kick-account-preparation/stock-companion/{evidence.md,preparation-result.json}`.
+This does not change the three verified patched-app installations or pass any account/UI gate.
 
 | Flow | Evidence supplied | Boundary / remaining proof |
 |---|---|---|
@@ -329,11 +365,6 @@ observer removed. Wi-Fi/mobile remained 1/1. The evidence records this cache cha
   flows; Kick physical-phone authenticated navigation/playback and stock broadcaster token handoff; Rumble
   authenticated/Premium playback. A read-only/test-channel equivalent must prove the named
   behavior. Sending real chat, spending points/money and subscription changes need specific scope.
-- Install the final Rumble APK on USB and verify its installed hash. The two historical bounded
-  attempts timed out; no new installation or phone result follows from the wording rebuild.
-- Complete scoped re-review of the final whole-branch fixes. Combined Task 7 scoped implementation
-  review is clean at `f86098f`; whole-branch review is complete with its two findings fixed at
-  `4e1aa6e`, awaiting that re-review. Neither review closes the external verification gates.
 - Task 8 publication/CI/prerelease/stable/backmerge verification after all required evidence.
 
 Real notification delivery, live wire payloads/queue drain, provider-admin mutations and audible
