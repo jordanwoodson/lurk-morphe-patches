@@ -45,11 +45,11 @@
 
 **Interfaces:** existing injected onPlay/onStop signatures stay unchanged. A shared expiry representation carries eligible players plus generation; platform fallback callers use that representation.
 
-- [ ] Add scheduler-controlled failing tests: new player after expiry, resumed same player, genuinely missed player, stopped/released player, repeated expiry.
-- [ ] Implement generation invalidation and expiry-time player eligibility for both callers.
-- [ ] Add empty-history, keyword-off-at-join and account-change identity regressions before fixing discovery.
-- [ ] Mark cookie blocking restart-required and update its effect text; add saved-speed on/off/on behavior coverage and align docs.
-- [ ] Run host checks and current-helper Android probes; report commands for host-runner integration; commit owned paths.
+- [x] Add scheduler-controlled failing tests: new player after expiry, resumed same player, genuinely missed player, stopped/released player, repeated expiry.
+- [x] Implement generation invalidation and expiry-time player eligibility for both callers.
+- [x] Add empty-history, keyword-off-at-join and account-change identity regressions before fixing discovery.
+- [x] Mark cookie blocking restart-required and update its effect text; add saved-speed on/off/on behavior coverage and align docs.
+- [x] Run host checks and current-helper Android probes; report commands for host-runner integration; commit owned paths.
 
 ### Task 3: Twitch asynchronous playback and chapters
 
