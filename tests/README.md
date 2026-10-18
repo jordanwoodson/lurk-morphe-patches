@@ -39,6 +39,15 @@ APK patched with Sleep timer. `tests/rumble/test_state_transitions.py` runs the
 production chat filter and Rumble helpers for empty and keywords-off joins, account changes, sign-out
 and remember-speed on/off/on. Neither needs an APK, SDK or device.
 
+`tests/twitch/test_async.py` compiles TwitchBackupStream and its production request helper unchanged.
+It serves real loopback HTTP with delayed headers, trickling bodies and oversized responses, and drives
+controlled IVS providers for absolute deadlines, cancellation, ad fallback and worker saturation.
+It also checks delayed-source reconciliation and partial/all-stale playlist windows.
+`tests/twitch/test_vod_requests.py` compiles TwitchVod unchanged and checks shared prefetch/open
+results, failure retry/retention, successful-cache eviction, bounded queues/waiters, presenter ownership,
+navigation, detach and disabling. JSON, HTTPS and UI are platform doubles there; the existing ART
+AdBackupProbe and visible VOD verification remain necessary for real platform/schema evidence.
+
 The release script also runs the selected source's `bin/test-host` immediately before building a fresh
 release or rebuilding an older release for recovery. A missing source gate or a failed check stops
 publication for the run. This verifies the source actually being released even when the branch has

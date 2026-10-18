@@ -275,6 +275,17 @@ for the body), which every Twitch player uses. When a media playlist's next segm
 - a break past 4 minutes, an unreadable playlist or a backup that stops answering ends the switch;
 - without a backup, Mute stitched ads applies.
 
+Playlist reads and backup discovery share a six-second monotonic budget, including queued work,
+headers and continually progressing bodies. Compressed and expanded bodies are limited to 1 MiB.
+Three I/O workers and eight pending operations bound stalled providers; cancellation releases the
+caller even if a provider ignores interruption. Workers check cancellation before further reads and
+chained requests. An expired discovery retains the already-read ad playlist so the existing mute
+fallback still applies. Delayed responses cannot restore a retired source or regress the media
+sequence; when a newer source cannot be fetched, the last accepted window is reused.
+`tests/twitch/test_async.py` verifies these paths with local delayed/trickling HTTP and controlled
+IVS providers. A permanently blocked platform provider can retain one worker until it returns;
+the worker count stays bounded and saturated callers fail promptly or use the existing body.
+
 `bin/test-twitch-ad-backup` runs the hooked consumer on ART against live Twitch playlists. A test
 build with a faked break went 1080p → 360p → 1080p without a reload. No real commercial was caught
 in the app.
@@ -383,13 +394,21 @@ Twitch already loads recent chat history on join (native
 *VOD chapters* (on by default) adds a Chapters button next to the rotate button in the native VOD
 player's overlay. It reads the video's `moments(momentRequestType: VIDEO_CHAPTER_MARKERS)` (position,
 duration, game) from gql.twitch.tv with the app's Client-ID only, since chapters are public. This
-runs on a background thread, results are cached per video, and they're shown in a list. Tapping a row
-seeks through Twitch's own VOD seek.
+shares one background request per video between prefetches and open overlays. Two chapter jobs run
+at once with eight queued; successful results and failure backoff each retain at most 32 videos.
+Failures retry after 15 seconds. Each load keeps at most eight weak owners, and at most 32 pending
+buttons can wait for a dialog. Requests use the same six-second monotonic budget and 1 MiB body
+limit as playlist I/O. Tapping a row seeks through Twitch's own VOD seek.
 
 Feed previews also load VOD presenters, so the button finds its video through its own overlay: the
 presenter whose visible player view lies under it (captured in the base presenter's view binding),
 mapped to the video it loaded. `VodModel.getId()` carries a `v` prefix that GQL rejects, so the
-prefix is stripped. Verified on the emulator: the dialog listed a VOD's three chapters, and tapping
+prefix is stripped. Pending dialogs check the original presenter, video, overlay attachment and
+current setting before appearing. Navigation and disabling chapters retire queued/provider work;
+results remain shared when another owner still needs that video. `tests/twitch/test_vod_requests.py`
+covers sharing, retry, eviction, queue/waiter bounds and stale delivery using platform HTTPS, JSON
+and UI doubles; it does not verify Twitch's live GraphQL schema or actual Android rendering.
+Verified on the emulator: the dialog listed a VOD's three chapters, and tapping
 the second seeked to 26:29.
 
 ### Tablet layout, navigation bar position and Force ExoPlayer

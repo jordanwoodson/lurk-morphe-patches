@@ -184,6 +184,12 @@ public final class AdBackupProbe {
             && kept.indexOf("twitch-session") < kept.indexOf("#EXTINF"), "Trimming must keep the session date range first");
         check(((List<?>) field(trimmed, "segments")).size() == 10, "Trimming must drop exactly the old segments");
 
+        Object allStale = call(renumbered, "trimmedBelow", 5000L);
+        String emptyWindow = (String) call(allStale, "text");
+        check(emptyWindow.contains("#EXT-X-MEDIA-SEQUENCE:5000\n")
+            && ((List<?>) field(allStale, "segments")).isEmpty()
+            && !emptyWindow.contains("TWITCH-PREFETCH"), "All-stale windows must advance without old segments or prefetch");
+
         // Back from the break: the stream's own playlist, numbered on (5000..) by its ads, is matched by time
         // with what was served from picture-by-picture (4240.. from T0, 2 s each).
         Method resume = method(EXT, "resume", Map.class, String.class, playlistType, playlistType, long.class);
