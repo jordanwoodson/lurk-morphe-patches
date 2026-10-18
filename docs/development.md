@@ -141,10 +141,18 @@ standard library into the patched app (`extensions/shared/build.gradle.kts` excl
 
 ## Testing
 
-There is no CI test suite; the checks need a patched APK, decoded output or a Hermes bundle,
-and for the probes a device. The workspace emulator is `emulator-5580`; every `bin/test-*`
-script uses it unless `ANDROID_SERIAL` names another device, so a connected phone is never
-patched by accident.
+Run `bin/test-host` for offline, APK-free checks with Python 3, Git, a JDK (21 recommended),
+Chrome or Chromium, and `python3 -m pip install -r tests/requirements-host.txt`.
+It honors `JAVA_HOME`, `CHROME` and `MORPHE_WORK`, runs all registered checks and fails if any check fails.
+Both PR builds and release jobs require it before building or publishing. The suite exercises
+the Twitch interface, playback/link and privacy-consent helpers, Kick player and privacy helpers,
+the offline Kick chat page in headless Chrome,
+and release recovery using local Git fixtures. See [tests/README.md](../tests/README.md) for coverage
+and how to register another host check.
+
+The other checks need a patched APK, decoded output or a Hermes bundle, and for the probes a device.
+The workspace emulator is `emulator-5580`; every Android `bin/test-*` script uses it unless
+`ANDROID_SERIAL` names another device, so a connected phone is never patched by accident.
 
 ```sh
 bin/emu start
@@ -183,7 +191,9 @@ worth pinning, and say in the pull request what you ran.
   `BREAKING CHANGE:` footer a major one; `dev` adds `-dev.N`. The script writes the generated files,
   builds the bundle, pushes the release commit and its tag together, then creates the GitHub release with
   the `.mpp`. If that last step fails, the next run (or "Run workflow" on the Release workflow) publishes
-  the missing release. A stable release is merged back into `dev`. To preview the next release and its
+  the missing release. A stable release is merged back into `dev`; reruns also finish a failed backmerge
+  after successful publication, without publishing again or creating duplicate merges. Published asset
+  outputs survive later failures so the workflow can still attest them. To preview the next release and its
   notes: `git fetch && python3 .github/scripts/release.py --dry-run --branch dev`.
 - Use semantic commit messages: `feat(twitch): ...`, `fix(kick): ...`, `chore: ...`.
 - Don't hand-edit generated files: `patches-list.json`, `patches-bundle.json`, `CHANGELOG.md`, or
