@@ -20,10 +20,11 @@ VOD = EXTRA | {
   public static class ConstantState{public Drawable newDrawable(){return new Drawable();}}}''',
  'android/view/View.java': '''package android.view;public class View implements ViewParent {
   public static final int VISIBLE=0,GONE=8;public android.content.Context context=new android.app.Activity();
+  private final Thread ui=Thread.currentThread();private void main(){if(Thread.currentThread()!=ui)throw new AssertionError("worker inspected View");}
   public View root=this; public ViewParent parent; public boolean shown=true,attached=true;public int visibility;
-  public android.content.Context getContext(){return context;}public int getWidth(){return 100;}public int getHeight(){return 100;}
-  public View getRootView(){return root;}public ViewParent getParent(){return parent;}public void getLocationOnScreen(int[] a){a[0]=a[1]=0;}
-  public boolean isShown(){return shown;}public boolean isAttachedToWindow(){return attached;}public Object getWindowToken(){return attached?root:null;}
+  public android.content.Context getContext(){return context;}public int getWidth(){main();return 100;}public int getHeight(){main();return 100;}
+  public View getRootView(){main();return root;}public ViewParent getParent(){return parent;}public void getLocationOnScreen(int[] a){main();a[0]=a[1]=0;}
+  public boolean isShown(){main();return shown;}public boolean isAttachedToWindow(){main();return attached;}public Object getWindowToken(){return attached?root:null;}
   public void setVisibility(int v){visibility=v;}public int getVisibility(){return visibility;}public View findViewById(int i){return null;}
   public static int generateViewId(){return 1;}public void setId(int i){}public void setContentDescription(String s){}
   public Object getLayoutParams(){return null;}public void setLayoutParams(Object o){}public void setPadding(int a,int b,int c,int d){}
@@ -31,7 +32,11 @@ VOD = EXTRA | {
   public android.graphics.drawable.Drawable getBackground(){return null;}public void setBackground(Object o){}
   public interface Click{void click(View v);}public void setOnClickListener(Click c){}
   public interface OnAttachStateChangeListener{void onViewAttachedToWindow(View v);void onViewDetachedFromWindow(View v);}
-  public void addOnAttachStateChangeListener(OnAttachStateChangeListener l){} }''',
+  public final java.util.List<OnAttachStateChangeListener> listeners=new java.util.ArrayList<>();
+  public void addOnAttachStateChangeListener(OnAttachStateChangeListener l){listeners.add(l);}
+  public void removeOnAttachStateChangeListener(OnAttachStateChangeListener l){listeners.remove(l);}
+  public void detach(){attached=false;shown=false;for(OnAttachStateChangeListener l:new java.util.ArrayList<>(listeners))l.onViewDetachedFromWindow(this);}
+  public void attach(){attached=true;shown=true;for(OnAttachStateChangeListener l:new java.util.ArrayList<>(listeners))l.onViewAttachedToWindow(this);} }''',
  'android/widget/ImageView.java': '''package android.widget;public class ImageView extends android.view.View {
   public ImageView(android.content.Context c){context=c;}public enum ScaleType{FIT_CENTER}
   public void setImageResource(int r){}public void setColorFilter(int c,android.graphics.PorterDuff.Mode m){}public void setScaleType(ScaleType t){} }''',

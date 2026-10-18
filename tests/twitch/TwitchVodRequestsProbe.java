@@ -43,7 +43,24 @@ public class TwitchVodRequestsProbe {
     static void settled()throws Exception{waitFor(()->running.get()==0,"requests still running");Thread.sleep(60);Handler.drain();}
     public static void main(String[] args)throws Exception{
         Settings.values.put("vod_chapters","true");install();String scenario=args[0];
-        if(scenario.equals("failure-retention")){
+        if(scenario.equals("queued-player-detach")) {
+            List<View> players=new ArrayList<>();
+            for(int i=1;i<=10;i++){Object p=load(""+i);View player=new View();players.add(player);owners.add(player);TwitchVod.playerView(p,player);}
+            Handler.drain();waitFor(()->calls.get()==2,"two workers did not start");
+            for(View player:players)player.detach();
+            gate.countDown();settled();Thread.sleep(150);Handler.drain();
+            check(calls.get()==2,"detached player prefetch started queued provider activity: "+calls.get());
+        }else if(scenario.equals("shared-player-detach")) {
+            Object p=load("1"),live=load("1");View retired=new View();TwitchVod.playerView(p,retired);owners.add(retired);
+            View b=button(live);open(b);Handler.drain();waitFor(()->calls.get()==1,"shared request did not start");
+            retired.detach();gate.countDown();settled();
+            check(calls.get()==1&&AlertDialog.shown.size()==1&&AlertDialog.shown.get(0)==b.context,"detaching one owner cancelled another live overlay");
+        }else if(scenario.equals("replaced-player-detach")) {
+            Object p=load("1");View retired=new View();TwitchVod.playerView(p,retired);owners.add(retired);
+            View b=button(p);open(b);Handler.drain();waitFor(()->calls.get()==1,"request did not start");
+            retired.detach();gate.countDown();settled();
+            check(AlertDialog.shown.size()==1,"old attachment retired the presenter's new player view");
+        }else if(scenario.equals("failure-retention")){
             fail=true;gate.countDown();for(int i=1;i<=40;i++){load(""+i);final int expected=i;waitFor(()->calls.get()==expected,"failure fetch missing");settled();}
             load("1");waitFor(()->calls.get()==41,"old failure never evicted");
             check(((Map<?,?>)field("FAILURES")).size()<=32,"failure retention unbounded");

@@ -281,7 +281,11 @@ Three I/O workers and eight pending operations bound stalled providers; cancella
 caller even if a provider ignores interruption. Workers check cancellation before further reads and
 chained requests. An expired discovery retains the already-read ad playlist so the existing mute
 fallback still applies. Delayed responses cannot restore a retired source or regress the media
-sequence; when a newer source cannot be fetched, the last accepted window is reused.
+sequence; when a newer source cannot be fetched, the last accepted window is reused. If that rendition
+has no accepted window yet, the consumer reports an error without delivering a retired or manufactured
+empty playlist. Native IVS probes found repeated synthetic empty windows cause rapid polling.
+Provider I/O runs outside the short stream state monitor; source generations prevent late workers
+from overwriting a newer transition, and request hooks stay usable while old I/O remains blocked.
 `tests/twitch/test_async.py` verifies these paths with local delayed/trickling HTTP and controlled
 IVS providers. A permanently blocked platform provider can retain one worker until it returns;
 the worker count stays bounded and saturated callers fail promptly or use the existing body.
@@ -404,7 +408,8 @@ Feed previews also load VOD presenters, so the button finds its video through it
 presenter whose visible player view lies under it (captured in the base presenter's view binding),
 mapped to the video it loaded. `VodModel.getId()` carries a `v` prefix that GQL rejects, so the
 prefix is stripped. Pending dialogs check the original presenter, video, overlay attachment and
-current setting before appearing. Navigation and disabling chapters retire queued/provider work;
+current setting before appearing. Player-view detach callbacks retire both prefetch and open demand on the main thread; an old
+attachment cannot retire its replacement. Navigation and disabling chapters retire queued/provider work;
 results remain shared when another owner still needs that video. `tests/twitch/test_vod_requests.py`
 covers sharing, retry, eviction, queue/waiter bounds and stale delivery using platform HTTPS, JSON
 and UI doubles; it does not verify Twitch's live GraphQL schema or actual Android rendering.

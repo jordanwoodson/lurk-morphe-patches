@@ -66,6 +66,11 @@ public class TwitchAsyncProbe {
             Settings.values.put("avoid_stitched_ads","false");
             check(TwitchBackupStream.requestUrl(new Object(),"http://own/a.m3u8").equals("http://own/a.m3u8"),"disabled patch still redirects provider");return;
         }
+        if(scenario.equals("first-stale")) {
+            try {call(TYPE,"onMedia",known,own,playlist(90,"late"));throw new AssertionError("first retired response synthesized a playlist instead of failing");}
+            catch(RuntimeException expected) {check(expected.getCause()!=null&&expected.getCause().getClass().getSimpleName().equals("UnavailablePlaylist"),"unexpected first-response failure: "+expected);}
+            return;
+        }
         String result=(String)call(TYPE,"onMedia",known,own,playlist(90,"late"));
         check(get(known,"lastSource")==current,"delayed clean old-source response changed served source");
         check(result!=null&&!result.contains("late1.ts"),"delayed old-source body leaked after source transition");
@@ -128,9 +133,55 @@ public class TwitchAsyncProbe {
             else{done.get(7,TimeUnit.SECONDS);check(errors[0]==0&&delivered.toString("UTF-8").equals(ad),"expired discovery lost existing ad fallback");}
         }finally{release.countDown();executor.shutdownNow();}
     }
+
+    static void subsequentHook(String scenario) throws Exception {
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        URL.setURLStreamHandlerFactory(protocol -> protocol.equals("https") ? new URLStreamHandler() {
+            protected URLConnection openConnection(URL url) { return new HttpURLConnection(url) {
+                public InputStream getInputStream(){return new ByteArrayInputStream(playlist(100,"main").getBytes(StandardCharsets.UTF_8));}
+                public void connect() {} public void disconnect() {} public boolean usingProxy() { return false; }
+                public int getResponseCode() {
+                    entered.countDown();
+                    while (true) try { release.await(); return 200; } catch (InterruptedException ignored) {}
+                }
+            }; }
+        } : null);
+        Object rendition = make("Rendition", "v", "https://own/a.m3u8", 720, 1000L);
+        Map<String,Object> variants = new HashMap<>(); variants.put("v", rendition);
+        Object stream = make("Stream", "https://usher.ttvnw.net/api/channel/hls/a.m3u8", "a", variants);
+        Object backup = make("Source", variants, 0L, null, true, "backup");
+        set(stream, "current", backup);
+        Object known = make("Media", stream, rendition);
+        Field media = TYPE.getDeclaredField("media"); media.setAccessible(true);
+        ((Map)media.get(null)).put("https://own/a.m3u8", known);
+        Request req = new Request() { public String getUrl() { return "https://own/a.m3u8"; } };
+        TwitchBackupStream.requestUrl(req, req.getUrl());
+        byte[] bytes = playlist(100,"backup").getBytes(StandardCharsets.UTF_8); int[] at = {0};
+        Consumer consumer = new Consumer(b -> { if (at[0]++ > 0) return -1; b.put(bytes); return bytes.length; });
+        ByteArrayOutputStream delivered=new ByteArrayOutputStream();int[] failures={0};
+        Callback cb = new Callback() { public void onData(ByteBuffer b, boolean last) {while(b.hasRemaining())delivered.write(b.get());} public void onError(Exception e) {failures[0]++;} };
+        ExecutorService callers = Executors.newFixedThreadPool(2, r -> { Thread t = new Thread(r); t.setDaemon(true); return t; });
+        try {
+            Future<?> consume = callers.submit(() -> TwitchBackupStream.consume(consumer, req, cb));
+            check(entered.await(2,TimeUnit.SECONDS), "main fetch not started");
+            if(scenario.equals("stream-lock")){req.cancelled = true;consume.get(600,TimeUnit.MILLISECONDS);}
+            set(known, "unanswered", 3);
+            Future<?> request = callers.submit(() -> TwitchBackupStream.requestUrl(new Object(), "https://own/a.m3u8"));
+            try { request.get(600,TimeUnit.MILLISECONDS); }
+            catch (TimeoutException e) { throw new AssertionError("HTTP retained stream monitor and blocked requestUrl"); }
+            Object expected=get(stream,"main");check(get(stream,"current")==expected,"unanswered backup did not return to main");
+            release.countDown();consume.get(1,TimeUnit.SECONDS);Thread.sleep(80);
+            check(get(stream,"current")==expected,"late HTTP overwrote the newer source generation");
+            check((Integer)get(stream,"mainFailures")==0&&(Long)get(stream,"freshAfter")==0L,
+                    "late HTTP mutated retry state after its generation retired");
+            check(!delivered.toString("UTF-8").contains("backup1.ts"),"late generation delivered retired backup segments");
+            if(scenario.equals("stream-generation"))check(delivered.size()==0&&failures[0]==1,"first retired response delivered a manufactured empty instead of onError");
+        } finally { release.countDown(); callers.shutdownNow(); }
+    }
     public static void main(String[] args)throws Exception{
         Settings.values.put("avoid_stitched_ads","true");String s=args[0];
-        if(Arrays.asList("headers","trickle","oversize","cancel-http").contains(s))http(s);
+        if(s.equals("stream-lock")||s.equals("stream-generation"))subsequentHook(s);
+        else if(Arrays.asList("headers","trickle","oversize","cancel-http").contains(s))http(s);
         else if(s.equals("saturation"))saturatedProviders();
         else if(s.equals("ad-timeout")||s.equals("cancel-chain"))adTimeout(s);
         else if(s.endsWith("provider"))provider(s);else stale(s);

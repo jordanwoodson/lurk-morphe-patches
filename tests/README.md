@@ -42,10 +42,12 @@ and remember-speed on/off/on. Neither needs an APK, SDK or device.
 `tests/twitch/test_async.py` compiles TwitchBackupStream and its production request helper unchanged.
 It serves real loopback HTTP with delayed headers, trickling bodies and oversized responses, and drives
 controlled IVS providers for absolute deadlines, cancellation, ad fallback and worker saturation.
-It also checks delayed-source reconciliation and partial/all-stale playlist windows.
+It also checks delayed-source reconciliation, partial/all-stale playlist windows, subsequent request
+hooks while cancelled HTTP remains blocked, and generation-safe unavailable/error delivery.
 `tests/twitch/test_vod_requests.py` compiles TwitchVod unchanged and checks shared prefetch/open
 results, failure retry/retention, successful-cache eviction, bounded queues/waiters, presenter ownership,
-navigation, detach and disabling. JSON, HTTPS and UI are platform doubles there; the existing ART
+navigation, player detach/replacement, another live owner, and disabling. View fixtures reject worker
+thread inspection. JSON, HTTPS and UI are platform doubles there; the existing ART
 AdBackupProbe and visible VOD verification remain necessary for real platform/schema evidence.
 
 The release script also runs the selected source's `bin/test-host` immediately before building a fresh

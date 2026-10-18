@@ -59,13 +59,50 @@ public final class TwitchVod {
         }
     }
 
-    private static final class Attached {
+    private static final class Attached implements View.OnAttachStateChangeListener {
         final WeakReference<View> view;
+        final WeakReference<Object> presenter;
         final long order;
+        volatile boolean detached;
 
-        Attached(View view, long order) {
+        Attached(Object presenter, View view, long order) {
             this.view = new WeakReference<>(view);
+            this.presenter = new WeakReference<>(presenter);
             this.order = order;
+        }
+
+        @Override public void onViewAttachedToWindow(View view) {
+            Object owner = presenter.get();
+            synchronized (PLAYER_VIEWS) {
+                if (owner == null || PLAYER_VIEWS.get(owner) != this) return;
+                detached = false;
+            }
+            String id = vodOf(owner);
+            if (id != null) request(new Pending(owner, null, id));
+            MAIN.post(TwitchVod::refreshButtons);
+        }
+
+        @Override public void onViewDetachedFromWindow(View view) {
+            Object owner = presenter.get();
+            synchronized (PLAYER_VIEWS) {
+                if (owner == null || PLAYER_VIEWS.get(owner) != this) return;
+                detached = true;
+            }
+            // Lifecycle callbacks run on main. Permanently retire this attachment's old demand;
+            // a reattach may request afresh, while another owner can keep a shared load alive.
+            synchronized (REQUESTS) {
+                for (Load load : new ArrayList<>(LOADS.values())) {
+                    for (Pending pending : load.waiters) {
+                        if (pending.presenter.get() == owner) pending.valid = false;
+                    }
+                    if (!load.active()) { LOADS.remove(load.id); FETCHES.remove(load); }
+                }
+                for (Pending pending : WAITING.values()) {
+                    if (pending.presenter.get() == owner) pending.valid = false;
+                }
+                postDelivery();
+            }
+            MAIN.post(TwitchVod::refreshButtons);
         }
     }
 
@@ -108,9 +145,17 @@ public final class TwitchVod {
      */
     public static void playerView(Object presenter, View view) {
         if (presenter == null || view == null || !Settings.isEnabled("vod_chapters")) return;
+        Attached previous;
+        Attached attached;
         synchronized (PLAYER_VIEWS) {
-            PLAYER_VIEWS.put(presenter, new Attached(view, ++attachOrder));
+            attached = new Attached(presenter, view, ++attachOrder);
+            previous = PLAYER_VIEWS.put(presenter, attached);
         }
+        if (previous != null) {
+            View oldView = previous.view.get();
+            if (oldView != null) oldView.removeOnAttachStateChangeListener(previous);
+        }
+        view.addOnAttachStateChangeListener(attached);
         MAIN.post(TwitchVod::refreshButtons);
     }
 
@@ -332,8 +377,13 @@ public final class TwitchVod {
 
         // Safe on I/O workers; view inspection happens only on the main thread below.
         boolean active() {
-            return valid && Settings.isEnabled("vod_chapters") && id.equals(vodOf(presenter.get()))
-                    && (!open || button.get() != null);
+            Object owner = presenter.get();
+            if (!valid || !Settings.isEnabled("vod_chapters") || !id.equals(vodOf(owner))
+                    || open && button.get() == null) return false;
+            synchronized (PLAYER_VIEWS) {
+                Attached attached = PLAYER_VIEWS.get(owner);
+                return attached == null || !attached.detached;
+            }
         }
 
         boolean current() {
