@@ -107,7 +107,7 @@ review is clean after shared test-harness extraction at `f86098f`.
 
 - [x] Build the bundle and patch all three pinned APKs; verify emitted extension calls, resources, settings and Hermes edits. Record hashes and selected patches.
 - [ ] Install on authorized USB phone and run relevant ART/UI probes; background/foreground, Wi-Fi/mobile, lock-screen and PiP transitions.
-- [ ] Establish account sessions through normal on-device flows, including authorized test-account creation once the email identifier and required verification are available, and validate named authenticated flows. Do not send real chat, spend points/money, or change subscriptions without explicit scope for the specific action; use read-only/test-channel equivalents where they prove the behavior, and record remaining input/entitlement needs.
+- [ ] Establish account sessions through normal on-device flows, including authorized test-account creation using the dedicated inbox once date-of-birth/on-device-entry and required verification prerequisites are resolved, and validate named authenticated flows. Do not send real chat, spend points/money, or change subscriptions without explicit scope for the specific action; use read-only/test-channel equivalents where they prove the behavior, and record remaining input/entitlement needs.
 - [x] Inspect residual telemetry payloads/dependencies and compare relevant switch transitions, including Rumble consent restart and push consequences.
 - [x] Fix failures and rerun affected plus full host/build gates; have independent review of completed diff and resolve findings.
 
@@ -179,6 +179,16 @@ Wi-Fi/mobile 1/1); volume is latest pre-gesture 3/15, system brightness was not 
 Twitch was stopped with no sessions at 15:49:23 UTC, Kick/Rumble stopped, Go Live unlaunched.
 The phone is securely locked again and needs normal user unlock for remaining account UI.
 Remaining physical/account requirements stay open; no waiver or Task 7 completion is claimed.
+
+#### Authorized test-account preparation, 16:00–16:05 UTC
+
+A dedicated [Mail.tm](https://mail.tm/) inbox is active and ownership verified; personal email is
+no longer required. Official host-browser attempts created no platform accounts: Twitch's
+email-first form reset after Continue (cause unconfirmed), Kick requires an unprovided birthday,
+and Rumble stopped at security verification. The date-of-birth/on-device-entry question remains
+unanswered. `task-7/test-accounts/outcome.md` and safe JSON record the limits. At 16:04:56 UTC
+the phone is locked and all four app packages are stopped. Paid entitlements, audio confirmation
+and actual signed-in physical flows remain open; Task 7 and Task 8 remain incomplete.
 
 ### Task 8: Push and stable release
 

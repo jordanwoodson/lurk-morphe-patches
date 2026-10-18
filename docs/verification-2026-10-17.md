@@ -456,13 +456,28 @@ and Go Live remains unlaunched. The phone is securely locked again after the tes
 normal user unlock for future account UI work. Installed APKs and reviewed production source
 are unchanged. No accounts were created and the email/audio questions remain unanswered.
 
+### Authorized test-account preparation, 16:00–16:05 UTC
+
+A dedicated [Mail.tm](https://mail.tm/) inbox was created and ownership/active status verified
+through its official API at 16:00 UTC; a personal email address is no longer a prerequisite.
+This establishes an inbox, not a Twitch, Kick or Rumble account. Official host-browser signup
+attempts created no platform accounts: Twitch's email-first form returned to an empty email field
+after Continue (cause unconfirmed); Kick's visible form requires a birthday, which was not
+provided or submitted; Rumble's web route stopped at security verification without challenge
+interaction or bypass. The asynchronous date-of-birth/on-device-entry question remains unanswered.
+Evidence: `task-7/test-accounts/{outcome.md,inbox-evidence.json,final-prerequisites.json}`.
+At 16:04:56 UTC the phone is locked and all four packages (Twitch, Kick, Rumble and Go Live)
+have no application PIDs. Account creation/sign-in, paid entitlements, physical authenticated
+flows and audible-output confirmation remain open; no prior gate is passed by this preparation.
+
 ## Required remaining gates
 
 - Complete remaining physical native/RN/composer/gesture, audible playback and lock-screen
   checks on final APKs. The bounded guest native/transport/PiP evidence above does not establish
   every required physical path or named account behavior.
 - Establish named account sessions through normal on-device flows, including authorized
-  test-account creation once the email identifier and required verification are available:
+  test-account creation using the dedicated inbox once the date-of-birth/on-device-entry and
+  required verification prerequisites are resolved:
   Twitch authenticated chat/points/Amazon/member flows; Kick physical authenticated navigation/
   playback and stock broadcaster token handoff; Rumble authenticated/Premium playback. Required
   entitlements remain unavailable. A read-only/test-channel equivalent must prove the named
