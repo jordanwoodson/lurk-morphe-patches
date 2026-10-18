@@ -75,11 +75,13 @@
 
 **Files:** `patches/.../kick/emotes/`, `patches/.../kick/chat/`, `patches/src/main/resources/kick/chat/chat-page.js`, `extensions/.../kick/KickChat.java`, focused composer/provider helpers as required, `tests/kick/`, `docs/kick.md`.
 
-- [ ] Inspect pinned RN composer and WebView message bridge; record exact hook design in the spec before implementing.
-- [ ] Add stalled-owner/provider and partial-success tests; implement deadlines and independent global rendering with channel precedence.
-- [ ] Add 7TV zero-width fixtures and live add/update/remove fixtures; implement layering and live update lifecycle with bounded retries and shutdown.
-- [ ] Add picker/autocomplete tests covering insertion at cursor, Unicode, existing draft, signed-out state, channel change and disabled provider setting; implement in the actual chat composer.
-- [ ] Run browser/native/Hermes checks and phone UI tests; update descriptions, request disclosures and documentation; commit.
+- [x] Inspect pinned RN composer and WebView message bridge; record exact hook design in the spec before implementing.
+- [x] Add stalled-owner/provider and partial-success tests; implement deadlines and independent global rendering with channel precedence.
+- [x] Add 7TV zero-width fixtures and live add/update/remove fixtures; implement layering and live update lifecycle with bounded retries and shutdown.
+- [x] Add picker/autocomplete tests covering insertion at cursor, Unicode, existing draft, signed-out state, channel change and disabled provider setting; implement in the actual chat composer.
+- [x] Run browser/native/Hermes checks and actual emulator composer/lifecycle checks; update descriptions, request disclosures and documentation; commit. Physical-phone UI remains required under Task 7.
+
+Task 5 implementation and scoped re-review complete at `14cd09b`: native picker/autocomplete, atomic cursor insertion, channel lifecycle and default/prepared loader paths verified on the emulator. Retained fixtures cover EventAPI mutations; live provider administration and physical-phone UI are not claimed.
 
 ### Task 6: Twitch RN chat coverage and provider/UI tests
 
