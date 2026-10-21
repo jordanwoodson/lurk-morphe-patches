@@ -148,7 +148,7 @@ STUBS = {
 
 
 def run(name, helpers, probe, args=(), extra=None):
-    scratch = Path(os.environ.get('MORPHE_WORK', Path.home() / 'scratch/morphe')) / name
+    scratch = Path(os.environ.get('MORPHE_WORK', Path.home() / 'build/lurk-morphe-patches')) / name
     scratch.mkdir(parents=True, exist_ok=True)
     output = Path(tempfile.mkdtemp(prefix='jvm-', dir=scratch))
     try:

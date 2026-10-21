@@ -3,8 +3,16 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # Regenerable output (decompiled code, patched APKs, logs) lives outside the repo.
-WORK="${MORPHE_WORK:-$HOME/scratch/morphe}"
+WORK="${MORPHE_WORK:-$HOME/build/lurk-morphe-patches}"
 TOOLS="$ROOT/tools"
+APKS="$ROOT/apks"
+# A git worktree has neither apks/ nor tools/ of its own: share the main checkout's.
+if [[ ! -d "$APKS" || ! -d "$TOOLS" ]]; then
+    main_root="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+    main_root="${main_root%/.git}"
+    [[ -d "$APKS" || ! -d "$main_root/apks" ]] || APKS="$main_root/apks"
+    [[ -d "$TOOLS" || ! -d "$main_root/tools" ]] || TOOLS="$main_root/tools"
+fi
 PATCHES_SRC="$ROOT/patches/src/main/kotlin/io/github/jordanwoodson/patches"
 # Morphe Desktop keeps its signing keystore here. Keep it: Android only installs an update
 # over a patched app when it is signed with the same key.
@@ -62,19 +70,37 @@ slug_for_package() {
 app_version() {
     local slug="$1" version="${2:-}"
     if [[ -z "$version" ]]; then
-        version="$(ls "$ROOT/apks/$slug" 2>/dev/null | sort -V | tail -1)"
+        version="$(ls "$APKS/$slug" 2>/dev/null | sort -V | tail -1)"
         [[ -n "$version" ]] || die "no APKs stored for $slug: download one, then bin/apk-add <file>"
     fi
-    [[ -d "$ROOT/apks/$slug/$version" ]] || die "no apks/$slug/$version (have: $(ls "$ROOT/apks/$slug" 2>/dev/null | tr '\n' ' '))"
+    [[ -d "$APKS/$slug/$version" ]] || die "no apks/$slug/$version (have: $(ls "$APKS/$slug" 2>/dev/null | tr '\n' ' '))"
     echo "$version"
 }
 
-# The stored input file (apk/apkm/apks/xapk) for an app version.
+# Every stored file (apk/apkm/apks/xapk) of an app version, sorted. Several variants of one version
+# can sit side by side: the phone's arm64-v8a build and an x86_64 one for the emulator.
+app_inputs() {
+    find "$APKS/$1/$2" -maxdepth 1 -type f \( -name '*.apk' -o -name '*.apkm' -o -name '*.apks' -o -name '*.xapk' \) | sort
+}
+
+# The stored file for an app version: the first one, or with an ABI the one that has native
+# libraries for it (a file with no native code at all runs anywhere). Fails when none fits.
 app_input() {
-    local f
-    f="$(find "$ROOT/apks/$1/$2" -maxdepth 1 -type f \( -name '*.apk' -o -name '*.apkm' -o -name '*.apks' -o -name '*.xapk' \) | sort | head -1)"
-    [[ -n "$f" ]] || die "apks/$1/$2 has no apk/apkm/apks/xapk file"
-    echo "$f"
+    local slug="$1" version="$2" abi="${3:-}" files f abis
+    files="$(app_inputs "$slug" "$version")"
+    [[ -n "$files" ]] || die "apks/$slug/$version has no apk/apkm/apks/xapk file"
+    if [[ -z "$abi" ]]; then
+        head -1 <<<"$files"
+        return
+    fi
+    while IFS= read -r f; do
+        abis="$(apk_py abis "$f")"
+        if [[ "$abis" == none || " $abis " == *" $abi "* ]]; then
+            echo "$f"
+            return
+        fi
+    done <<<"$files"
+    return 1
 }
 
 # GitHub Packages credentials for Morphe's Gradle plugin. ~/.gradle/gradle.properties

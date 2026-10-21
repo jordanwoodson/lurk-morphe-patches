@@ -9,7 +9,7 @@ repo = Path(__file__).resolve().parents[1]
 if len(sys.argv) != 2:
     raise SystemExit("usage: bin/test-twitch-chat-hermes <stock-index.android.bundle>")
 stock = Path(sys.argv[1]).resolve()
-work = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe")) / "twitch-chat-hermes"
+work = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "twitch-chat-hermes"
 work.mkdir(parents=True, exist_ok=True)
 libraries = sorted((Path.home() / ".gradle/wrapper/dists").glob("gradle-*/**/lib/kotlin-compiler-embeddable-*.jar"))
 if not libraries:

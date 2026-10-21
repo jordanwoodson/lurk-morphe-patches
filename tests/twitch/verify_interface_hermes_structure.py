@@ -2,7 +2,7 @@
 """Independent Hermes decoder boundary checks. Run with the installed hermes-dec Python.
 
 Usage: verify_interface_hermes_structure.py [bundle manifest]
-Defaults to bin/test-twitch-interface-hermes output under $MORPHE_WORK (default ~/scratch/morphe).
+Defaults to bin/test-twitch-interface-hermes output under $MORPHE_WORK (default ~/build/lurk-morphe-patches).
 """
 import hashlib
 import io
@@ -13,7 +13,7 @@ import sys
 from hermes_dec.parsers.hbc_file_parser import HBCReader
 from hermes_dec.parsers.hbc_bytecode_parser import parse_hbc_bytecode
 
-root = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe")) / "twitch-interface"
+root = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "twitch-interface"
 base = Path(sys.argv[1]).read_bytes() if len(sys.argv) > 1 else (root / "interface.bundle").read_bytes()
 manifest = json.loads((Path(sys.argv[2]) if len(sys.argv) > 2 else root / "interface-manifest.json").read_text())
 edits = manifest["edits"]

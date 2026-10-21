@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-work = Path(os.environ.get('MORPHE_WORK', Path.home() / 'scratch/morphe'))
+work = Path(os.environ.get('MORPHE_WORK', Path.home() / 'build/lurk-morphe-patches'))
 work.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='compiled-hermes-', dir=work) as directory:
     directory = Path(directory)

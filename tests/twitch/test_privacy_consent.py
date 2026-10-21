@@ -10,7 +10,7 @@ import tempfile
 
 def main():
     repo = Path(__file__).resolve().parents[2]
-    scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe")) / "twitch-privacy"
+    scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "twitch-privacy"
     scratch.mkdir(parents=True, exist_ok=True)
     output = Path(tempfile.mkdtemp(prefix="consent-", dir=scratch))
     try:

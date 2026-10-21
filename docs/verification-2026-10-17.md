@@ -13,7 +13,7 @@ No push, tag, release or merge was performed for this verification. Missing prer
 recorded as open gates, never as passing tests.
 
 Evidence root (`ROOT` below):
-`~/scratch/morphe/improvements-2026-10-17/`. These local captures, manifests and logs are retained
+`~/build/lurk-morphe-patches/improvements-2026-10-17/`. These local captures, manifests and logs are retained
 for review; they are not committed or distributed release artifacts. The older observations in
 the per-app pages describe their original artifacts. Current evidence is qualified below.
 

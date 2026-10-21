@@ -39,7 +39,7 @@ With GitHub Packages access configured as described in the workspace README:
 ```sh
 bin/patch rumble
 bin/emu start
-bash bin/test-rumble ~/scratch/morphe/out/rumble-3.21.0-patched.apk
+bash bin/test-rumble ~/build/lurk-morphe-patches/out/rumble-3.21.0-patched.apk
 ```
 
 `bin/test-rumble` runs every probe in `tests/rumble/`, or only the ones named after the APK
@@ -55,7 +55,7 @@ To confirm the negative control, the same probe against the original base APK mu
 fail with `Profile must report premium when server is_premium=false`:
 
 ```sh
-bash bin/test-rumble ~/scratch/morphe/rumble/3.21.0/base.apk PremiumProbe
+bash bin/test-rumble ~/build/lurk-morphe-patches/rumble/3.21.0/base.apk PremiumProbe
 ```
 
 ## Validation on 2026-10-14
@@ -71,10 +71,10 @@ bash bin/test-rumble ~/scratch/morphe/rumble/3.21.0/base.apk PremiumProbe
   the Kotlin compiler and Android D8. It contains both JVM classes and Android DEX.
   Releases build the patch with Gradle in CI.
 
-Artifacts are in `~/scratch/morphe/out/`: `rumble-3.21.0.mpp`,
+Artifacts are in `~/build/lurk-morphe-patches/out/`: `rumble-3.21.0.mpp`,
 `rumble-3.21.0-patched.apk` and the Morphe result JSON. Build and verification logs
-are in `~/scratch/morphe/build-rumble/`; the launch screenshot is in
-`~/scratch/morphe/shots/rumble-premium-launch.png`.
+are in `~/build/lurk-morphe-patches/build-rumble/`; the launch screenshot is in
+`~/build/lurk-morphe-patches/shots/rumble-premium-launch.png`.
 
 ## Lurk icon
 

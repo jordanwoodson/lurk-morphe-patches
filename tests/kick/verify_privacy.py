@@ -2,7 +2,7 @@
 """Run production KickPrivacy Java with boundary doubles; no Android device is needed.
 
 Usage: python3 tests/kick/verify_privacy.py
-Requires the configured JDK. Generated sources/classes live under $MORPHE_WORK (default ~/scratch/morphe)
+Requires the configured JDK. Generated sources/classes live under $MORPHE_WORK (default ~/build/lurk-morphe-patches)
 and are removed on Linux. This checks helper behavior, not Android SDK transmission.
 """
 import os
@@ -21,7 +21,7 @@ def java_tool(name):
 
 def main():
     repo = Path(__file__).resolve().parents[2]
-    scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe")) / "kick-tests"
+    scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "kick-tests"
     scratch.mkdir(parents=True, exist_ok=True)
     output = Path(tempfile.mkdtemp(prefix="privacy-", dir=scratch))
     try:

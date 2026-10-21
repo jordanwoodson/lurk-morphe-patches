@@ -13,7 +13,7 @@ python3 -m pip install -r tests/requirements-host.txt
 ```
 
 `JAVA_HOME` selects the JDK, `CHROME` selects the browser and `MORPHE_WORK`
-selects the scratch directory (default `~/scratch/morphe`). It runs every registered check, reports
+selects the scratch directory (default `~/build/lurk-morphe-patches`). It runs every registered check, reports
 failures and exits nonzero if any check fails. Both PR builds and release jobs run it before building
 or publishing. Add new standalone APK-free checks to the list in `bin/test-host`.
 

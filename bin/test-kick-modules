@@ -8,7 +8,7 @@ import sys
 if len(sys.argv) != 2 or not Path(sys.argv[1]).is_file():
     raise SystemExit('usage: bin/test-kick-modules <stock index.android.bundle>')
 root = Path(__file__).resolve().parent.parent
-work = Path(os.environ.get('MORPHE_WORK', Path.home() / 'scratch/morphe')) / 'tests/kick-modules'
+work = Path(os.environ.get('MORPHE_WORK', Path.home() / 'build/lurk-morphe-patches')) / 'tests/kick-modules'
 work.mkdir(parents=True, exist_ok=True)
 compilers = sorted((Path.home() / '.gradle/wrapper/dists').glob('gradle-*/**/lib/kotlin-compiler-embeddable-*.jar'))
 if not compilers:

@@ -66,7 +66,7 @@ unverified real-app behavior remains an open item; passing helper tests is not a
 
 Use pinned Twitch 31.6.0, Kick 40.32.1 and Rumble 3.21.0 APKs. Sources only APKMirror,
 Google Play or Uptodown; no copying third-party patch implementations. Reuse installed
-JDK 21 and Android SDK. Temporary output belongs in `~/scratch/morphe/`. Runtime code
+JDK 21 and Android SDK. Temporary output belongs in `~/build/lurk-morphe-patches/`. Runtime code
 stays Java and fingerprints use strings/signatures/patterns with unique-match checks.
 All settings must act only when their patch is included. Preserve opt-in provider
 privacy and disclose any added external requests.

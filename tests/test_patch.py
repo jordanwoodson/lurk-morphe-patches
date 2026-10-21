@@ -45,7 +45,7 @@ pathlib.Path(args[args.index("-o") + 1]).write_bytes(b"patched output")
 
 class PatchInputTests(unittest.TestCase):
     def setUp(self):
-        scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe")) / "patch-tests"
+        scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "patch-tests"
         scratch.mkdir(parents=True, exist_ok=True)
         self.fixture = Path(tempfile.mkdtemp(prefix="run-", dir=scratch))
         self.root = self.fixture / "repository"

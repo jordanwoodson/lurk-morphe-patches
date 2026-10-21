@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 repo = Path(__file__).resolve().parents[1]
-work = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe"))
+work = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches"))
 root = work / "twitch-interface"
 root.mkdir(parents=True, exist_ok=True)
 libraries = sorted((Path.home() / ".gradle/wrapper/dists").glob("gradle-*/**/lib/kotlin-compiler-embeddable-*.jar"))

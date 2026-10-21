@@ -9,7 +9,7 @@ import tempfile
 
 def main():
     repo = Path(__file__).resolve().parents[2]
-    root = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe")) / "twitch-interface"
+    root = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "twitch-interface"
     root.mkdir(parents=True, exist_ok=True)
     output = Path(tempfile.mkdtemp(prefix="java-", dir=root))
     try:

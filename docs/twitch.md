@@ -22,7 +22,7 @@ APKMirror reports the signing certificate SHA-256 as
 `1338f9b049893cc70b78432a177582f90bd4bc6296ea4ed35bcc7df59687ac53`.
 The supplied APK's verified signature matches this certificate, which is now pinned
 in `twitch/shared/Constants.kt`. Decompiled Java, smali and resources are under
-`~/scratch/morphe/twitch/31.6.0/`. Twitch also embeds a Hermes v98 React Native bundle
+`~/build/lurk-morphe-patches/twitch/31.6.0/`. Twitch also embeds a Hermes v98 React Native bundle
 and web-view JavaScript; native screens alone do not cover every feature.
 
 ## Coverage
@@ -207,7 +207,7 @@ fired twice.
 Implementing this exposed a patcher pitfall. A non-range `invoke-static { p0, v0 }` in a method whose
 `p0` maps above v15 (here v30) is dropped from the output without an error or warning. Injected
 calls therefore use `/range` or low registers, and a scan of the patched DEX lists every extension
-method that app code calls (`~/scratch/morphe/twitch-gap/scripts/ext_calls.py`).
+method that app code calls (`~/build/lurk-morphe-patches/twitch-gap/scripts/ext_calls.py`).
 
 ### Player: sleep timer, refresh, gestures and latency
 
@@ -687,7 +687,7 @@ specific local behavior, not complete authenticated end-to-end coverage. The
 app also contains WebView code outside the covered native/RN presentation hooks.
 
 Analysis, decoded APKs, build logs and emulator captures remain under
-`~/scratch/morphe/twitch/31.6.0/`, `build-twitch/`, `twitch-privacy/` and
+`~/build/lurk-morphe-patches/twitch/31.6.0/`, `build-twitch/`, `twitch-privacy/` and
 `twitch-interface/`. The original upload is untouched.
 
 ## Implementation and release requirements

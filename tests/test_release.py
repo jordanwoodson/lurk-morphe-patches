@@ -24,7 +24,7 @@ spec.loader.exec_module(release)
 
 class ReleaseRecoveryTests(unittest.TestCase):
     def setUp(self):
-        scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe")) / "release-tests"
+        scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "release-tests"
         scratch.mkdir(parents=True, exist_ok=True)
         self.fixture = Path(tempfile.mkdtemp(prefix="git-", dir=scratch))
         self.root = self.fixture / "work"
@@ -458,7 +458,7 @@ class ReleaseRecoveryTests(unittest.TestCase):
 
 class HostGateTests(unittest.TestCase):
     def test_every_registered_failure_fails_the_gate_and_all_checks_still_run(self):
-        scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe")) / "host-gate-tests"
+        scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "host-gate-tests"
         scratch.mkdir(parents=True, exist_ok=True)
         fixture = Path(tempfile.mkdtemp(prefix="gate-", dir=scratch))
         try:

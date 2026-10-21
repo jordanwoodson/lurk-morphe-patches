@@ -49,7 +49,7 @@ the test probes and how releases work. Read it first, then:
 - **APKs come from APKMirror, Google Play or Uptodown only.** No other mirrors, not even to
   look. Never commit an APK, decompiled code or a patched build; `apks/` and `tools/` are
   ignored and everything regenerable lives outside the repo (`$MORPHE_WORK`, default
-  `~/scratch/morphe/`).
+  `~/build/lurk-morphe-patches/`).
 - **Original work.** Write patches from your own analysis of the app. Don't copy or port code
   or fingerprints from other Twitch, Kick or Rumble patch bundles. Morphe's own repos
   (`bin/refs`) are fine as API reference, and saying where an idea came from is fine, as
@@ -76,9 +76,15 @@ Patch the supported version and try it on a device or the workspace emulator, wi
 setting on and off:
 
 ```sh
+bin/emu start                                  # boots in seconds from its last state
 bin/patch twitch --install=emulator-5580
-adb -s emulator-5580 logcat -s lurk
+bin/ui launch twitch && bin/ui tree            # the screen as text; bin/ui tap "…", bin/ui wait "…"
+bin/ui lurk twitch                             # the Lurk settings screen
+bin/ui log --dump                              # logcat, tag lurk
 ```
+
+`bin/emu save NAME` keeps a prepared state (signed in, on a channel) that `bin/emu start NAME`
+boots into; see [docs/development.md](docs/development.md#testing).
 
 Where something is worth pinning, add a check under `tests/<app>/`: the Python scripts
 inspect patched output, the Java and Kotlin probes run real app methods on the emulator

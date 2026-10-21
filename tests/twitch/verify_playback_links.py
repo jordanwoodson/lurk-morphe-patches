@@ -12,7 +12,7 @@ JAVA = ROOT / 'extensions/shared/src/main/java/io/github/jordanwoodson/extension
 def main():
     for name in ['TwitchPlayback', 'TwitchLinks']:
         assert (JAVA / (name + '.java')).is_file(), f'missing production {name} helper'
-    scratch = Path(os.environ.get('MORPHE_WORK', Path.home() / 'scratch/morphe')) / 'twitch-playback'
+    scratch = Path(os.environ.get('MORPHE_WORK', Path.home() / 'build/lurk-morphe-patches')) / 'twitch-playback'
     scratch.mkdir(parents=True, exist_ok=True)
     output = Path(tempfile.mkdtemp(prefix='contracts-', dir=scratch))
     try:

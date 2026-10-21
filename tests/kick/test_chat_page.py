@@ -8,7 +8,7 @@ https://chat.mobile.kick.com shaped like Kick's (the #app message list, its mess
 elements; none of Kick's code), plus fixed Kick and 7TV responses. Checks the host guard, running once per page,
 hidden highlight lines, ignored clears, 7TV words in existing and new messages (channel over global, exact words
 only, links and Kick emotes untouched), the owner lookup, and that no request carries a referrer or cookies.
-The Chrome profile lives under $MORPHE_WORK (default ~/scratch/morphe) and is removed.
+The Chrome profile lives under $MORPHE_WORK (default ~/build/lurk-morphe-patches) and is removed.
 """
 import asyncio
 import argparse
@@ -347,7 +347,7 @@ async def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--native-captures", type=Path, help="bin/test-kick-chat ART capture log")
     args = parser.parse_args()
-    work = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe"))
+    work = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches"))
     work.mkdir(parents=True, exist_ok=True)
     profile = Path(tempfile.mkdtemp(prefix="chat-page-", dir=work))
     with socket.socket() as s:

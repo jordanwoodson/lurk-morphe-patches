@@ -1,6 +1,6 @@
 # Review improvements implementation plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans. Track steps and evidence below; temporary briefs/reports go in `~/scratch/morphe/improvements-2026-10-17/`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans. Track steps and evidence below; temporary briefs/reports go in `~/build/lurk-morphe-patches/improvements-2026-10-17/`.
 
 **Goal:** Implement every item in the code review and proposed chat features, verify them, and publish a stable release.
 
@@ -14,7 +14,7 @@
 
 - Work on dev; start at aea51ab. Do not push intermediate unfinished work: pushes publish prereleases.
 - JDK `~/.local/opt/jdk-21`, SDK `~/.local/opt/android-sdk`, USB serial `ZA2234BBJ8` (revalidate before use).
-- All scratch artifacts under `~/scratch/morphe/`; no new toolchain copies or temporary files inside the repo.
+- All scratch artifacts under `~/build/lurk-morphe-patches/`; no new toolchain copies or temporary files inside the repo.
 - Production behavior changes need regression evidence: record the failure before the fix and passing result afterward.
 - Commit only owned paths. One implementation worker at a time; research/review workers may run independently.
 - User's existing autonomous-execution and release authorization supersedes repeated skill approval prompts.

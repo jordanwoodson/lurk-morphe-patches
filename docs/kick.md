@@ -26,7 +26,7 @@ remaining limitations. Everything is checked against Kick 40.32.1.
   Its SHA-1 footer matches its contents.
 
 `bin/decompile kick 40.32.1` produced Java, smali, resources, Hermes disassembly and
-decompiled JavaScript under `~/scratch/morphe/kick/40.32.1/`. `bin/scan kick 40.32.1`
+decompiled JavaScript under `~/build/lurk-morphe-patches/kick/40.32.1/`. `bin/scan kick 40.32.1`
 provided an initial SDK inventory. Code inspection expanded that inventory; SDK
 presence alone does not establish that it transmits data in a particular session.
 
@@ -59,7 +59,7 @@ still need validation against smali/Hermes instructions and runtime behavior.
 
 ## Concrete targets
 
-Paths in this section are relative to `~/scratch/morphe/kick/40.32.1/`. Function IDs
+Paths in this section are relative to `~/build/lurk-morphe-patches/kick/40.32.1/`. Function IDs
 identify this exact bundle for investigation; they are not version-stable fingerprints.
 
 ### Resources and cloning
@@ -205,7 +205,7 @@ available here. Recheck all targets when changing the supported version.
 
 The original upload was left in place; the verified copy is in `apks/kick/40.32.1/`.
 About 1.7 GiB of extracted/decompiled analysis material remains in
-`~/scratch/morphe/kick/40.32.1/` for implementation follow-up. Temporary resource-split
+`~/build/lurk-morphe-patches/kick/40.32.1/` for implementation follow-up. Temporary resource-split
 audit extracts were removed. The resource-split audit found no `app_name` or launcher
 icon overrides in the supplied language/density splits.
 
