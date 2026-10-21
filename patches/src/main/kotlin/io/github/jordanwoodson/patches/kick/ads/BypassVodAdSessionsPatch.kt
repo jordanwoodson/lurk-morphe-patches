@@ -1,10 +1,9 @@
 package io.github.jordanwoodson.patches.kick.ads
 
-import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
-import io.github.jordanwoodson.patches.kick.shared.hex
+import io.github.jordanwoodson.patches.kick.shared.HermesOp
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -27,18 +26,28 @@ val bypassVodAdSessionsPatch = bytecodePatch(
         // live-rewind loader fall back to their original VOD URL when manifestUrl is absent.
         // Replace APIRequest.send(request) with {}, keeping the generator state transitions and
         // Promise completion. This does not touch postPlayerTelemetry, which acquires playback URLs.
-        // Its compiler-generated wrapper has the same name, so the request construction must
-        // identify exactly one function before the name is checked.
-        val request = hex("45 06 00 00 62 e5 45 05 06 01 30 ae 02 00 c5 1b 00 00 53 7a 04 00 52 00 07 01 6e 05 05 06 00")
-        val function = kickHermes.matchingFunction(request)
-        if (function.name != "?anon_0_getVodSession") {
-            throw PatchException("Kick: the VOD session request is in an unexpected function")
+        // Its compiler-generated wrapper has the same name, so exactly one of the functions with that
+        // name must build the request: api = APIRequest; send = api.send; request = {method: 'GET', url,
+        // parse: true}; send.call(api, request). Only the Call2 changes: NewObject and a Mov of the same
+        // length leave {} in the call's result register.
+        val (function, run) = kickHermes.sequence(
+            "VOD session request", kickHermes.functionsNamed("?anon_0_getVodSession"),
+            listOf(
+                kickHermes.reads("APIRequest"),
+                kickHermes.reads("send"),
+                kickHermes.creates("method", "url", "parse"),
+                { it.opcode == HermesOp.PUT_OWN_BY_SLOT_IDX },
+                { it.opcode == HermesOp.CALL2 },
+            ),
+        ) { (api, send, request, put, call) ->
+            send.u8(2) == api.u8(1) && put.u8(1) == request.u8(1) && call.u8(2) == send.u8(1) &&
+                call.u8(3) == api.u8(1) && call.u8(4) == request.u8(1)
         }
-        kickHermes.replace(
-            function, KEY, request,
-            hex("45 06 00 00 62 e5 45 05 06 01 30 ae 02 00 c5 1b 00 00 53 7a 04 00 52 00 07 01 05 05 10 05 05"),
-            defaultEnabled = false,
-        )
+        val call = run.last()
+        val result = call.bytes[1]
+        kickHermes.replaceInstruction(function, KEY, call,
+            byteArrayOf(HermesOp.NEW_OBJECT.toByte(), result, HermesOp.MOV.toByte(), result, result),
+            defaultEnabled = false)
         kickSettings.add(
             SwitchSetting(
                 KEY,

@@ -3,7 +3,7 @@
 
 Usage (hermes-dec Python): verify_hosting.py stock.bundle patched.apk
 Or: verify_hosting.py stock.bundle patched.bundle manifest.json
-Pinned Kick 40.32.1. React hooks, JSX, scheduler and routing are boundary doubles;
+Pinned Kick 40.32.3 (functions found by name). React hooks, JSX, scheduler and routing are boundary doubles;
 compiler memo caches persist across renders. Random duration is seeded at its real
 memo slot (3 seconds). This does not run React Native or a real Pusher/network event.
 """
@@ -22,6 +22,21 @@ from test_hermes import verify as structural
 
 U = object()
 SENTINEL = object()
+
+
+def function_named(reader, name):
+    """The one function with this name: functions are found by name, not by build-local ID."""
+    ids = [fid for fid, header in enumerate(reader.function_headers) if reader.strings[header.functionName] == name]
+    assert len(ids) == 1, f'expected one function named {name}, found {len(ids)}'
+    return ids[0]
+
+
+def closure_at(reader, data, fid, pc):
+    """The function a CreateClosure at pc in function fid creates."""
+    reader.file_buffer = BytesIO(data)
+    found = [i for i in parse_hbc_bytecode(reader.function_headers[fid], reader) if i.original_pos == pc]
+    assert len(found) == 1 and found[0].inst.name == 'CreateClosure', f'no CreateClosure at {pc:#x}'
+    return found[0].arg3
 
 
 def same(a, b):
@@ -184,6 +199,8 @@ class Hooks:
 class Scenario:
     def __init__(self, reader, data):
         self.vm = VM(reader, data)
+        self.functions = {name: function_named(reader, name)
+                          for name in ('useCountdown', 'JoinHostDialog', 'JoinHostDialogContent')}
         self.hooks = None
         self.event, self.tree = None, None
         self.parent_cache = [SENTINEL] * 13
@@ -212,12 +229,12 @@ class Scenario:
 
     def countdown(self, this, options):
         self.options = options
-        return self.vm.run(23177, [self.module], (options,))
+        return self.vm.run(self.functions['useCountdown'], [self.module], (options,))
 
     def render(self):
         # Execute the actual parent's event conditional and JSX output seam. The
         # event/scheduler/router inputs above replace Pusher delivery, not this branch.
-        parent = self.vm.run(28703, [self.module], pc=0x24b, registers={
+        parent = self.vm.run(self.functions['JoinHostDialog'], [self.module], pc=0x24b, registers={
             9: self.event, 3: None, 7: self.parent_cache, 8: self.redirect, 12: self.clear,
             6: self.module, 1: U,
         })
@@ -228,7 +245,7 @@ class Scenario:
         assert parent['type'] == 'JoinHostDialogContent'
         if self.hooks is None: self.hooks = Hooks()
         self.hooks.cursor = 0
-        self.tree = self.vm.run(28704, [self.module], (parent['props'],))
+        self.tree = self.vm.run(self.functions['JoinHostDialogContent'], [self.module], (parent['props'],))
         self.hooks.commit()
 
     def host(self, name):
@@ -331,7 +348,8 @@ def verify(stock, embedded, manifest):
     broken[offset+4:offset+8] = replacement[8:12]
     rejected('start flag without memo invalidation', broken, manual)
     blocked = bytearray(selected)
-    header = reader.function_headers[39723]
+    # The onEnd callback (t1) is the closure JoinHostDialogContent creates at 0xdd.
+    header = reader.function_headers[closure_at(reader, stock, function_named(reader, 'JoinHostDialogContent'), 0xdd)]
     # Real opcodes from existing LoadConstUndefined r0; Ret r0 at callback end.
     blocked[header.offset:header.offset+7] = stock[header.offset+0x5c:header.offset+0x60] + replacement[12:15]
     rejected('obsolete onEnd return-at-entry', blocked, manual)

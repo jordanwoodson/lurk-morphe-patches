@@ -19,7 +19,7 @@ import org.json.JSONObject;
 
 /** Executes the injected loader on Android. All-off must reconstruct the independent stock SHA-256. */
 public final class BundleProbe {
-    private static final String STOCK = "a9d911b3f8b640d8e56b7527929a093c2356d97992409c453d167fdf39538d9a";
+    private static final String STOCK = "dd5e4d45bffa1a7befbf943985eb3f0d0d1896d303d28abf0a5748b1d5f124dc";
     private static final Map<String, Boolean> switches = new HashMap<>();
     private static final Map<String, String> choices = new HashMap<>();
 

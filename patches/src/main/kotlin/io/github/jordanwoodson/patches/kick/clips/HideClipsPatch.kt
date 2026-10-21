@@ -3,6 +3,7 @@ package io.github.jordanwoodson.patches.kick.clips
 import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.kick.shared.HermesOp
 import io.github.jordanwoodson.patches.kick.shared.hex
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
@@ -23,18 +24,16 @@ val hideClipsPatch = bytecodePatch(
 
     execute {
         // BrowseScreenLayout's memoized screen list: categories, livestreams, clips. Select the
-        // anonymous producer by the categories object and translation call, not its function ID.
-        val browseTabs = kickHermes.matchingFunction(
-            hex("02 02 e9 05 00 00 ed cf 03 00 34 01 00 3b 04 01 00 90 01 15 f5"),
-        )
+        // anonymous producer by its three tab titles, not its function ID.
+        val browseTabs = kickHermes.functionUsing("Browse tab list",
+            loads = listOf("categories.title.message", "browse.tabs.livechannels.title.message", "clips.title.message"))
         kickHermes.replace(browseTabs, KEY, hex("09 01 03 00 5a 01 02 00"), hex("09 01 02 00 5a 01 02 00"))
         kickHermes.replace(browseTabs, KEY, hex("5a 01 02 02 76 01"), hex("93 00 93 00 76 01"))
 
         // ChannelLayout's list: home, about, videos, clips, chat. Remove the Clips append and
         // compact Chat into index 3. r0 already holds undefined throughout both small producers.
-        val channelTabs = kickHermes.matchingFunction(
-            hex("02 02 2f 1b 00 00 a9 83 04 00 34 01 00 3b 04 01 02 90 01 4a d4"),
-        )
+        val channelTabs = kickHermes.functionUsing("channel tab list",
+            loads = listOf("channel.tabs.home.message", "channel.tabs.clips.message", "channel.tabs.chat.message"))
         kickHermes.replace(channelTabs, KEY, hex("09 01 05 00 5a 01 02 00"), hex("09 01 04 00 5a 01 02 00"))
         kickHermes.replace(channelTabs, KEY, hex("52 02 03 01 5a 01 02 03"), hex("52 02 03 01 93 00 93 00"))
         kickHermes.replace(channelTabs, KEY, hex("5a 01 02 04 76 01"), hex("5a 01 02 03 76 01"))
@@ -48,12 +47,23 @@ val hideClipsPatch = bytecodePatch(
         )
 
         // Remove the PopularClipsRow React element in its parent, preserving the video and
-        // recent-category rows. React ignores null children; there is no blank Clips screen.
-        kickHermes.replace(
-            "ChannelHomeContent", KEY,
-            hex("45 11 0e 1b 9c eb 02 0e 28 10 00 00 d3 c9 01 00 52 0e 10 00 6f 0e 12 03 11 0e"),
-            hex("45 11 0e 1b 9c eb 02 0e 28 10 00 00 d3 c9 01 00 52 0e 10 00 94 0e 94 0e 94 0e"),
-        )
+        // recent-category rows: jsx(PopularClipsRow, {channelSlug}) becomes null in the same register.
+        // React ignores null children; there is no blank Clips screen.
+        val (home, row) = kickHermes.sequence(
+            "PopularClipsRow element", kickHermes.functionsNamed("ChannelHomeContent"),
+            listOf(
+                kickHermes.reads("PopularClipsRow"),
+                kickHermes.creates("channelSlug"),
+                { it.opcode == HermesOp.PUT_OWN_BY_SLOT_IDX },
+                { it.opcode == HermesOp.CALL3 },
+            ),
+        ) { (component, props, put, call) ->
+            put.u8(1) == props.u8(1) && call.u8(4) == component.u8(1) && call.u8(5) == props.u8(1)
+        }
+        val element = row.last()
+        val result = element.bytes[1]
+        val loadNull = HermesOp.LOAD_CONST_NULL.toByte()
+        kickHermes.replaceInstruction(home, KEY, element, byteArrayOf(loadNull, result, loadNull, result, loadNull, result))
         kickSettings.add(
             SwitchSetting(
                 KEY,

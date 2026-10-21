@@ -23,7 +23,7 @@ from hermes_dec.parsers.hbc_file_parser import HBCReader
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # Also under python -I.
 from verify_literals import verify as verify_literals  # noqa: E402
 
-STOCK_SHA256 = "a9d911b3f8b640d8e56b7527929a093c2356d97992409c453d167fdf39538d9a"
+STOCK_SHA256 = "dd5e4d45bffa1a7befbf943985eb3f0d0d1896d303d28abf0a5748b1d5f124dc"
 
 
 def footer(data):
@@ -150,7 +150,8 @@ def verify(stock, embedded, manifest):
                        if item.inst.name == "PutOwnBySlotIdx"]
         assert (0, 2, 2) in assignments, "Missing preview default assignment"
         assert any(item.inst.name == "LoadConstFalse" and item.arg1 == 2 for item in new_instructions)
-        assert reader.object_shape_keys[3987][2].strip("'\"") == "showStreamPreviews"
+        state = next(item for item in original_instructions if item.inst.name.startswith("NewObjectWithBuffer"))
+        assert reader.object_shape_keys[state.arg2][2].strip("'\"") == "showStreamPreviews"
 
     print(f"PASS: {len(edits)} edits in {len(affected)} functions and {len(literal_edits)} literals; "
           f"{len(keys)} independent settings ({len(choices)} choices); all-off exact restoration, unchanged "

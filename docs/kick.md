@@ -1,4 +1,4 @@
-# Kick 40.32.1
+# Kick
 
 Static analysis of the supplied APKMirror bundle on 2026-10-14, compared with the 14
 Rumble patches in this repository. **None of the existing patches applies to Kick
@@ -10,7 +10,9 @@ The assessment below, up to "Workspace result", was the starting point and is ke
 it was written. Twelve Kick patches were implemented from it, and a second batch,
 inspired by Xtra and by Lurk's own Twitch patches, added more. The notes from
 "Implemented patch set" on describe them and separate tested behavior from the
-remaining limitations. Everything is checked against Kick 40.32.1.
+remaining limitations. The analysis below was done on Kick 40.32.1. The patches are now
+checked against Kick 40.32.3, where the patched code is unchanged apart from renumbered
+string, shape and literal IDs.
 
 ## Input and analysis
 
@@ -634,12 +636,20 @@ The edit helpers, all equal-length and fail-closed:
 - `skipGuard`: a handler's opening `if (!event) return;` jump becomes a `Mov` of the
   tested register onto itself, so the handler always returns before doing anything.
 - `dataEdit` / `dataChoice`: values in the literal buffer that array and object literals
-  read, as a switch or a choice. Their replacement window is grown until its original
-  bytes are unique in the bundle.
+  read, as a switch or a choice. Hermes shares value bytes between literals, so each edit
+  names the literals allowed to read its bytes and fails if any other literal does. Their
+  replacement window is grown until its original bytes are unique in the bundle.
 - `functionUsing`: selects an anonymous function by the properties it reads and the
   strings it loads, rather than by bytes that embed build-local string IDs.
 - `objectKeys`: an object literal's property names, read from the bundle's shape table in
   slot order, so an edit can find the slot a named property is stored in.
+- `literals` / `slotArrays`: every array and object literal instruction with the value
+  bytes it reads, and the array literals stored into an object's slots right after it is
+  made. Literal edits find their values through these, not through buffer offsets.
+- `sequence`, `reads`, `creates`, `getById`: one run of instructions matched by opcode,
+  property, object keys and register flow, and a `GetById` pattern built with this bundle's
+  string ID. Shape numbers, literal offsets and string IDs change in every Kick release;
+  these keep the registers and code shape exact without pinning those numbers.
 
 Verification tools retained in this repository:
 

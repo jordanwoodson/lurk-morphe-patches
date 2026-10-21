@@ -28,7 +28,7 @@ internal const val KICK_BUNDLE = "Lio/github/jordanwoodson/extension/shared/kick
 
 context(context: BytecodePatchContext)
 internal fun Fingerprint.kickMatch(what: String): Match = matchAllOrNull()?.singleOrNull()
-    ?: throw PatchException("Kick 40.32.1: expected exactly one $what")
+    ?: throw PatchException("Kick 40.32.3: expected exactly one $what")
 
 internal val kickSettingsPatch = bytecodePatch(
     description = "Adds Lurk settings to Kick's launcher shortcut.",

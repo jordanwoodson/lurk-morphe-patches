@@ -9,7 +9,6 @@ import io.github.jordanwoodson.patches.kick.settings.kickMatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.settings.kickSettingsPatch
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
-import io.github.jordanwoodson.patches.kick.shared.hex
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
 import io.github.jordanwoodson.patches.shared.bridge
@@ -43,26 +42,30 @@ val defaultVideoQualityPatch = bytecodePatch(
         // The serialized PlayerConfig default is 720. Replacing only the initial store read loses
         // 1080 on the first load: _getResetStreamLoadingStates compares it with the old default and
         // restores getInitialStateFor's 720. Keep all ten consumers coherent without changing the
-        // serialized literal table. Each anchor includes the preceding PlayerConfig read; this
-        // identifies anonymous functions and repeated reads without relying on function IDs.
-        // Explicit quality selection and the original reset/clamping rules remain intact, using
-        // the selected ceiling wherever Kick previously used its 720 default (including Auto).
+        // serialized literal table. Each anchor is the PlayerConfig read and the
+        // defaultMaxAutoQualityHeight read of its result, with that consumer's registers and cache
+        // slots and this bundle's string IDs; this identifies anonymous functions and repeated reads
+        // without relying on function IDs. Explicit quality selection and the original reset/clamping
+        // rules remain intact, using the selected ceiling wherever Kick previously used its 720 default
+        // (including Auto).
+        // (config result, its object, cache), (height result, cache): the height read's object is the config.
         val reads = listOf(
-            "45 09 09 00 89 eb 45 09 09 01 ac d7", // usePlayerStoreIVSModuleSlice
-            "45 09 09 01 89 eb 45 09 09 12 ac d7", // onData
-            "45 05 05 02 89 eb 45 05 05 03 ac d7", // _getResetStreamLoadingStates
-            "45 06 06 01 89 eb 45 05 06 02 ac d7", // setUserSelectedQuality fallback
-            "45 04 04 01 89 eb 45 04 04 02 ac d7", // setSelectedQualityGroupPreset: Auto
-            "45 04 04 00 89 eb 45 04 04 01 ac d7", // getInitialStateFor
-            "45 05 07 10 89 eb 45 06 05 11 ac d7", // cleanupState: no prior ceiling
-            "45 04 05 10 89 eb 45 04 04 11 ac d7", // cleanupState: clamp prior ceiling
-            "45 07 07 10 89 eb 45 07 07 11 ac d7", // cleanupState: reset preset
-            "45 05 05 06 89 eb 45 05 05 07 ac d7", // _applyQualityScale fallback
+            listOf(9, 9, 0, 9, 1), // usePlayerStoreIVSModuleSlice
+            listOf(9, 9, 1, 9, 18), // onData
+            listOf(5, 5, 2, 5, 3), // _getResetStreamLoadingStates
+            listOf(6, 6, 1, 5, 2), // setUserSelectedQuality fallback
+            listOf(4, 4, 1, 4, 2), // setSelectedQualityGroupPreset: Auto
+            listOf(4, 4, 0, 4, 1), // getInitialStateFor
+            listOf(5, 7, 16, 6, 17), // cleanupState: no prior ceiling
+            listOf(4, 5, 16, 4, 17), // cleanupState: clamp prior ceiling
+            listOf(7, 7, 16, 7, 17), // cleanupState: reset preset
+            listOf(5, 5, 6, 5, 7), // _applyQualityScale fallback
         )
-        for (pattern in reads) {
-            val before = hex(pattern)
+        for ((config, source, configCache, result, cache) in reads) {
+            val before = kickHermes.getById(config, source, configCache, "PlayerConfig") +
+                kickHermes.getById(result, config, cache, "defaultMaxAutoQualityHeight")
             val constant = ByteBuffer.allocate(6).order(ByteOrder.LITTLE_ENDIAN)
-                .put(0x8c.toByte()).put(before[7]).putInt(height).array()
+                .put(0x8c.toByte()).put(result.toByte()).putInt(height).array()
             kickHermes.replaceMatchingFunction(before, KEY, before, before.copyOfRange(0, 6) + constant)
         }
         // Every ceiling reaches the player through the view's setAutoMaxQuality: the stream's starting one,

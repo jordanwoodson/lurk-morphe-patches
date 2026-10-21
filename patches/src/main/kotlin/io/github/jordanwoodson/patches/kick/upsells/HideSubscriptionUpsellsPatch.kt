@@ -24,11 +24,14 @@ val hideSubscriptionUpsellsPatch = bytecodePatch(
     execute {
         // The branch to the existing subscribed icon stays intact. Only the unsubscribed path
         // returns null, after all hooks have run; subscription state and access are unchanged.
+        // `if (x.subscription) <subscribed icon>`: the read, its JmpTrueLong, then the unsubscribed path's
+        // first instruction (GetByIndex), which becomes `return null`.
+        val subscribed = kickHermes.getById(4, 9, 22, "subscription") + hex("b2 a9 00 00 00 04")
         kickHermes.replace(
             "ChannelSubButton",
             KEY,
-            hex("45 04 09 16 3b ad b2 a9 00 00 00 04 5e 04 06 0c"),
-            hex("45 04 09 16 3b ad b2 a9 00 00 00 04 94 04 76 04"),
+            subscribed + hex("5e 04 06 0c"),
+            subscribed + hex("94 04 76 04"),
         )
         kickHermes.returnNull("ChannelGiftSubButton", KEY)
         kickHermes.returnNull("LeaderboardSubsFooter", KEY)

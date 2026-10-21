@@ -1,5 +1,6 @@
 package io.github.jordanwoodson.patches.kick.player
 
+import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
@@ -10,13 +11,6 @@ import io.github.jordanwoodson.patches.shared.settings.ChoiceSetting
 import io.github.jordanwoodson.patches.shared.settings.Section
 
 private const val KEY = "vod_skip_seconds"
-
-/**
- * PlayerConfig.controls.skip.scale's `vod` and `live-vod` arrays, [10, 10, 10]: three integer literals in the
- * literal buffer, read only by those two arrays (tests/kick/verify_literals.py). The live edge and clip arrays
- * share their bytes with unrelated literals and stay.
- */
-private const val SKIP_SCALE_LITERAL = 201721
 
 @Suppress("unused")
 val seekIntervalPatch = bytecodePatch(
@@ -29,8 +23,21 @@ val seekIntervalPatch = bytecodePatch(
 
     execute {
         fun scale(seconds: Int) = hex("73") + ByteArray(12) { if (it % 4 == 0) seconds.toByte() else 0 }
+        // PlayerConfig.controls.skip.scale is {livestream, vod, 'live-vod', clip}, each slot filled from an array
+        // literal right after the object is made. The `vod` and `live-vod` arrays read the same [10, 10, 10]
+        // values, which no other literal shares; the live edge and clip arrays share bytes elsewhere and stay.
+        val skipScale = kickHermes.literals.filter { it.keys == listOf("livestream", "vod", "live-vod", "clip") }
+            .singleOrNull() ?: throw PatchException("Kick: expected one PlayerConfig skip scale object")
+        val slots = kickHermes.slotArrays(skipScale)
+        val vod = slots[1]
+        val liveVod = slots[2]
+        if (vod == null || liveVod == null || vod.start != liveVod.start || vod.end - vod.start != 13 ||
+            !kickHermes.literal(vod.start, 13).contentEquals(scale(10))) {
+            throw PatchException("Kick: the VOD skip scale is no longer [10, 10, 10] shared by vod and live-vod")
+        }
         val seconds = listOf(5, 15, 20, 30)
-        kickHermes.dataChoice(SKIP_SCALE_LITERAL, KEY, scale(10), seconds.associate { "$it" to scale(it) })
+        kickHermes.dataChoice(vod.start, KEY, scale(10), seconds.associate { "$it" to scale(it) },
+            readers = listOf(vod, liveVod))
         kickSettings.add(
             ChoiceSetting(
                 KEY,

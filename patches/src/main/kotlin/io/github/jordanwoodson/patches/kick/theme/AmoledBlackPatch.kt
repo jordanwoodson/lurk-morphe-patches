@@ -17,12 +17,6 @@ import io.github.jordanwoodson.patches.shared.settings.Section
 
 private const val KEY = "amoled_black"
 
-/**
- * Colors.surface.default's values in the literal buffer: a short-string tag, then the string IDs of highest,
- * base, lowest and five more colours. Only that object reads them (tests/kick/verify_literals.py).
- */
-private const val SURFACE_LITERAL = 142616
-
 @Suppress("unused")
 val amoledBlackPatch = bytecodePatch(
     name = "AMOLED black",
@@ -35,18 +29,22 @@ val amoledBlackPatch = bytecodePatch(
     execute {
         // Kick is dark only. Hermes stores strings overlapping each other ('#141517' shares bytes with '1',
         // '17' and others), so the colours aren't edited in place: the object's string IDs are swapped for
-        // existing ones. 'highest' (raised elements and borders) stays in every mode.
+        // existing ones. 'highest' (raised elements and borders) stays in every mode. Colors.surface.default
+        // is the object literal with keys highest, base, lowest, ... whose values start with a short-string
+        // tag and these three colours; no other literal may read the two edited IDs.
         fun id(colour: String): ByteArray = kickHermes.stringId(colour).let {
             if (it > 0xffff) throw PatchException("Kick: $colour needs a long string ID")
             byteArrayOf(it.toByte(), (it ushr 8).toByte())
         }
         val expected = byteArrayOf(0x58) + id("#1C1E20") + id("#141517") + id("#090A0B")
-        if (!kickHermes.literal(SURFACE_LITERAL, expected.size).contentEquals(expected)) {
-            throw PatchException("Kick: Colors.surface.default changed")
-        }
+        val surface = kickHermes.literals.filter {
+            it.keys?.take(3) == listOf("highest", "base", "lowest") && it.end - it.start >= expected.size &&
+                kickHermes.literal(it.start, expected.size).contentEquals(expected)
+        }.singleOrNull() ?: throw PatchException("Kick: Colors.surface.default changed")
         // 1: black background. 2: also near-black cards and sheets, one step above black so they still stand out.
-        kickHermes.dataChoice(SURFACE_LITERAL + 5, KEY, id("#090A0B"), mapOf("1" to id("#000000"), "2" to id("#000000")))
-        kickHermes.dataChoice(SURFACE_LITERAL + 3, KEY, id("#141517"), mapOf("2" to id("#0B0B0C")))
+        kickHermes.dataChoice(surface.start + 5, KEY, id("#090A0B"), mapOf("1" to id("#000000"), "2" to id("#000000")),
+            readers = listOf(surface))
+        kickHermes.dataChoice(surface.start + 3, KEY, id("#141517"), mapOf("2" to id("#0B0B0C")), readers = listOf(surface))
 
         // The window behind React Native, seen during transitions and at the edges, follows the same choice.
         MainActivityCreateFingerprint.kickMatch("MainActivity.onCreate").method.apply {
