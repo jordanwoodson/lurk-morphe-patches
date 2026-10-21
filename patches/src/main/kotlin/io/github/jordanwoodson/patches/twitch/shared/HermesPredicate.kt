@@ -10,7 +10,9 @@ internal fun HermesBundle.installDelayedPredicate(input: ByteArray) {
     val header = donor.predicateHeader(predicate)
     require(header.read32(4) == 2 && predicate.frameSize in 8..32 && predicate.numberRegisters == 0 &&
         predicate.nonPointerRegisters == 0 && predicate.flags == 0x1a, "compiler register/parameter/exception contract changed")
-    val original = matchingFunction(hex("89030144040300cd90020c6a17000402b0120044040300cd"))
+    // `event.type === "chat" || event.type === ...`: the opening of the original delayed callback.
+    val type = id8("type")
+    val original = matchingFunction(hex("89 03 01 44 04 03 00 $type 90 02 ${id16("chat")} 17 00 04 02 b0 12 00 44 04 03 00 $type"))
     require(original.body.size == 122 && original.flags and 0x18 == 0, "original callback changed")
     require(delayedAppend == null, "predicate already installed")
     data class Instruction(val old: Int, val bytes: ByteArray, val regs: IntArray, val branch: Int = 0)

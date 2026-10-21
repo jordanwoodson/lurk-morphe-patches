@@ -6,23 +6,34 @@ Apply the same workflow used for Rumble and Kick: inspect the original app, impl
 the viable equivalents of the existing patches, verify the resulting APK and runtime
 settings, and publish a tested stable Lurk release through the repository workflow.
 
-The supported target is `tv.twitch.android.app` **31.6.0**, version code **3106006**.
-The original APKMirror bundle was added on 2026-10-14 with `bin/apk-add --copy`, which
-verified its signature and stored it in `apks/twitch/31.6.0/`. The universal variant supports Android 12L+ (API 32), with arm64-v8a,
-armeabi-v7a, x86 and x86_64 splits. The base APK SHA-256 is
-`9e540dc16e8c6bb2c10ff06600f11576afe671b6f4cc7ba3ee80985b523d45b8`.
+The supported target is `tv.twitch.android.app` **31.7.0**, version code **3107006**.
+The patches were written against 31.6.0 (3106006) and moved to 31.7.0 on 2026-10-21. Two APKMirror
+bundles of 31.7.0 were added that day with `bin/apk-add`, which verified their signature and stored
+them in `apks/twitch/31.7.0/`: the arm64-v8a 480-640 dpi bundle for phones (Android 10+, the default
+input) and the arm64-v8a, x86 and x86_64 480 dpi bundle (Android 8.0+) that emulator installs pick.
+The phone bundle's base APK SHA-256 is
+`4c1e1bb8e75b52d964310cb74ec7c10587ae8eb7fed1efa4959a5e88098c9c56`.
 
 Allowed sources are APKMirror, Google Play and Uptodown (see [CONTRIBUTING.md](../CONTRIBUTING.md)).
-The variant used is listed here:
+The variants used are listed here:
 
-- [APKMirror release and variants](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-31-6-0-release/)
-- [APKMirror universal bundle](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-31-6-0-release/twitch-live-streaming-31-6-0-android-apk-download/)
+- [APKMirror release and variants](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-31-7-0-release/)
+- [APKMirror arm64-v8a bundle](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-31-7-0-release/twitch-live-streaming-31-7-0-4-android-apk-download/)
+- [APKMirror arm64-v8a + x86 + x86_64 bundle](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-31-7-0-release/twitch-live-streaming-31-7-0-2-android-apk-download/)
+
+What changed from 31.6.0 for the patches: the React Native bundle (still Hermes v98) renumbered its
+strings, functions, literals and registers, and the React Native player moved its player, metadata,
+stream URL and release handling from `TwitchIVSPlayerView` into a new `PlaybackSession`. Patterns
+that carry string IDs now resolve them from the bundle (`HermesBundle.id8`/`id16`). The edits whose
+registers, offsets or memo-cache slots are the compiler's (Hide Clips in `DiscoveryFeedContent`,
+the player's Share button) were re-derived from 31.7.0's disassembly, and the version-pinned tests
+that name R8-renamed classes were moved to 31.7.0's names.
 
 APKMirror reports the signing certificate SHA-256 as
 `1338f9b049893cc70b78432a177582f90bd4bc6296ea4ed35bcc7df59687ac53`.
 The supplied APK's verified signature matches this certificate, which is now pinned
 in `twitch/shared/Constants.kt`. Decompiled Java, smali and resources are under
-`~/build/lurk-morphe-patches/twitch/31.6.0/`. Twitch also embeds a Hermes v98 React Native bundle
+`~/build/lurk-morphe-patches/twitch/31.7.0/` (`bin/decompile twitch`). Twitch also embeds a Hermes v98 React Native bundle
 and web-view JavaScript; native screens alone do not cover every feature.
 
 ## Coverage
@@ -251,8 +262,10 @@ Native:
 Brand surveys, which replace unfilled feed ads, are dropped. Sponsorship and paid-promotion labels
 are untouched.
 
-*Mute stitched ads* watches each player's EXT-X-DATERANGE cues: the native `sna.h(JSONObject)` handler
-and RN `TwitchIVSPlayerView.handleMetadata`. From `twitch-stitched-ad` until `twitch-stream-source`
+*Mute stitched ads* watches each player's EXT-X-DATERANGE cues: the native player's `h(JSONObject)`
+handler and the RN player's `PlaybackSession.handleMetadata`. Each RN player view owns one session and
+is its display; the patch adds two public static helpers to the session, because its display and
+player getter are private and `handleMetadata` has one free register. From `twitch-stitched-ad` until `twitch-stream-source`
 = `live`, it mutes the IVS player through `setMuted` and covers the video in black. Twitch itself mutes
 with the volume, so the user's own mute is untouched. A break also ends on a new stream, a release, or
 a timer set from the ad's duration (capped at 240 s). The ad still plays for its full length.

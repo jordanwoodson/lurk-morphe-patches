@@ -10,7 +10,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Executes actual emitted Twitch methods on ART, with uninitialized owners to detect fallthrough.
- * Compile against compile-only ur50/djg stubs; omit both stubs from the probe DEX.
+ * Compile against compile-only kx50/akg stubs; omit both stubs from the probe DEX.
+ * R8 names are Twitch 31.7.0's: Spade dispatcher jn0 and callback kx50, client ads ms/os, Crashlytics arbiter apc.
  * CLASSPATH=probe.jar:patched.apk app_process / PrivacyAdsProbe
  */
 public final class PrivacyAdsProbe {
@@ -56,10 +57,10 @@ public final class PrivacyAdsProbe {
     public static void main(String[] args) throws Exception {
         settings();
         switches.put("disable_analytics", true);
-        Class<?> dispatcher = Class.forName("dn0");
+        Class<?> dispatcher = Class.forName("jn0");
         Object owner = allocate(dispatcher);
-        Method send = dispatcher.getMethod("d", String.class, LinkedHashMap.class, ur50.class, boolean.class);
-        // R8 removed ur50's empty constructor, so bypass our compile-only constructor as well.
+        Method send = dispatcher.getMethod("d", String.class, LinkedHashMap.class, kx50.class, boolean.class);
+        // R8 removed kx50's empty constructor, so bypass our compile-only constructor as well.
         SpadeCallback callback = (SpadeCallback) allocate(SpadeCallback.class);
         send.invoke(owner, "test_event", new LinkedHashMap<>(), callback, false);
         check(callback.successes == 1 && callback.failures == 0, "Spade must complete success exactly once");
@@ -87,10 +88,10 @@ public final class PrivacyAdsProbe {
             });
         Class<?> emitterType = Class.forName("io.reactivex.internal.operators.single.c");
         Object emitter = emitterType.getConstructor(observerType).newInstance(observer);
-        Class<?> merged = Class.forName("ls");
+        Class<?> merged = Class.forName("ms");
         Object request = merged.getConstructor(int.class, Object.class, Object.class)
-            .newInstance(0, allocate(Class.forName("ns")), null);
-        merged.getMethod("g", emitterType).invoke(request, emitter);
+            .newInstance(0, allocate(Class.forName("os")), null);
+        merged.getMethod("h", emitterType).invoke(request, emitter);
         check(calls[0] == 1 && calls[1] == 0, "Client-ad eligibility must complete once without error");
         check(result[0].getClass().getName().equals("tv.twitch.android.util.Optional"), "Wrong eligibility result type");
         Field optionalValue = result[0].getClass().getDeclaredField("a");
@@ -100,7 +101,7 @@ public final class PrivacyAdsProbe {
         switches.put("block_client_ads", false);
         try {
             Object nextEmitter = emitterType.getConstructor(observerType).newInstance(observer);
-            merged.getMethod("g", emitterType).invoke(request, nextEmitter);
+            merged.getMethod("h", emitterType).invoke(request, nextEmitter);
             throw new AssertionError("Disabled ad patch did not reach the original eligibility code");
         } catch (InvocationTargetException expected) {
             check(expected.getCause() instanceof NullPointerException, "Original ad dependencies must remain uninitialized");
@@ -108,7 +109,7 @@ public final class PrivacyAdsProbe {
         check(calls[0] == 1 && calls[1] == 0, "Disabled client-ad gate unexpectedly emitted a result");
 
         switches.put("disable_analytics", true);
-        Class<?> arbiterType = Class.forName("goc");
+        Class<?> arbiterType = Class.forName("apc");
         Object arbiter = allocate(arbiterType);
         Method collectionPermission = arbiterType.getMethod("b");
         check(Boolean.FALSE.equals(collectionPermission.invoke(arbiter)), "Crashlytics automatic upload permission must be false");
@@ -132,11 +133,11 @@ public final class PrivacyAdsProbe {
     }
 }
 
-final class SpadeCallback extends ur50 {
+final class SpadeCallback extends kx50 {
     int successes;
     int failures;
     Object value;
 
-    @Override public void C(Object response) { successes++; value = response; }
-    @Override public void B(djg error) { failures++; }
+    @Override public void K(Object response) { successes++; value = response; }
+    @Override public void J(akg error) { failures++; }
 }

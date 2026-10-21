@@ -9,6 +9,8 @@ internal const val ADS = "Lio/github/jordanwoodson/extension/shared/twitch/Twitc
 internal const val AD_EDGE_API = "Ltv/twitch/android/shared/ad/edge/api/AdEdgeApi;"
 internal const val IVS_MEDIA_PLAYER = "Lcom/amazonaws/ivs/player/MediaPlayer;"
 internal const val RN_PLAYER_VIEW = "Lcom/twitchrn/player/TwitchIVSPlayerView;"
+internal const val RN_PLAYBACK_SESSION = "Lcom/twitchrn/player/PlaybackSession;"
+internal const val RN_PLAYBACK_DISPLAY = "Lcom/twitchrn/player/PlaybackDisplay;"
 internal const val BASE_VIEW_DELEGATE = "Ltv/twitch/android/core/mvp/viewdelegate/BaseViewDelegate;"
 internal const val BRAND_SURVEY_ITEM = "Ltv/twitch/android/shared/viewer/pub/FeedItem\$BrandSurveyItem;"
 internal const val RN_VIDEO_AD_PLAYER = "Ltv/twitch/android/feature/discovery/feed/rn/runtime/TwitchRNVideoAdPlayer;"
@@ -65,16 +67,16 @@ internal object StitchedAdPlayingFingerprint : Fingerprint(
 )
 
 internal object RnPlayerMetadataFingerprint : Fingerprint(
-    definingClass = RN_PLAYER_VIEW, name = "handleMetadata", returnType = "V",
+    definingClass = RN_PLAYBACK_SESSION, name = "handleMetadata", returnType = "V",
     parameters = listOf("Ljava/lang/String;", "Ljava/nio/ByteBuffer;"),
 )
 
 internal object RnPlayerStreamUrlFingerprint : Fingerprint(
-    definingClass = RN_PLAYER_VIEW, name = "setStreamUrl", returnType = "V", parameters = listOf("Ljava/lang/String;"),
+    definingClass = RN_PLAYBACK_SESSION, name = "setStreamUrl", returnType = "V", parameters = listOf("Ljava/lang/String;"),
 )
 
 internal object RnPlayerReleaseFingerprint : Fingerprint(
-    definingClass = RN_PLAYER_VIEW, name = "release", returnType = "V", parameters = emptyList(),
+    definingClass = RN_PLAYBACK_SESSION, name = "release", returnType = "V", parameters = emptyList(),
 )
 
 // The native live playlist (usher) URL, built from the channel and its signed playback token.

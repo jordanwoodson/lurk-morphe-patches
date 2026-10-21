@@ -18,10 +18,11 @@ import java.util.Map;
 
 /**
  * Version-pinned integration test for Hide chat highlights, Hide player buttons, Hide Home sections,
- * Hide mature content warning and the native Hide Clips Home tabs: the real Twitch 31.6.0 classes
+ * Hide mature content warning and the native Hide Clips Home tabs: the real Twitch 31.7.0 classes
  * from the patched APK, with the production extension, on ART. A switch that is on returns before
  * the original code; a switch that is off reaches the original code, which then fails on the
- * deliberately empty (allocated, never constructed) objects. Obfuscated names are pinned here only.
+ * deliberately empty (allocated, never constructed) objects. Obfuscated names are pinned here only;
+ * they are Twitch 31.7.0's R8 output.
  */
 public final class HighlightsArtProbe {
     private static final Map<String, Boolean> switches = new HashMap<>();
@@ -121,58 +122,58 @@ public final class HighlightsArtProbe {
 
     private static void highlights() throws Exception {
         // Community highlight dispatch: Add events by type id.
-        Method dispatch = method("x79", "M2");
-        Object presenter = allocate("x79");
-        Class<?> typeBase = Class.forName("z89");
-        Object hypeTrain = Class.forName("m89").getDeclaredConstructors()[0].newInstance(3, null, null);
-        Object raid = Class.forName("t89").getField("c").get(null);
-        Object gift = allocate("l89");
+        Method dispatch = method("k89", "M2");
+        Object presenter = allocate("k89");
+        Class<?> typeBase = Class.forName("m99");
+        Object hypeTrain = Class.forName("z89").getDeclaredConstructors()[0].newInstance(3, null, null);
+        Object raid = Class.forName("g99").getField("c").get(null);
+        Object gift = allocate("y89");
         set(gift, typeBase, "a", "gift_sub");
         for (boolean enabled : new boolean[]{true, false}) {
             switches.put("hide_hype_train", enabled);
             switches.put("hide_sub_notices", enabled);
             for (Object type : new Object[]{hypeTrain, gift, raid}) {
-                Object model = allocate("s99");
-                set(model, Class.forName("s99"), "b", type);
-                Object add = Class.forName("a99").getConstructors()[0].newInstance(model);
+                Object model = allocate("fa9");
+                set(model, Class.forName("fa9"), "b", type);
+                Object add = Class.forName("n99").getConstructors()[0].newInstance(model);
                 boolean hidden = enabled && type != raid;
                 check(returns(dispatch, presenter, add) == hidden, "Highlight " + type.getClass().getName() + " enabled=" + enabled);
             }
         }
 
         // Chat notice lines: subscription kinds, gift notices, watch streaks; charity always stays.
-        Method notice = method("rh6", "c");
-        Object mapper = allocate("rh6");
-        Class<?> kinds = Class.forName("dt6");
+        Method notice = method("ci6", "c");
+        Object mapper = allocate("ci6");
+        Class<?> kinds = Class.forName("ot6");
         for (boolean enabled : new boolean[]{true, false}) {
             switches.put("hide_sub_notices", enabled);
             switches.put("hide_watch_streaks", enabled);
             for (String kind : new String[]{"Sub", "Resub", "SubGift", "SubMassGift", "ExtendSub", "Charity"}) {
-                Object subscription = allocate("at6");
+                Object subscription = allocate("lt6");
                 set(subscription, subscription.getClass(), "h", kinds.getField(kind).get(null));
-                Object event = allocate("jh6");
+                Object event = allocate("th6");
                 set(event, event.getClass(), "c", subscription);
                 boolean hidden = enabled && !kind.equals("Charity");
                 if (hidden) check(notice.invoke(mapper, event, null) == null, "Hidden " + kind + " notice produced a line");
                 else check(!returns(notice, mapper, event, null), kind + " notice skipped the original mapper");
             }
-            for (String type : new String[]{"bh6", "ih6", "lh6"}) {
+            for (String type : new String[]{"lh6", "sh6", "vh6"}) {
                 if (enabled) check(notice.invoke(mapper, allocate(type), null) == null, "Hidden " + type + " produced a line");
                 else check(!returns(notice, mapper, allocate(type), null), type + " skipped the original mapper");
             }
         }
 
         // Private pop-ups: watch streak and Hype Train rewards; others stay.
-        Constructor<?> lambda = Class.forName("u7v").getDeclaredConstructors()[0];
+        Constructor<?> lambda = Class.forName("j9v").getDeclaredConstructors()[0];
         lambda.setAccessible(true);
-        Object callout = lambda.newInstance(allocate("c8v"), 0);
-        Method invoke = Class.forName("u7v").getMethod("invoke", Object.class);
-        Class<?> calloutTypes = Class.forName("f8v");
+        Object callout = lambda.newInstance(allocate("r9v"), 0);
+        Method invoke = Class.forName("j9v").getMethod("invoke", Object.class);
+        Class<?> calloutTypes = Class.forName("u9v");
         for (boolean enabled : new boolean[]{true, false}) {
             switches.put("hide_watch_streaks", enabled);
             switches.put("hide_hype_train", enabled);
             for (String type : new String[]{"WATCH_STREAK_REACHED", "HYPE_TRAIN_REWARD", "MOD_VIEW_AVAILABLE"}) {
-                Object model = allocate("n5v");
+                Object model = allocate("c7v");
                 set(model, model.getClass(), "e", calloutTypes.getField(type).get(null));
                 boolean hidden = enabled && !type.equals("MOD_VIEW_AVAILABLE");
                 check(returns(invoke, callout, model) == hidden, "Callout " + type + " enabled=" + enabled);
@@ -185,30 +186,30 @@ public final class HighlightsArtProbe {
             switches.put("hide_pinned_cheers", enabled);
             switches.put("hide_celebrations", enabled);
             switches.put("hide_tipping", enabled);
-            Object leaderboard = construct("b85", true);
+            Object leaderboard = construct("i85", true);
             check(flag(leaderboard, "b") == !enabled && flag(leaderboard, "c") == !enabled &&
                 flag(leaderboard, "d") == !enabled && flag(leaderboard, "f") == !enabled, "Leaderboard settings enabled=" + enabled);
-            check(flag(construct("d1t", true), "a") == !enabled, "Pinned cheers enabled=" + enabled);
-            Object celebration = construct("lv4", true);
+            check(flag(construct("g2t", true), "a") == !enabled, "Pinned cheers enabled=" + enabled);
+            Object celebration = construct("tv4", true);
             check(flag(celebration, "a") == !enabled && flag(celebration, "b") == true, "Celebrations enabled=" + enabled);
-            Object unchanged = construct("lv4", false);
+            Object unchanged = construct("tv4", false);
             check(!flag(unchanged, "a") && flag(unchanged, "b") == enabled, "Celebration update enabled=" + enabled);
-            Object input = construct("a86", true);
+            Object input = construct("k86", true);
             check(flag(input, "a") && flag(input, "b") == !enabled && flag(input, "c"), "Chat input Bits picker enabled=" + enabled);
         }
         for (boolean enabled : new boolean[]{true, false}) {
             switches.put("hide_clip_button", enabled);
             switches.put("hide_share_button", enabled);
-            Object clip = construct("qua", true);
+            Object clip = construct("zua", true);
             check(flag(clip, "a") == !enabled && flag(clip, "b"), "Clip button state enabled=" + enabled);
-            Object overlay = construct("b2u", true);
+            Object overlay = construct("o3u", true);
             check(flag(overlay, "a") == !enabled && flag(overlay, "b") == !enabled && flag(overlay, "d") && flag(overlay, "e"),
                 "Player overlay options enabled=" + enabled);
         }
 
         // Mature content: every label counts as acknowledged only while the switch is on.
-        Method acknowledged = Class.forName("cyo").getMethod("p", String.class);
-        Object labels = allocate("cyo");
+        Method acknowledged = Class.forName("azo").getMethod("p", String.class);
+        Object labels = allocate("azo");
         switches.put("hide_mature_warning", true);
         check((Boolean) acknowledged.invoke(labels, "MatureGame"), "Mature label not acknowledged");
         switches.put("hide_mature_warning", false);
@@ -227,8 +228,8 @@ public final class HighlightsArtProbe {
         Constructor<?> page = pageType.getConstructor(location);
         Object live = page.newInstance(Class.forName("tv.twitch.android.models.feed.FeedLocation$Live").getField("INSTANCE").get(null));
         Object clips = page.newInstance(Class.forName("tv.twitch.android.models.feed.FeedLocation$Clips").getField("INSTANCE").get(null));
-        Object signedOut = Class.forName("mio").getField("a").get(null);
-        List<?> stock = (List<?>) Class.forName("khh").getMethod("b", boolean.class).invoke(signedOut, false);
+        Object signedOut = Class.forName("njo").getField("a").get(null);
+        List<?> stock = (List<?>) Class.forName("lih").getMethod("b", boolean.class).invoke(signedOut, false);
         check(stock.equals(Arrays.asList(live, clips)), "Unexpected signed-out Home tabs " + stock);
         Method filter = Class.forName("io.github.jordanwoodson.extension.shared.twitch.TwitchInterface")
             .getMethod("homeTabs", List.class, Object.class);
@@ -251,7 +252,7 @@ public final class HighlightsArtProbe {
         Method sections = Class.forName("io.github.jordanwoodson.extension.shared.twitch.TwitchHighlights")
             .getMethod("followingSections", List.class);
         List<Object> all = new ArrayList<>();
-        for (String type : new String[]{"c9i", "e9i", "f9i", "b9i", "d9i"}) all.add(allocate(type));
+        for (String type : new String[]{"dai", "fai", "gai", "cai", "eai"}) all.add(allocate(type));
         for (boolean enabled : new boolean[]{true, false}) {
             switches.put("hide_home_continue_watching", enabled);
             switches.put("hide_home_offline_channels", enabled);

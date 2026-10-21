@@ -3,6 +3,7 @@
 
 Usage: python3 tests/twitch/verify_interface_emitted.py stock-apktool patched-apktool
 Version-specific class/field names belong in this independent artifact test, never fingerprints.
+The names below are Twitch 31.7.0's R8 output.
 """
 from pathlib import Path
 import re
@@ -28,7 +29,7 @@ def executable_source(text):
 def main():
     stock, patched = map(Path, sys.argv[1:])
     helper = "Lio/github/jordanwoodson/extension/shared/twitch/TwitchInterface;"
-    for filename, flags in [("rr70.smali", ["k", "m"]), ("v9s.smali", ["e", "k"])]:
+    for filename, flags in [("px70.smali", ["k", "m"]), ("zas.smali", ["e", "k"])]:
         original = source(stock, filename)
         emitted = source(patched, filename)
         assert helper not in original, "Stock negative unexpectedly contains Lurk"
@@ -43,29 +44,29 @@ def main():
             assert instructions[position - 1] == f"move-result {register}"
             assert "->bitsVisible(Z)Z" in instructions[position - 2]
         assert constructor.count("return-void") == 1, "UI-state constructor exit changed"
-    profile = source(patched, "omv.smali")
+    profile = source(patched, "cov.smali")
     assert helper + "->clipTabs(Ljava/lang/Object;Landroid/os/Bundle;)Ljava/lang/Object;" in profile
     assert re.search(r"invoke-static \{p1, p4\}, " + re.escape(helper) +
                      r"->clipTabs\(Ljava/lang/Object;Landroid/os/Bundle;\)Ljava/lang/Object;", profile), "Profile tabs lost original Bundle context"
     assert "check-cast p1, Lkotlin/enums/EnumEntries;" in profile or "check-cast v" in profile
-    renderer = method(source(patched, "jp20.smali"), "w(Lip20;)V")
-    assert "instance-of v0, p1, Lfp20;" in renderer
-    assert "instance-of v0, p1, Ldp20;" in renderer
+    renderer = method(source(patched, "vs20.smali"), "w(Lus20;)V")
+    assert "instance-of v0, p1, Lrs20;" in renderer
+    assert "instance-of v0, p1, Lps20;" in renderer
     assert "->setVisibility(I)V" in renderer and "hide_subscription_upsells" in renderer
-    assert "hide_subscription_upsells" not in method(source(stock, "jp20.smali"), "w(Lip20;)V")
+    assert "hide_subscription_upsells" not in method(source(stock, "vs20.smali"), "w(Lus20;)V")
     # Account entitlement, received chat events and clip deep links are preservation controls.
-    for filename in ["tv/twitch/android/models/UserModel.smali", "oqr.smali", "fp20.smali", "dp20.smali"]:
+    for filename in ["tv/twitch/android/models/UserModel.smali", "prr.smali", "rs20.smali", "ps20.smali"]:
         assert executable_source(source(stock, filename)) == executable_source(source(patched, filename)), filename + " changed unexpectedly"
-    assert "hide_subscription_upsells" in source(patched, "o890.smali"), "Turbo app-start route was not guarded"
-    account = source(patched, "djj.smali")
+    assert "hide_subscription_upsells" in source(patched, "le90.smali"), "Turbo app-start route was not guarded"
+    account = source(patched, "smj.smali")
     account_section = next(body for declaration, body in re.findall(r"^\.method ([^\n]+)\n(.*?)^\.end method", account, re.M | re.S)
-                           if "0x7f151826" in body and "0x7f151827" in body)
+                           if "0x7f151833" in body and "0x7f151834" in body)
     assert "hide_subscription_upsells" in account_section, "Native account Turbo promotion remains"
     assert re.search(r"move/from16 v\d+, p0", account_section), "Must retain actual Turbo subscription input"
-    for filename in ["nd50.smali", "hfr.smali"]:
+    for filename in ["dj50.smali", "hgr.smali"]:
         assert executable_source(source(stock, filename)) == executable_source(source(patched, filename)), filename + " changed unexpectedly"
     # Selection/argument parsing and the existing native clip bridge are preservation controls.
-    for filename in ["w72.smali", "kb1.smali", "lov.smali", "qb8.smali", "wv7.smali",
+    for filename in ["e82.smali", "sb1.smali", "aqv.smali", "ec8.smali", "lw7.smali",
                      "tv/twitch/android/feature/discovery/feed/rn/bridge/TwitchRNHostNavigationModule.smali"]:
         assert executable_source(source(stock, filename)) == executable_source(source(patched, filename)), filename + " clip navigation changed unexpectedly"
     print("PASS: native UI flag writes, profile tabs, selective subscription renderer, Turbo route and stock preservation controls")

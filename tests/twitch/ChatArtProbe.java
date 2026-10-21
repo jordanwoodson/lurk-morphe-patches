@@ -24,9 +24,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Version-pinned integration test for the chat patches: the real Twitch 31.6.0 classes with the emitted
+ * Version-pinned integration test for the chat patches: the real Twitch 31.7.0 classes with the emitted
  * hooks, run on ART with a fake settings store. Each switch is checked on and off; "off" must reach the
  * original code (its result, or the exception its empty dependencies cause).
+ * The short class names and resource ID below are Twitch 31.7.0's R8 output.
  */
 public final class ChatArtProbe {
     private static final Map<String, Object> settings = new HashMap<>();
@@ -114,7 +115,7 @@ public final class ChatArtProbe {
         // The input restriction: Twitch's LOGIN while on; the original lookup (which needs the account) while off.
         String restrictions = "tv.twitch.android.shared.messageinput";
         Class<?> state = Class.forName(restrictions + ".impl.chatrestrictions.ChatRestrictionsState");
-        Object mapper = allocate("nn6");
+        Object mapper = allocate("yn6");
         Method restriction = null;
         for (Method method : mapper.getClass().getMethods()) {
             if (method.getParameterTypes().length == 3 && method.getParameterTypes()[0] == state) restriction = method;
@@ -130,15 +131,15 @@ public final class ChatArtProbe {
         }
 
         // The SendChatMessage mutation: Twitch's own failure result while on.
-        Object sender = allocate("vay");
+        Object sender = allocate("wey");
         Method send = null;
         for (Method method : sender.getClass().getMethods()) {
             Class<?>[] types = method.getParameterTypes();
-            if (method.getName().equals("u") && types.length == 5 && types[0] == String.class && types[3] == String.class) send = method;
+            if (method.getName().equals("t") && types.length == 5 && types[0] == String.class && types[3] == String.class) send = method;
         }
         anonymous(true);
         Object result = send.invoke(sender, "123", "hello", null, null, null);
-        check(result != null && result.getClass().getName().equals("r6z") &&
+        check(result != null && result.getClass().getName().equals("a9z") &&
             result.toString().startsWith("Error(error=java.lang.IllegalStateException: Lurk"), "On must not send: " + result);
         anonymous(false);
         check(failure(send, sender, "123", "hello", null, null, null) != null, "Off must reach the original GraphQL send");
@@ -146,32 +147,32 @@ public final class ChatArtProbe {
     }
 
     private static void chatClears() throws Exception {
-        Class<?> logger = Class.forName("bjo");
+        Class<?> logger = Class.forName("cko");
         Object log = Proxy.newProxyInstance(logger.getClassLoader(), new Class<?>[]{logger}, (proxy, method, values) -> null);
-        Class<?> parserType = Class.forName("xna");
-        Object parser = parserType.getConstructor(logger, Class.forName("y0e"), Class.forName("i00")).newInstance(log, null, null);
+        Class<?> parserType = Class.forName("foa");
+        Object parser = parserType.getConstructor(logger, Class.forName("q1e"), Class.forName("qgz")).newInstance(log, null, null);
         Method line = parserType.getMethod("N", String.class);
         Method parse = null;
         for (Method method : parserType.getMethods()) {
             Class<?>[] types = method.getParameterTypes();
             if (method.getName().equals("L") && types.length == 5 && types[4] == boolean.class) parse = method;
         }
-        Object user = Class.forName("i3d").getMethod("l").invoke(null);
-        Object properties = allocate("bq5");
-        Object ignored = Class.forName("yim").getField("b").get(null);
-        Class<?> event = Class.forName("y55");
+        Object user = Class.forName("e4d").getMethod("l").invoke(null);
+        Object properties = allocate("mq5");
+        Object ignored = Class.forName("vjm").getField("b").get(null);
+        Class<?> event = Class.forName("f65");
         for (boolean enabled : new boolean[]{false, true, false}) {
             settings.put("chat_ignore_clears", enabled);
             Object clear = parse.invoke(parser, line.invoke(parser, ":tmi.twitch.tv CLEARCHAT #somechannel"), user, properties, null, false);
             if (enabled) check(clear == ignored, "On must ignore a chat clear, got " + clear);
-            else check(clear.getClass().getName().equals("vim") && get(clear, event).getClass().getName().equals("p55"),
+            else check(clear.getClass().getName().equals("sjm") && get(clear, event).getClass().getName().equals("w55"),
                 "Off must clear the chat, got " + clear);
             Object timeout = parse.invoke(parser, line.invoke(parser,
                 "@ban-duration=600;room-id=1;target-user-id=42 :tmi.twitch.tv CLEARCHAT #somechannel :someone"), user, properties, null, false);
-            check(get(timeout, event).getClass().getName().equals("x55"), "Timeouts must always apply, got " + timeout);
+            check(get(timeout, event).getClass().getName().equals("e65"), "Timeouts must always apply, got " + timeout);
             Object delete = parse.invoke(parser, line.invoke(parser,
                 "@login=someone;room-id=;target-msg-id=abc-123 :tmi.twitch.tv CLEARMSG #somechannel :hello"), user, properties, null, false);
-            check(get(delete, event).getClass().getName().equals("n55"), "Deletions must always arrive, got " + delete);
+            check(get(delete, event).getClass().getName().equals("u55"), "Deletions must always arrive, got " + delete);
         }
     }
 
@@ -180,19 +181,19 @@ public final class ChatArtProbe {
         Class<?> struck = Class.forName(CHAT + "$DeletedSpan");
         // Shown line: name span (Twitch's own) on "viewer", then ": " and the message.
         SpannableStringBuilder text = new SpannableStringBuilder("12:00 viewer: hello there");
-        text.setSpan(allocate("wd7"), 6, 12, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text.setSpan(allocate("je7"), 6, 12, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         SpannedString line = new SpannedString(text);
         Resources system = Resources.getSystem();
         Resources resources = new Resources(system.getAssets(), new DisplayMetrics(), new Configuration()) {
             @Override public String getString(int id) {
-                return id == 0x7f150329 ? "message deleted" : super.getString(id);
+                return id == 0x7f15032a ? "message deleted" : super.getString(id);
             }
         };
         Context context = new ContextWrapper(null) {
             @Override public Resources getResources() { return resources; }
         };
         Class<?> dispatcher = Class.forName("tv.twitch.android.core.mvp.viewdelegate.EventDispatcher");
-        Method render = Class.forName("t7m").getMethod("t", String.class, SpannedString.class, Context.class, dispatcher, boolean.class);
+        Method render = Class.forName("r8m").getMethod("u", String.class, SpannedString.class, Context.class, dispatcher, boolean.class);
         for (boolean enabled : new boolean[]{false, true, false}) {
             settings.put("chat_show_deleted", enabled);
             Spanned shown = (Spanned) render.invoke(null, "abc-123", line, context, null, false);
@@ -216,8 +217,8 @@ public final class ChatArtProbe {
 
     private static void timestamps() throws Exception {
         Method shown = Class.forName(CHAT).getMethod("timestamps", Object.class, boolean.class);
-        Class<?> source = Class.forName("yt90");
-        Class<?> config = Class.forName("rb6");
+        Class<?> source = Class.forName("vz90");
+        Class<?> config = Class.forName("cc6");
         Object chat = config.getConstructors()[0].newInstance(true, source.getField("Chat").get(null), null);
         Object whisper = config.getConstructors()[0].newInstance(true, source.getField("Whisper").get(null), null);
         for (boolean enabled : new boolean[]{false, true}) {
@@ -235,10 +236,10 @@ public final class ChatArtProbe {
 
     private static void autoClaim() throws Exception {
         Class<?> modelType = Class.forName("tv.twitch.android.models.communitypoints.CommunityPointsModel");
-        Class<?> claimType = Class.forName("jd");
+        Class<?> claimType = Class.forName("ld");
         Class<?> channel = Class.forName("tv.twitch.android.models.channel.ChannelInfo");
-        Class<?> presenterType = Class.forName("tc9");
-        Class<?> action = Class.forName("bg9");
+        Class<?> presenterType = Class.forName("gd9");
+        Class<?> action = Class.forName("og9");
         List<String> claims = new ArrayList<>();
         Object recorder = Proxy.newProxyInstance(action.getClassLoader(), new Class<?>[]{action}, (proxy, method, values) -> {
             Class<?>[] types = method.getParameterTypes();
@@ -251,7 +252,7 @@ public final class ChatArtProbe {
         });
         Object presenter = allocate(presenterType.getName());
         set(presenter, "m", recorder);
-        Object update = Class.forName("fc9").getConstructor(presenterType, int.class).newInstance(presenter, 0);
+        Object update = Class.forName("sc9").getConstructor(presenterType, int.class).newInstance(presenter, 0);
         Method invoke = update.getClass().getMethod("invoke", Object.class);
         // ChannelInfo is an interface; the claim only stores it.
         Object info = Proxy.newProxyInstance(channel.getClassLoader(), new Class<?>[]{channel}, (proxy, method, values) -> null);

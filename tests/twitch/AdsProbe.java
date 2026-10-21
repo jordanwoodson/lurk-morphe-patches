@@ -24,7 +24,7 @@ import java.util.Map;
 /**
  * Executes the patched Twitch ad hooks on ART: the real native metadata handler, stream load, overlay
  * renderer, RN video ad player and brand survey state, plus the extension behind the AdEdgeApi, React
- * Native request and player view hooks. Owners are left uninitialized, so a switched-off hook (or the
+ * Native request, player view and playback session hooks. Owners are left uninitialized, so a switched-off hook (or the
  * original code after a hook) fails with a NullPointerException, which proves execution resumed.
  * CLASSPATH=probe.jar:patched.apk app_process / AdsProbe
  */
@@ -71,6 +71,31 @@ public final class AdsProbe {
             return;
         }
         throw new AssertionError(method.getName() + " did not reach its original code");
+    }
+
+    /** Like [originalContinues], but the original may also return normally. */
+    private static void originalRuns(Method method, Object owner, Object... arguments) throws Exception {
+        try {
+            method.invoke(owner, arguments);
+        } catch (InvocationTargetException expected) {
+            Throwable cause = expected.getCause();
+            check(cause instanceof NullPointerException || cause instanceof IllegalStateException,
+                "Unexpected original failure: " + cause);
+            for (StackTraceElement frame : cause.getStackTrace()) {
+                check(!frame.getClassName().startsWith(ADS), "Hook failed instead of the original code: " + cause);
+            }
+        }
+    }
+
+    /** The React Native player view's role for its session: a View that is the session's display. */
+    static final class SessionDisplay extends FrameLayout implements com.twitchrn.player.PlaybackDisplay {
+        SessionDisplay(Context context) { super(context); }
+        @Override public void onContentSize(int width, int height) {}
+        @Override public void onPlaybackStarted() {}
+        @Override public void onSecureSurfaceRequired(boolean required) {}
+        @Override public void onSourceLoadStarted(boolean warm) {}
+        @Override public void onSurfaceArrived() {}
+        @Override public void onWarmPlayerAdopted() {}
     }
 
     private static void settings() throws Exception {
@@ -176,7 +201,7 @@ public final class AdsProbe {
         // Brand surveys: the real state constructor.
         Class<?> itemType = Class.forName("tv.twitch.android.shared.viewer.pub.FeedItem$BrandSurveyItem");
         Class<?> stateType = Class.forName("tv.twitch.android.shared.viewer.pub.s");
-        Class<?> completion = Class.forName("pgh");
+        Class<?> completion = Class.forName("qhh");
         Object notStarted = completion.getField("NOT_STARTED").get(null);
         Object item = allocate(itemType);
         Constructor<?> state = stateType.getConstructor(itemType, completion);
@@ -209,7 +234,8 @@ public final class AdsProbe {
         System.out.println("PASS: AdEdgeApi Result.error and pass-through, RN ad URL filter, brand survey state, RN VAST noAd/off");
 
         // Mute stitched ads, native player: the real metadata handler and stream load.
-        Class<?> nativeType = Class.forName("sna");
+        // R8 names are Twitch 31.7.0's: native player aoa, ad overlay vw with states rw (playing) and sw (hidden).
+        Class<?> nativeType = Class.forName("aoa");
         Method cue = nativeType.getMethod("h", JSONObject.class);
         Method load = null;
         for (Method method : nativeType.getMethods()) if (method.getName().equals("T") && method.getParameterTypes().length == 2) load = method;
@@ -246,12 +272,12 @@ public final class AdsProbe {
         // Native cover: the real overlay renderer with Twitch's ad-playing and hidden states.
         Context context = systemContext();
         FrameLayout overlay = new FrameLayout(context);
-        Class<?> overlayType = Class.forName("tw");
+        Class<?> overlayType = Class.forName("vw");
         Object renderer = allocate(overlayType);
         set(renderer, Class.forName("tv.twitch.android.core.mvp.viewdelegate.BaseViewDelegate"), "b", overlay);
-        Method render = overlayType.getMethod("v", Class.forName("tv.twitch.android.core.mvp.viewdelegate.ViewDelegateState"));
-        Object playing = allocate(Class.forName("pw"));
-        Object hidden = Class.forName("qw").getField("a").get(null);
+        Method render = overlayType.getMethod("u", Class.forName("tv.twitch.android.core.mvp.viewdelegate.ViewDelegateState"));
+        Object playing = allocate(Class.forName("rw"));
+        Object hidden = Class.forName("sw").getField("a").get(null);
         switches.put("mute_stitched_ads", true);
         originalContinues(render, renderer, playing);
         check(overlay.getBackground() != null && overlay.getBackground().getClass().getName().endsWith("AdCover"),
@@ -289,6 +315,55 @@ public final class AdsProbe {
         rnCue.invoke(null, view, pooled.player, "text/json", ByteBuffer.wrap(ad("30", "1", "0").toString().getBytes(StandardCharsets.UTF_8)));
         check(pooled.mutes.size() == 6 && view.getForeground() == null, "Switched-off RN view was muted or covered");
 
+        // React Native playback session: the real handleMetadata, setStreamUrl and release with their
+        // hooks, and the two helpers the patch adds to the session (its display as a View, and the
+        // metadata hook with the session's own player). The display is the player view in the app.
+        // An allocated session's original code may return early or fail on a null field; both are fine.
+        Class<?> sessionType = Class.forName("com.twitchrn.player.PlaybackSession");
+        Class<?> displayType = Class.forName("com.twitchrn.player.PlaybackDisplay");
+        Class<?> custodyType = Class.forName("com.twitchrn.player.PlayerCustody");
+        Object session = allocate(sessionType);
+        SessionDisplay display = new SessionDisplay(context);
+        FakePlayer sessionPlayer = new FakePlayer();
+        Object custody = allocate(custodyType);
+        set(custody, custodyType, "player", sessionPlayer.player);
+        Field displayField = null;
+        for (Field field : sessionType.getDeclaredFields()) {
+            field.setAccessible(true);
+            if (field.getType() == displayType) { displayField = field; field.set(session, display); }
+            if (field.getType() == custodyType) field.set(session, custody);
+        }
+        check(displayField != null, "Playback session has no display field");
+        Method metadata = sessionType.getMethod("handleMetadata", String.class, ByteBuffer.class);
+        Method streamUrl = sessionType.getMethod("setStreamUrl", String.class);
+        Method release = sessionType.getMethod("release");
+        switches.put("mute_stitched_ads", true);
+        originalRuns(streamUrl, session, "https://usher.ttvnw.net/api/v2/channel/hls/c.m3u8");
+        ByteBuffer sessionData = ByteBuffer.wrap(ad("30", "1", "0").toString().getBytes(StandardCharsets.UTF_8));
+        originalRuns(metadata, session, "text/json", sessionData);
+        check(sessionPlayer.mutes.equals(List.of(true)) && display.getForeground() != null
+            && display.getForeground().getClass().getName().endsWith("AdCover"),
+            "A session cue must mute the session's player and cover its view: " + sessionPlayer.mutes);
+        originalRuns(streamUrl, session, "https://usher.ttvnw.net/api/v2/channel/hls/d.m3u8");
+        check(sessionPlayer.mutes.equals(List.of(true, false)) && display.getForeground() == null,
+            "A new session stream must unmute and uncover: " + sessionPlayer.mutes);
+        originalRuns(metadata, session, "text/json",
+            ByteBuffer.wrap(ad("30", "1", "0").toString().getBytes(StandardCharsets.UTF_8)));
+        originalRuns(release, session);
+        check(sessionPlayer.mutes.equals(List.of(true, false, true, false)) && display.getForeground() == null,
+            "Session release must unmute and uncover: " + sessionPlayer.mutes);
+        // A display that isn't a View leaves the hooks inert.
+        displayField.set(session, Proxy.newProxyInstance(displayType.getClassLoader(), new Class<?>[]{displayType},
+            (proxy, method, values) -> null));
+        originalRuns(metadata, session, "text/json",
+            ByteBuffer.wrap(ad("30", "1", "0").toString().getBytes(StandardCharsets.UTF_8)));
+        check(sessionPlayer.mutes.size() == 4, "A session without a view display was muted");
+        displayField.set(session, display);
+        switches.put("mute_stitched_ads", false);
+        originalRuns(metadata, session, "text/json",
+            ByteBuffer.wrap(ad("30", "1", "0").toString().getBytes(StandardCharsets.UTF_8)));
+        check(sessionPlayer.mutes.size() == 4 && display.getForeground() == null, "Switched-off session was muted or covered");
+
         // The fallback timer, from the ad's duration, when no stream-source cue arrives.
         switches.put("mute_stitched_ads", true);
         FakePlayer lost = new FakePlayer();
@@ -298,7 +373,7 @@ public final class AdsProbe {
         check(lost.mutes.equals(List.of(true)), "Timer test break did not start");
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             check(lost.mutes.equals(List.of(true, false)), "The fallback timer must unmute: " + lost.mutes);
-            System.out.println("PASS: native cue/load/overlay, RN view cue/URL/release, fallback timer; off switches leave players and views alone");
+            System.out.println("PASS: native cue/load/overlay, RN view cue/URL/release, RN playback session hooks, fallback timer; off switches leave players and views alone");
             System.exit(0);
         }, 7000);
         Looper.loop();

@@ -118,7 +118,7 @@ val disableAutoplayPatch = bytecodePatch(
         // controller falls back to enabled=true when its unsupported native getter throws.
         // Only the automatic advance hook consumes this enabled argument; manual scroll/open
         // callbacks are separate. Preserve all instruction boundaries and branch offsets.
-        twitchHermes.replace("useClipAutoAdvance", NEXT, hex("44 0c 07 01 79"),
+        twitchHermes.replace("useClipAutoAdvance", NEXT, hex("44 0c 07 01 ${twitchHermes.id8("enabled")}"),
             hex("96 0c 10 0c 0c"), defaultEnabled = nextVideo == true)
         twitchSettings.add(SwitchSetting("disable_autoplay", "No feed autoplay",
             "Defaults to Never until you choose another option in Twitch's autoplay setting.",

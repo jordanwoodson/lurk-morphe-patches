@@ -30,7 +30,7 @@ internal class HermesBundle(input: ByteArray, compiledPredicate: Boolean = false
         ensure(digest("SHA-1", bytes.copyOfRange(0, bytes.size - 20))
             .contentEquals(bytes.copyOfRange(bytes.size - 20, bytes.size)), "invalid SHA-1 footer")
         if (compiledPredicate) ensure(bytes.size <= 65536, "oversized compiled predicate")
-        else ensure(bytes.sha256() == SOURCE_SHA256, "unrecognized Twitch 31.6.0 bundle")
+        else ensure(bytes.sha256() == SOURCE_SHA256, "unrecognized Twitch 31.7.0 bundle")
         val functionCount = u32(40)
         val stringCount = u32(52)
         val overflowCount = u32(56)
@@ -130,6 +130,21 @@ internal class HermesBundle(input: ByteArray, compiledPredicate: Boolean = false
     }
 
     fun stringId(value: String): Int = strings.indexOf(value).also { ensure(it >= 0, "missing string $value") }
+
+    /**
+     * A string's ID as the operand bytes of an instruction pattern, so patterns survive the string
+     * table being renumbered between app versions: one byte for the short forms (GetByIdShort),
+     * two little-endian bytes for the 16-bit forms (GetById, TryGetById, LoadConstString).
+     */
+    fun id8(value: String): String = stringId(value).let { id ->
+        ensure(id < 256, "$value has no 8-bit string ID")
+        "%02x".format(id)
+    }
+
+    fun id16(value: String): String = stringId(value).let { id ->
+        ensure(id < 65536, "$value has no 16-bit string ID")
+        "%02x %02x".format(id and 255, id ushr 8)
+    }
 
     fun function(name: String): HermesFunction = functions.filter { it.name == name }.singleOrNull()
         ?: fail("expected one function named $name")
@@ -310,7 +325,7 @@ internal class HermesBundle(input: ByteArray, compiledPredicate: Boolean = false
     private fun align(offset: Int) = (offset + 3) and -4
 
     companion object {
-        const val SOURCE_SHA256 = "50e73cce33e67272f9eb9a38b8d8e6f1ecd06ceccf4b88cc9dbc091743493fc9"
+        const val SOURCE_SHA256 = "928f89c5766562e9cb266485282e90c058dd7947f73c9bcafa1d0fc626debf5e"
 
         /** Byte lengths of the v98 instructions accepted in a replaced prologue (BytecodeList.def). */
         private val PROLOGUE_LENGTHS = mapOf(

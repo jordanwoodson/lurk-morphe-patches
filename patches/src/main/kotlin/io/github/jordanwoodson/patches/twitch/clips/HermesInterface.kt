@@ -14,21 +14,29 @@ internal fun HermesBundle.hideClipDiscoveryTabs() {
 
     // The chrome hook is not the pager's model. Remove the same key before Object.keys builds
     // exported TABS; following/live retain indexes 0/1. Its numeric sort is then redundant.
-    val model = matchingFunction(hex("48 04 03 00 28 00 44 03 04 02 a8 6e 04 03 04 05 45 03 04 03 22 f5 84 01 01 67 62 6e 01 03 04 01"))
-    val clips = stringId("clips")
+    // `TABS = Object.keys(FEED_TAB_INDEX).sort(...)`, found by its string operands.
+    val objectId = id16("Object")
+    val keys = id8("keys")
+    val model = matchingFunction(hex("48 04 03 00 $objectId 44 03 04 02 $keys 6e 04 03 04 05 45 03 04 03 ${id16("sort")}"))
     replace(model, "hide_clips", model.body.copyOfRange(0x7a, 0x9a),
-        byteArrayOf(0x90.toByte(), 7, clips.toByte(), (clips ushr 8).toByte()) +
-            hex("63 07 05 07 00 48 04 03 00 28 00 44 03 04 02 a8 6e 04 03 04 05 10 01 04 93 00 93 00"))
+        hex("90 07 ${id16("clips")} 63 07 05 07 00 48 04 03 00 $objectId 44 03 04 02 $keys 6e 04 03 04 05 10 01 04 93 00 93 00"))
 
+    // DiscoveryFeedContent's offsets and registers are the compiler's for 31.7.0: its pager children
+    // array is r89, built from r90; the page after the second child starts at 0x6802.
     val content = function("DiscoveryFeedContent")
-    replace(content, "hide_clips", hex("08 58 03 00 5a 58 59 00"), hex("08 58 02 00 5a 58 59 00"))
+    replace(content, "hide_clips", hex("08 59 03 00 5a 59 5a 00"), hex("08 59 02 00 5a 59 5a 00"))
     // Skip creation and insertion of ClipsFeedPage. The first two children, parent JSX call,
-    // scroll ranges and initial selection now all use the same two-entry TABS model.
-    replace(content, "hide_clips", content.body.copyOfRange(0x66c6, 0x66cf), hex("5a 58 59 01 af 62 01 00 00"))
+    // scroll ranges and initial selection now all use the same two-entry TABS model. Nothing
+    // outside the skipped range jumps into it, and it writes none of the registers read after it.
+    // `children[1] = page; jsxs`, then a long jump to the parent props after the third child.
+    val secondPage = hex("5a 59 5a 01 44 5e 5b ff ${id8("jsxs")}")
+    if (!content.body.copyOfRange(0x67fe, 0x6807).contentEquals(secondPage))
+        throw PatchException("Twitch: unexpected clip pager children")
+    replace(content, "hide_clips", secondPage, hex("5a 59 5a 01 af 61 01 00 00"))
 
     // Explicit in-feed clip requests use Twitch's existing native clip pager instead. The
     // original t86 callback selected index 2 before injecting a clip, which is no longer valid.
-    val entry = matchingFunction(hex("45 03 03 00 ff 5a 45 03 03 01 31 6a"))
+    val entry = matchingFunction(hex("45 03 03 00 ${id16("FEED_TAB_INDEX")} 45 03 03 01 ${id16("clips")}"))
     if (entry.body.size != 71 || entry.frameSize < 6 || entry.numberRegisters + entry.nonPointerRegisters > 2)
         throw PatchException("Twitch: unexpected explicit clip callback registers")
     fun get(dst: Int, src: Int, cache: Int, property: String): ByteArray {
@@ -47,19 +55,23 @@ internal fun HermesBundle.hideClipDiscoveryTabs() {
     // The native pager fetches the requested slug itself. The old readiness gate waited for
     // Home feed edges, which could remain empty after falling back from initialTab=clips.
     // The effect still requires a non-empty initialClipSlug and deduplicates it through its ref.
-    replace(content, "hide_clips", hex("6e 4a 3e 05 2a"), hex("95 4a 10 4a 4a"))
+    replace(content, "hide_clips", hex("6e 4b 3e 05 25"), hex("95 4b 10 4b 4b"))
 
     // Give initial clipSlug effects and pending deep-link events the same native callback.
-    // Omit one memo dependency save (slot183), so this small props block recomputes safely.
-    val props = content.body.copyOfRange(0x1f68, 0x1fbf)
-    val oldSave = hex("8b 00 b7 60 0e 00 4e")
+    // Omit one memo dependency save (slot 189), so this small props block recomputes safely.
+    val props = content.body.copyOfRange(0x2045, 0x20a3)
+    val oldSave = hex("8b 00 bd 60 0e 00 4f")
     val saveAt = props.indices.singleOrNull { at -> at + oldSave.size <= props.size && props.copyOfRange(at, at + oldSave.size).contentEquals(oldSave) }
         ?: throw PatchException("Twitch: missing clip props memo dependency")
     val updatedProps = props.copyOf()
-    if (!updatedProps.copyOfRange(30, 34).contentEquals(hex("52 2a 4e 05")))
+    if (!updatedProps.copyOfRange(30, 34).contentEquals(hex("52 25 4f 05")))
         throw PatchException("Twitch: missing initial clip callback prop")
-    updatedProps[32] = 152.toByte()
-    val closure = byteArrayOf(0x84.toByte(), 152.toByte(), 96, entry.id.toByte(), (entry.id ushr 8).toByte())
+    // r154 holds the stock clip callback closure, which is created right after this block, so it is
+    // free here; r97 is the component's function environment.
+    if (!content.body.copyOfRange(3, 5).contentEquals(hex("40 61")))
+        throw PatchException("Twitch: unexpected clip feed environment register")
+    updatedProps[32] = 154.toByte()
+    val closure = byteArrayOf(0x84.toByte(), 154.toByte(), 97, entry.id.toByte(), (entry.id ushr 8).toByte())
     replace(content, "hide_clips", props, closure + updatedProps.copyOfRange(0, saveAt) +
         updatedProps.copyOfRange(saveAt + oldSave.size, updatedProps.size) + hex("93 05"))
 
@@ -74,7 +86,8 @@ internal fun HermesBundle.hideClipDiscoveryTabs() {
     // callback once; keep the existing slug/ref checks so ordinary rerenders do not reopen it.
     val initial = matchingFunction(hex("34 01 00 3b 03 01 00 b2 27 03 3b 02 01 01 b2 20 02 3b 02 01 08"))
     if (initial.body.size != 50) throw PatchException("Twitch: unexpected initial clip effect")
-    val initialBody = hex("93 00 34 01 00 3b 03 01 00 b2 1f 03 3b 02 01 08 44 04 02 00 57 d3 13 04 03 4a 02 03 00 57 00 3b 01 01 03 6e 01 01 00 03 76 00")
+    val initialBody = hex("93 00 34 01 00 3b 03 01 00 b2 1f 03 3b 02 01 08 44 04 02 00 ${id8("current")} d3 13 04 03 " +
+        "4a 02 03 00 ${id16("current")} 3b 01 01 03 6e 01 01 00 03 76 00")
         .copyOf(initial.body.size)
     replace(initial, "hide_clips", initial.body, initialBody)
 }

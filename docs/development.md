@@ -182,8 +182,8 @@ The workspace emulator is `emulator-5580`; every Android `bin/test-*` script use
 ```sh
 bin/emu start
 bin/patch twitch --install=emulator-5580
-bash bin/test-twitch "$MORPHE_WORK/out/twitch-31.6.0-patched.apk"       # injected loader and settings
-bash bin/test-twitch-privacy "$MORPHE_WORK/out/twitch-31.6.0-patched.apk"
+bash bin/test-twitch "$MORPHE_WORK/out/twitch-31.7.0-patched.apk"       # injected loader and settings
+bash bin/test-twitch-privacy "$MORPHE_WORK/out/twitch-31.7.0-patched.apk"
 ```
 
 - The emulator (`bin/emu`) is a headless Android 16 x86_64 image under KVM with 8 cores, 6 GB and
