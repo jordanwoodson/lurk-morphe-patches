@@ -30,7 +30,8 @@ val playlistProxyPatch = bytecodePatch(
         "example one that returns playlists without stitched ads. The proxy receives each request in full, " +
         "including your signed playback token, which identifies your account: only use a proxy you trust. " +
         "An http:// proxy gets an exception from Twitch's HTTPS-only rule for its host alone, and the token then " +
-        "travels unencrypted. Does nothing while the proxy URL is empty. Videos and clips are not proxied.",
+        "travels unencrypted. Does nothing while the proxy URL is empty. Videos and clips are not proxied. " +
+        "Avoid stitched ads leaves proxied streams alone: the proxy decides what their playlists hold.",
     default = false,
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)

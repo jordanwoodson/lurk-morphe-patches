@@ -317,8 +317,19 @@ the worker count stays bounded and saturated callers fail promptly or use the ex
 build with a faked break went 1080p → 360p → 1080p without a reload. No real commercial was caught
 in the app.
 
+Switching *Avoid stitched ads* off stops new breaks, not the streams it already changed. A stream on
+a picture-by-picture session, or renumbered after one, keeps being served until it ends: its own
+playlist has the original sequence numbers, and serving it as is would move the player's media
+sequence. A break in progress therefore returns to the stream the usual way when it's over. Streams it
+never changed pass unchanged from the moment the switch is off. `TwitchAsyncProbe disabled` checks
+both cases.
+
 *Playlist proxy* is opt-in and does nothing without its `proxyUrl` option. It sends live usher requests
-to the configured proxy, and the proxy receives the signed playback token.
+to the configured proxy, and the proxy receives the signed playback token. *Avoid stitched ads* reads
+only `usher.ttvnw.net` master playlists, so a stream loaded through the proxy is never tracked: with
+both patches on, the proxy alone decides what the playlists hold, and Mute stitched ads still acts on
+any ad cues they keep. `TwitchAsyncProbe proxy` checks that a proxied master, in place of usher or with
+the usher URL in its query, isn't consumed.
 
 `bin/test-twitch-ads` runs these hooks on ART. Signed out, no display or stitched ads were served,
 so real ad delivery is verified only through the probe and the emitted bytecode. The proxy was checked

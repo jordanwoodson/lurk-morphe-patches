@@ -28,7 +28,8 @@ val avoidStitchedAdsPatch = bytecodePatch(
         "at most, with sound, then back to the stream's own session and quality when the break is over. The " +
         "player doesn't reload. The playback token for that session is requested without your account. When " +
         "none can be had, the break plays, and Mute stitched ads still mutes and covers it. Native and React " +
-        "Native players; streams started while it's off are left alone.",
+        "Native players; streams started while it's off are left alone, and turning it off during a break " +
+        "lets that break finish on picture-by-picture first. Does nothing for streams loaded through Playlist proxy.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
     dependsOn(twitchSettingsPatch)
@@ -75,7 +76,8 @@ val avoidStitchedAdsPatch = bytecodePatch(
 
         twitchSettings.add(SwitchSetting(KEY, "Avoid stitched ads",
             "During a stitched ad break, play the stream at up to 360p from a picture-by-picture session, which " +
-                "has no ads. Applies to streams started after it's turned on.",
+                "has no ads. Applies to streams started after it's turned on; turned off, a break in progress " +
+                "finishes first. Not for streams loaded through Playlist proxy.",
             Section.PLAYBACK))
     }
 }
