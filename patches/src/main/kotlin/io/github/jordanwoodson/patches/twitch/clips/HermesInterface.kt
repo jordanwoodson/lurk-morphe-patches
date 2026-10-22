@@ -21,7 +21,7 @@ internal fun HermesBundle.hideClipDiscoveryTabs() {
     replace(model, "hide_clips", model.body.copyOfRange(0x7a, 0x9a),
         hex("90 07 ${id16("clips")} 63 07 05 07 00 48 04 03 00 $objectId 44 03 04 02 $keys 6e 04 03 04 05 10 01 04 93 00 93 00"))
 
-    // DiscoveryFeedContent's offsets and registers are the compiler's for 31.7.0: its pager children
+    // DiscoveryFeedContent's offsets and registers are the compiler's for the supported version: its pager children
     // array is r89, built from r90; the page after the second child starts at 0x6802.
     val content = function("DiscoveryFeedContent")
     replace(content, "hide_clips", hex("08 59 03 00 5a 59 5a 00"), hex("08 59 02 00 5a 59 5a 00"))

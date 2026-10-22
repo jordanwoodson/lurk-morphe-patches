@@ -30,7 +30,7 @@ internal class HermesBundle(input: ByteArray, compiledPredicate: Boolean = false
         ensure(digest("SHA-1", bytes.copyOfRange(0, bytes.size - 20))
             .contentEquals(bytes.copyOfRange(bytes.size - 20, bytes.size)), "invalid SHA-1 footer")
         if (compiledPredicate) ensure(bytes.size <= 65536, "oversized compiled predicate")
-        else ensure(bytes.sha256() == SOURCE_SHA256, "unrecognized Twitch 31.7.0 bundle")
+        else ensure(bytes.sha256() == SOURCE_SHA256, "unrecognized bundle: the supported Twitch version's has SHA-256 $SOURCE_SHA256")
         val functionCount = u32(40)
         val stringCount = u32(52)
         val overflowCount = u32(56)

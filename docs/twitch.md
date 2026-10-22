@@ -33,7 +33,7 @@ APKMirror reports the signing certificate SHA-256 as
 `1338f9b049893cc70b78432a177582f90bd4bc6296ea4ed35bcc7df59687ac53`.
 The supplied APK's verified signature matches this certificate, which is now pinned
 in `twitch/shared/Constants.kt`. Decompiled Java, smali and resources are under
-`~/build/lurk-morphe-patches/twitch/31.7.0/` (`bin/decompile twitch`). Twitch also embeds a Hermes v98 React Native bundle
+`$MORPHE_WORK/twitch/31.7.0/` (`bin/decompile twitch`). Twitch also embeds a Hermes v98 React Native bundle
 and web-view JavaScript; native screens alone do not cover every feature.
 
 ## Coverage
@@ -62,7 +62,7 @@ based on this APK; the Rumble and Kick fingerprints do not apply directly.
 ## Patches beyond the Rumble set
 
 These were added on 2026-10-15 after comparing Lurk with other Twitch patch bundles and mods at the
-feature level. Each is written from 31.6.0's own code.
+feature level. Each was written from 31.6.0's own code and moved to 31.7.0 with the rest.
 
 ### Feature checklist
 
@@ -76,7 +76,7 @@ ReVive, bttv-android, TwitchMod, Xtra, Twire and Frosty.
 | Proxy ad blocking | Playlist proxy (opt-in, own URL) |
 | Hide display ads, audio ads | Block display ads |
 | Fix login / notifications in re-signed builds | Fix notifications. Sign-in has no signature gate (see below). |
-| Disable Bugsnag | Not in 31.6.0. Nielsen and Sprig, the remaining reporters, are now in Disable analytics. |
+| Disable Bugsnag | Not in 31.6.0 or 31.7.0. Nielsen and Sprig, the remaining reporters, are now in Disable analytics. |
 | Disable Google Play services | Declined |
 | Anonymous chat | Anonymous chat |
 | Show deleted messages, ignore chat clears | Show deleted messages, with Ignore chat clears |
@@ -112,7 +112,7 @@ are under [Declined](#declined).
 
 ### Watch without signing in
 
-31.6.0 still ships Twitch's signed-out browsing mode. It sits behind the Eppo `loggedOutExperiment`,
+Twitch (31.6.0 and 31.7.0) still ships its signed-out browsing mode. It sits behind the Eppo `loggedOutExperiment`,
 which is unassigned by default. Three places decide between the main UI and `LoginActivity`: the
 intent router, `ViewerLandingActivity.onCreate` and the settings screen. All three call the
 experiment's one boolean getter: false while signed in, otherwise whether the device was given a
@@ -168,7 +168,7 @@ Browse opens at launch.
 
 ### Trackers in Disable analytics
 
-31.6.0 has no Bugsnag, Facebook SDK, SafetyNet or Amazon APS. Disable analytics now also:
+31.7.0, like 31.6.0, has no Bugsnag, Facebook SDK, SafetyNet or Amazon APS. Disable analytics now also:
 - turns Nielsen's server-to-server ping into a no-op. That is the method calling
   `NielsenS2SService.firePing`, a GET to `imrworldwide.com` with the advertising ID;
 - skips `UserLeap.configure(Context, String)`, so Sprig surveys and tracking never get an
@@ -572,7 +572,7 @@ statically.
 
 These features appear in other Twitch bundles and mods but are deliberately not built:
 
-- **Twitch debug mode** (ReVanced): 31.6.0's debug menu (`debug_app_actions`, RN `canReachDevTools`)
+- **Twitch debug mode** (ReVanced): the debug menu (`debug_app_actions`, RN `canReachDevTools`)
   is staff-gated, and release builds fold the debug-build check to false. Reaching it means passing
   the app off as a staff account, or bypassing the staff gate on a menu whose tools change experiment
   assignments, GQL and Spade endpoints, latency and ad behaviour on Twitch's service. *Show video
@@ -778,9 +778,8 @@ the emulator. Bytecode and callback probes establish
 specific local behavior, not complete authenticated end-to-end coverage. The
 app also contains WebView code outside the covered native/RN presentation hooks.
 
-Analysis, decoded APKs, build logs and emulator captures remain under
-`~/build/lurk-morphe-patches/twitch/31.6.0/`, `build-twitch/`, `twitch-privacy/` and
-`twitch-interface/`. The original upload is untouched.
+Decoded APKs (`bin/decompile twitch`), build logs and probe output go to `$MORPHE_WORK`
+(`twitch/<version>/`, `twitch-chat/`, `twitch-interface/` and so on); none of it is in the repository.
 
 ## Implementation and release requirements
 
