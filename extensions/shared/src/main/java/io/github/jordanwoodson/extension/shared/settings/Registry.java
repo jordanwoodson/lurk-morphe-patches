@@ -47,6 +47,8 @@ final class Registry {
         final String defaultValue;
         /** Whether the app has to restart before a change applies. */
         final boolean restart;
+        /** A switch that Pause Lurk leaves as it is (lockout protection, Debug logging). */
+        final boolean keepWhenPaused;
         final String[] choiceLabels;
         final String[] choiceValues;
 
@@ -59,6 +61,7 @@ final class Registry {
             parent = json.isNull("parent") ? null : json.optString("parent", null);
             defaultValue = json.getString("default");
             restart = json.optBoolean("restart");
+            keepWhenPaused = json.optBoolean("keep");
             JSONArray choices = json.optJSONArray("choices");
             int count = choices == null ? 0 : choices.length();
             choiceLabels = new String[count];
@@ -75,6 +78,17 @@ final class Registry {
                 if (choiceValues[i].equals(value)) return choiceLabels[i];
             }
             return value;
+        }
+
+        boolean hasChoice(String value) {
+            for (String choice : choiceValues) {
+                if (choice.equals(value)) return true;
+            }
+            return false;
+        }
+
+        boolean isSwitch() {
+            return SWITCH.equals(type);
         }
     }
 

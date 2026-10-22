@@ -40,7 +40,10 @@ internal sealed class Setting(
     val restart: Boolean,
 )
 
-/** A switch. Injected code reads it with [isEnabled]. */
+/**
+ * A switch. Injected code reads it with [isEnabled]. [keepWhenPaused] marks lockout protection that "Pause
+ * Lurk" must leave alone (see [KEEP_WHEN_PAUSED] for the switches marked here).
+ */
 internal class SwitchSetting(
     key: String,
     title: String,
@@ -49,7 +52,15 @@ internal class SwitchSetting(
     default: Boolean = true,
     parent: String? = null,
     restart: Boolean = false,
+    val keepWhenPaused: Boolean = false,
 ) : Setting(key, title, summary, section, default.toString(), parent, restart)
+
+/**
+ * Switches "Pause Lurk" leaves as they are, besides any registered with keepWhenPaused: Block update prompts
+ * (without it a forced update can lock someone out of the app, and updating removes Lurk) and Lurk's own
+ * Debug logging, which helps while finding out whether Lurk is the cause of a problem.
+ */
+private val KEEP_WHEN_PAUSED = setOf("block_update_prompts", "debug_logging")
 
 /** One of [choices] (label to value). Injected code reads the value as a number with [intValue]. */
 internal class ChoiceSetting(
@@ -111,8 +122,18 @@ internal class SettingsScreen(private val app: String) {
         }
     }
 
-    /** By section, then title, each switch followed by the settings under it. */
+    /**
+     * By section, then title, each switch followed by the settings under it. A setting's parent must be a
+     * registered top-level switch in the same section, or the screen couldn't show the setting under it.
+     */
     fun json(): String {
+        for (setting in settings) {
+            val parent = setting.parent ?: continue
+            val switch = settings.singleOrNull { it.key == parent }
+            require(switch is SwitchSetting && switch.parent == null && switch.section == setting.section) {
+                "Lurk setting ${setting.key}: its parent $parent is not a registered top-level switch in ${setting.section.title}"
+            }
+        }
         val ordered = settings.filter { it.parent == null }
             .sortedWith(compareBy({ it.section.ordinal }, { it.title }))
             .flatMap { setting -> listOf(setting) + settings.filter { it.parent == setting.key } }
@@ -131,6 +152,9 @@ internal class SettingsScreen(private val app: String) {
                 "parent" to (setting.parent?.json() ?: "null"),
                 "restart" to setting.restart.toString(),
             )
+            if (setting is SwitchSetting && (setting.keepWhenPaused || setting.key in KEEP_WHEN_PAUSED)) {
+                fields += "keep" to "true"
+            }
             if (setting is ChoiceSetting) {
                 fields += "choices" to setting.choices.joinToString(",", "[", "]") { (label, value) ->
                     "[${label.json()},${value.json()}]"

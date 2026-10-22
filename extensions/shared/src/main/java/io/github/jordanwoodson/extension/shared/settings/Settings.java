@@ -9,9 +9,16 @@ import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
 import android.graphics.drawable.Icon;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Process;
+import android.os.SystemClock;
 
 import java.lang.reflect.Proxy;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import io.github.jordanwoodson.extension.shared.Logger;
@@ -20,15 +27,35 @@ import io.github.jordanwoodson.extension.shared.Logger;
  * Runtime switches for the patches in a patched app. A patch that can be switched off asks
  * {@link #isEnabled(String)} before it changes anything. The switches are on the Lurk settings screen
  * ({@link SettingsActivity}); each keeps its patch-time default until it is changed there.
+ *
+ * <p>Lurk fails closed: a key no included patch registered is off, and when the registry can't be read
+ * every key is. "Pause Lurk" turns every switch off from the next start, except the ones a patch marked to
+ * keep (lockout protection such as Block update prompts), without changing what is stored. Lurk pauses
+ * itself when the app crashes within a minute of starting three times in a row.
  */
 @SuppressWarnings("unused")
 public final class Settings {
     private static final String PREFERENCES = "lurk_settings";
+    /** Lurk's own state, apart from the settings so exports and resets of settings never carry it. */
+    private static final String STATE = "lurk_state";
+    static final String PAUSED = "paused";
+    static final String AUTO_PAUSED = "auto_paused";
+    static final String CRASH_STREAK = "crash_streak";
     private static final String SHORTCUT_ID = "lurk_settings";
+    /** A crash this soon after the process started counts towards pausing Lurk. */
+    static final long EARLY_CRASH_MS = 60_000;
+    /** Early crashes in a row that pause Lurk. */
+    static final int CRASHES_TO_PAUSE = 3;
 
     private static volatile Context context;
     private static volatile Registry registry;
     private static Object openAction;
+    private static boolean initialized;
+
+    /** Whether this process runs paused, read once: pausing applies from the next start. Null until read. */
+    private static volatile Boolean pausedAtStart;
+    /** The values the restart-flagged settings had when this process started, or null until taken. */
+    private static volatile Map<String, String> startValues;
 
     private static final AtomicLong CHANGES = new AtomicLong();
     /** SharedPreferences keeps its listeners weakly, so this one lives here. */
@@ -42,33 +69,36 @@ public final class Settings {
     private Settings() {
     }
 
-    /** Injection point: the start of the app's Application.onCreate(). */
+    /** Injection point: the start of the app's Application.onCreate(). Once per process. */
     public static void init(Context appContext) {
-        context = appContext;
+        synchronized (Settings.class) {
+            if (appContext == null || initialized) return;
+            initialized = true;
+            context = appContext;
+        }
         if (appContext instanceof Application) {
             ((Application) appContext).registerActivityLifecycleCallbacks(new ResumedActivityTracker());
         }
         // Watch for changes from here on, so Debug logging and cached lists follow the screen.
         changes();
+        // What this process starts with: pause, and the settings that are read once.
+        pausedNow();
+        startValues();
+        guardCrashes();
         new Thread(Settings::publishShortcut, "lurk-shortcut").start();
     }
 
     /**
      * Injection point. Whether the switch {@code key} is on. A key no included patch registered counts as
      * off, and so does every key when the registry can't be read: Lurk fails closed, so a broken registry
-     * turns every patch off instead of turning default-off ones on.
+     * turns every patch off instead of turning default-off ones on. While Lurk is paused every switch is off
+     * except the ones marked to keep.
      */
     public static boolean isEnabled(String key) {
         Registry.Entry entry = registry().get(key);
         if (entry == null) return false;
-        boolean fallback = Boolean.parseBoolean(entry.defaultValue);
-        SharedPreferences preferences = preferences();
-        if (preferences == null) return fallback;
-        try {
-            return preferences.getBoolean(key, fallback);
-        } catch (ClassCastException e) {
-            return fallback;
-        }
+        if (!entry.keepWhenPaused && pausedNow()) return false;
+        return storedBoolean(entry);
     }
 
     /**
@@ -175,6 +205,30 @@ public final class Settings {
         }
     }
 
+    /** The switch's own value, as changed on the screen or its default, whether or not Lurk is paused. */
+    static boolean storedBoolean(Registry.Entry entry) {
+        boolean fallback = Boolean.parseBoolean(entry.defaultValue);
+        SharedPreferences preferences = preferences();
+        if (preferences == null) return fallback;
+        try {
+            return preferences.getBoolean(entry.key, fallback);
+        } catch (ClassCastException e) {
+            return fallback;
+        }
+    }
+
+    /** The entry's value as text: "true"/"false" for a switch (whether or not Lurk is paused), else its value. */
+    static String value(Registry.Entry entry) {
+        return Registry.SWITCH.equals(entry.type) ? String.valueOf(storedBoolean(entry)) : getString(entry.key);
+    }
+
+    /** Every registered setting's value as text, in screen order. */
+    static Map<String, String> values() {
+        Map<String, String> values = new LinkedHashMap<>();
+        for (Registry.Entry entry : registry().entries) values.put(entry.key, value(entry));
+        return values;
+    }
+
     static void putBoolean(String key, boolean value) {
         SharedPreferences preferences = preferences();
         if (preferences != null) preferences.edit().putBoolean(key, value).apply();
@@ -187,12 +241,193 @@ public final class Settings {
         Logger.refresh();
     }
 
-    /** Forgets every change made on the screen, so each setting is back to its patch-time default. */
+    /** Sets several values at once (key to "true"/"false" for a switch, the value otherwise). */
+    static void putAll(Map<String, String> values) {
+        SharedPreferences preferences = preferences();
+        if (preferences == null) return;
+        SharedPreferences.Editor editor = preferences.edit();
+        Registry current = registry();
+        for (Map.Entry<String, String> value : values.entrySet()) {
+            Registry.Entry entry = current.get(value.getKey());
+            if (entry == null) continue;
+            if (Registry.SWITCH.equals(entry.type)) editor.putBoolean(entry.key, Boolean.parseBoolean(value.getValue()));
+            else editor.putString(entry.key, value.getValue());
+        }
+        editor.apply();
+        Logger.refresh();
+    }
+
+    /** Forgets every change made on the screen, so each setting is back to its patch-time default, and unpauses. */
     static void reset() {
         SharedPreferences preferences = preferences();
         if (preferences != null) preferences.edit().clear().apply();
+        setPaused(false);
         Logger.refresh();
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Pause Lurk
+
+    /** Whether this process runs with Lurk paused. Read once per process, when the settings can first be read. */
+    static boolean pausedNow() {
+        Boolean paused = pausedAtStart;
+        if (paused != null) return paused;
+        SharedPreferences state = state();
+        // No context yet: not known, and not kept, so the first read with a context decides.
+        if (state == null) return false;
+        boolean value;
+        try {
+            value = state.getBoolean(PAUSED, false);
+        } catch (RuntimeException e) {
+            value = false;
+        }
+        pausedAtStart = value;
+        return value;
+    }
+
+    /** Whether Lurk is set to be paused from the next start. */
+    static boolean pauseRequested() {
+        return stateBoolean(PAUSED);
+    }
+
+    /** Whether Lurk paused itself after early crashes (and hasn't been unpaused since). */
+    static boolean autoPaused() {
+        return stateBoolean(AUTO_PAUSED) && pauseRequested();
+    }
+
+    /** Pauses or unpauses Lurk from the next start. Either way, a pause Lurk made itself is forgotten. */
+    static void setPaused(boolean paused) {
+        SharedPreferences state = state();
+        if (state == null) return;
+        state.edit().putBoolean(PAUSED, paused).putBoolean(AUTO_PAUSED, false).putInt(CRASH_STREAK, 0).apply();
+    }
+
+    private static boolean stateBoolean(String key) {
+        SharedPreferences state = state();
+        if (state == null) return false;
+        try {
+            return state.getBoolean(key, false);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Restart
+
+    /** The restart-flagged settings' values as this process started with them (taken on first use). */
+    private static Map<String, String> startValues() {
+        Map<String, String> values = startValues;
+        if (values != null) return values;
+        if (preferences() == null) return Collections.emptyMap();
+        values = new HashMap<>();
+        for (Registry.Entry entry : registry().entries) {
+            if (entry.restart) values.put(entry.key, value(entry));
+        }
+        startValues = values;
+        return values;
+    }
+
+    /** Whether a setting that is only read at startup, or Pause Lurk, changed since this process started. */
+    static boolean restartNeeded() {
+        if (preferences() == null) return false;
+        if (pauseRequested() != pausedNow()) return true;
+        Registry current = registry();
+        for (Map.Entry<String, String> start : startValues().entrySet()) {
+            Registry.Entry entry = current.get(start.getKey());
+            if (entry != null && !start.getValue().equals(value(entry))) return true;
+        }
+        return false;
+    }
+
+    /** Starts the app again from its launcher activity, for settings that are read once at startup. */
+    static void restart(Activity activity) {
+        Intent launch = activity.getPackageManager().getLaunchIntentForPackage(activity.getPackageName());
+        if (launch == null || launch.getComponent() == null) return;
+        // Changes are saved with apply(), which writes in the background; exit() doesn't wait for it.
+        // A commit is queued behind those writes and returns once they're on disk.
+        SharedPreferences preferences = preferences();
+        if (preferences != null) preferences.edit().commit();
+        SharedPreferences state = state();
+        if (state != null) state.edit().commit();
+        activity.startActivity(Intent.makeRestartActivityTask(launch.getComponent()));
+        Runtime.getRuntime().exit(0);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Crash pause
+
+    /**
+     * Records crashes that end the process within {@link #EARLY_CRASH_MS} of its start, and passes them on
+     * to the handler that was there before (the app's crash reporter, then Android's), so the app still
+     * crashes as it would. A run that lasts that long ends the streak.
+     */
+    private static void guardCrashes() {
+        Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        if (previous instanceof CrashGuard) return;
+        Thread.setDefaultUncaughtExceptionHandler(new CrashGuard(previous));
+        long left = EARLY_CRASH_MS - (SystemClock.elapsedRealtime() - processStart());
+        new Handler(Looper.getMainLooper()).postDelayed(Settings::survivedStart, Math.max(0, left));
+    }
+
+    static long processStart() {
+        return Process.getStartElapsedRealtime();
+    }
+
+    /** The app ran past the first minute: the next early crash starts a new count. */
+    static void survivedStart() {
+        SharedPreferences state = state();
+        if (state == null) return;
+        try {
+            if (state.getInt(CRASH_STREAK, 0) != 0) state.edit().putInt(CRASH_STREAK, 0).apply();
+        } catch (RuntimeException e) {
+            Logger.d("settings: crash count: " + e);
+        }
+    }
+
+    /** An uncaught exception is about to end the process: count it if it came early. */
+    static void onCrash() {
+        if (SystemClock.elapsedRealtime() - processStart() >= EARLY_CRASH_MS) return;
+        // Already running without the patches: pausing again would change nothing.
+        if (pausedNow()) return;
+        SharedPreferences state = state();
+        if (state == null) return;
+        int streak = state.getInt(CRASH_STREAK, 0) + 1;
+        SharedPreferences.Editor editor = state.edit();
+        if (streak >= CRASHES_TO_PAUSE) {
+            editor.putBoolean(PAUSED, true).putBoolean(AUTO_PAUSED, true).putInt(CRASH_STREAK, 0);
+            Logger.w("Lurk paused itself: the app stopped " + streak + " times in a row within a minute of starting");
+        } else {
+            editor.putInt(CRASH_STREAK, streak);
+        }
+        // The process ends right after this handler: write now.
+        editor.commit();
+    }
+
+    static final class CrashGuard implements Thread.UncaughtExceptionHandler {
+        private final Thread.UncaughtExceptionHandler previous;
+
+        CrashGuard(Thread.UncaughtExceptionHandler previous) {
+            this.previous = previous;
+        }
+
+        @Override
+        public void uncaughtException(Thread thread, Throwable failure) {
+            try {
+                onCrash();
+            } catch (Throwable ignored) {
+                // Never stand in the way of the crash itself.
+            }
+            if (previous != null) {
+                previous.uncaughtException(thread, failure);
+            } else {
+                Process.killProcess(Process.myPid());
+                System.exit(10);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
 
     static Registry registry() {
         Registry current = registry;
@@ -212,21 +447,14 @@ public final class Settings {
         from.startActivity(intent);
     }
 
-    /** Starts the app again from its launcher activity, for settings that are read once at startup. */
-    static void restart(Activity activity) {
-        Intent launch = activity.getPackageManager().getLaunchIntentForPackage(activity.getPackageName());
-        if (launch == null || launch.getComponent() == null) return;
-        // Changes are saved with apply(), which writes in the background; exit() doesn't wait for it.
-        // A commit is queued behind those writes and returns once they're on disk.
-        SharedPreferences preferences = preferences();
-        if (preferences != null) preferences.edit().commit();
-        activity.startActivity(Intent.makeRestartActivityTask(launch.getComponent()));
-        Runtime.getRuntime().exit(0);
-    }
-
     private static SharedPreferences preferences() {
         Context current = context();
         return current == null ? null : current.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
+    }
+
+    private static SharedPreferences state() {
+        Context current = context();
+        return current == null ? null : current.getSharedPreferences(STATE, Context.MODE_PRIVATE);
     }
 
     private static Context context() {
@@ -265,6 +493,16 @@ public final class Settings {
             manager.addDynamicShortcuts(Collections.singletonList(shortcut));
         } catch (RuntimeException e) {
             Logger.w("settings: no launcher shortcut: " + e);
+        }
+    }
+
+    /** The patched app's version name, or "" when it can't be read. */
+    static String appVersion(Context current) {
+        try {
+            String name = current.getPackageManager().getPackageInfo(current.getPackageName(), 0).versionName;
+            return name == null ? "" : name;
+        } catch (Exception e) {
+            return "";
         }
     }
 

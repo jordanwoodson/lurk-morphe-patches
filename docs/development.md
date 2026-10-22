@@ -152,10 +152,19 @@ otherwise, so a new app version fails to patch instead of patching the wrong met
 [fingerprinting guide](https://github.com/MorpheApp/morphe-patcher/blob/main/docs/2_2_1_fingerprinting.md).
 
 Patches with runtime behavior depend on the app's settings patch and register their switches
-and choices on the app's `SettingsScreen`; the Lurk settings activity in `extensions/shared`
-shows only the settings of the patches that were included. Code that runs inside the app is
-plain Java in `extensions/shared/`, called from injected smali; `Logger.d(...)` (tag `lurk`) is
-the quickest way to confirm a hook fires.
+and choices on the app's `SettingsScreen` (`patches/.../shared/settings/Settings.kt`) at the end of
+`execute`. A key can be registered once, and a setting's `parent` must be a top-level switch of the
+same section. The settings patch writes the registrations as JSON into the extension, and the Lurk
+settings activity (`extensions/shared/.../settings/`) builds its screen from that: only the
+included patches' settings, grouped by section, with search, Pause Lurk, export and import, a bug
+report link and a restart bar for `restart = true` settings. It is plain framework Java: views and
+drawables made in code, no resources, AppCompat or Kotlin. Injected code reads a value with
+`Settings.isEnabled(key)` or `getInt(key)`. Lurk fails closed: a key that isn't registered reads
+as off (a choice as 0), and so does every key if the registry can't be read; Pause Lurk turns
+every switch off except those registered with `keepWhenPaused` (lockout protection such as Block
+update prompts). Code that runs inside the app is plain Java in `extensions/shared/`, called
+from injected smali; `Logger.d(...)` (tag `lurk`) is the quickest way to confirm a hook fires,
+once Lurk settings > Advanced > Debug logging is on. `Logger.i`, `w` and `blocked` always write.
 
 Two things that bite: Morphe silently drops a non-range `invoke-*` whose register is above
 v15 (use `/range` forms and check with `dexdump`), and the extension must not pull the Kotlin
@@ -167,7 +176,7 @@ Run `bin/test-host` for offline, APK-free checks with Python 3, Git, a JDK (21 r
 Chrome or Chromium, and `python3 -m pip install -r tests/requirements-host.txt`.
 It honors `JAVA_HOME`, `CHROME` and `MORPHE_WORK`, runs all registered checks and fails if any check fails.
 Both PR builds and release jobs require it before building or publishing. The suite exercises
-the Twitch interface, playback/link and privacy-consent helpers, Kick player and privacy helpers,
+the settings framework against each app's registry (`tests/shared/test_settings.py`), the Twitch interface, playback/link and privacy-consent helpers, Kick player and privacy helpers,
 the offline Kick chat page in headless Chrome,
 and release recovery using local Git fixtures. See [tests/README.md](../tests/README.md) for coverage
 and how to register another host check.

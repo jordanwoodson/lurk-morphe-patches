@@ -48,7 +48,7 @@ internal val kickSettingsPatch = bytecodePatch(
                     setAttribute("android:exported", "false")
                     setAttribute("android:label", "Lurk")
                     setAttribute("android:taskAffinity", "")
-                    setAttribute("android:theme", "@android:style/Theme.DeviceDefault.Light.NoActionBar")
+                    setAttribute("android:theme", "@android:style/Theme.DeviceDefault.NoActionBar")
                 })
             }
         }

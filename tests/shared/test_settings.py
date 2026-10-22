@@ -17,7 +17,16 @@ doubles (no Android SDK, APK or device) and cover:
 - failing closed: a missing, malformed, partly malformed or empty registry turns every switch off
   and every choice and text to "" (0 as a number), whatever was stored;
 - ChatFilter keeps its keyword lists until a Lurk setting changes (Settings.changes()), reads them
-  every time from preferences that take no listeners, and survives a vibrator that refuses.
+  every time from preferences that take no listeners, and survives a vibrator that refuses;
+- Logger.d follows Debug logging while i, w and blocked always write;
+- Pause Lurk: every switch off from the next start except the ones marked to keep, nothing stored
+  changes, unpausing needs a restart, Reset to defaults unpauses;
+- the crash guard: three crashes in a row within a minute of starting pause Lurk, a later crash
+  doesn't count, a minute of running ends the streak, every crash is passed on;
+- the restart bar: offered while a restart-flagged setting or the pause differs from the start;
+- Export and Import settings: every setting written with its type, re-importing changes nothing,
+  export-change-import restores every value, bad values and unknown keys are listed, not applied;
+- the bug report URL: the form's fields, every switch under On or Off, list contents never sent.
 """
 import json
 import re
@@ -80,18 +89,34 @@ ANDROID = {
         public ComponentName getComponent(){return null;}
         public static Intent makeRestartActivityTask(ComponentName c){return new Intent();} }''',
     'android/content/pm/PackageManager.java': '''package android.content.pm; public class PackageManager {
-        public android.content.Intent getLaunchIntentForPackage(String p){return null;} }''',
+        public static String versionName="31.7.0";
+        public static class NameNotFoundException extends Exception {}
+        public android.content.Intent getLaunchIntentForPackage(String p){return null;}
+        public PackageInfo getPackageInfo(String p,int flags)throws NameNotFoundException{
+          PackageInfo info=new PackageInfo();info.versionName=versionName;return info;} }''',
+    'android/content/pm/PackageInfo.java': 'package android.content.pm; public class PackageInfo {public String versionName;}',
     'android/content/pm/ApplicationInfo.java': 'package android.content.pm; public class ApplicationInfo {public int icon;}',
     'android/content/pm/ShortcutInfo.java': '''package android.content.pm; public class ShortcutInfo {
-        public String getId(){return "";}
-        public static class Builder {public Builder(android.content.Context c,String id){}
-          public Builder setShortLabel(CharSequence s){return this;} public Builder setLongLabel(CharSequence s){return this;}
+        public String id="";public CharSequence shortLabel,longLabel;
+        public String getId(){return id;} public CharSequence getShortLabel(){return shortLabel;}
+        public CharSequence getLongLabel(){return longLabel;}
+        public static class Builder {final ShortcutInfo info=new ShortcutInfo();
+          public Builder(android.content.Context c,String id){info.id=id;}
+          public Builder setShortLabel(CharSequence s){info.shortLabel=s;return this;}
+          public Builder setLongLabel(CharSequence s){info.longLabel=s;return this;}
           public Builder setIcon(android.graphics.drawable.Icon i){return this;} public Builder setIntent(android.content.Intent i){return this;}
-          public ShortcutInfo build(){return new ShortcutInfo();}} }''',
+          public ShortcutInfo build(){return info;}} }''',
     'android/content/pm/ShortcutManager.java': '''package android.content.pm; public class ShortcutManager {
-        public java.util.List<ShortcutInfo> getDynamicShortcuts(){return new java.util.ArrayList<>();}
-        public boolean addDynamicShortcuts(java.util.List<ShortcutInfo> s){return true;}
-        public boolean updateShortcuts(java.util.List<ShortcutInfo> s){return true;} }''',
+        public final java.util.List<ShortcutInfo> dynamic=new java.util.ArrayList<>();
+        public int added,updated;
+        public java.util.List<ShortcutInfo> getDynamicShortcuts(){return new java.util.ArrayList<>(dynamic);}
+        public boolean addDynamicShortcuts(java.util.List<ShortcutInfo> s){added++;dynamic.addAll(s);return true;}
+        public boolean updateShortcuts(java.util.List<ShortcutInfo> s){updated++;
+          for(ShortcutInfo n:s)for(int i=0;i<dynamic.size();i++)if(dynamic.get(i).id.equals(n.id))dynamic.set(i,n);return true;} }''',
+    'android/os/Process.java': '''package android.os; public class Process {
+        public static long start=100_000; public static int killed;
+        public static long getStartElapsedRealtime(){return start;} public static int myPid(){return 1;}
+        public static void killProcess(int pid){killed++;} }''',
     'android/graphics/drawable/Icon.java': '''package android.graphics.drawable; public class Icon {
         public static Icon createWithResource(android.content.Context c,int r){return new Icon();} }''',
     'android/app/Activity.java': '''package android.app; public class Activity extends android.content.ContextWrapper {
@@ -125,16 +150,42 @@ ANDROID = {
             StringBuilder out=new StringBuilder();
             for(Registry.Entry e:((Registry)r).entries){
               out.append(String.join("\\u001f",e.key,e.type,e.title,e.summary,e.section,String.valueOf(e.parent),
-                e.defaultValue,String.valueOf(e.restart),String.join("\\u001e",e.choiceLabels),String.join("\\u001e",e.choiceValues)));
+                e.defaultValue,String.valueOf(e.restart),String.valueOf(e.keepWhenPaused),
+                String.join("\\u001e",e.choiceLabels),String.join("\\u001e",e.choiceValues)));
               out.append('\\n');}
             return out.toString();}
           public static String[][] entries(Object r){
             java.util.List<String[]> out=new java.util.ArrayList<>();
             for(Registry.Entry e:((Registry)r).entries)out.add(new String[]{e.key,e.type,e.defaultValue,
-              e.choiceValues.length>1?e.choiceValues[e.choiceValues[0].equals(e.defaultValue)?1:0]:""});
+              e.choiceValues.length>1?e.choiceValues[e.choiceValues[0].equals(e.defaultValue)?1:0]:"",
+              String.valueOf(e.restart),String.valueOf(e.keepWhenPaused)});
             return out.toArray(new String[0][]);}
           public static String getString(String key){return Settings.getString(key);}
           public static void putBoolean(String key,boolean value){Settings.putBoolean(key,value);}
+          public static void putString(String key,String value){Settings.putString(key,value);}
+          public static java.util.Map<String,String> values(){return Settings.values();}
+          public static void putAll(java.util.Map<String,String> values){Settings.putAll(values);}
+          public static void reset(){Settings.reset();}
+          public static boolean pausedNow(){return Settings.pausedNow();}
+          public static boolean pauseRequested(){return Settings.pauseRequested();}
+          public static boolean autoPaused(){return Settings.autoPaused();}
+          public static void setPaused(boolean paused){Settings.setPaused(paused);}
+          public static boolean restartNeeded(){return Settings.restartNeeded();}
+          public static boolean stored(String key){return Settings.storedBoolean(Settings.registry().get(key));}
+          public static String export(String pkg)throws Exception{return Backup.export(Settings.registry(),Settings.values(),pkg);}
+          public static Object[] plan(String text)throws Exception{
+            Backup.Plan p=Backup.plan(text,Settings.registry(),Settings.values());
+            return new Object[]{p.app,p.changes,p.lines,p.unchanged,p.skipped};}
+          public static String report(boolean paused,String appVersion,String device){
+            return Report.url(Settings.registry(),Settings.values(),paused,appVersion,device);}
+          public static String reportSettings(boolean changedOnly){
+            return Report.settings(Settings.registry(),Settings.values(),false,changedOnly);}
+          public static void publishShortcut()throws Exception{
+            java.lang.reflect.Method m=Settings.class.getDeclaredMethod("publishShortcut");m.setAccessible(true);m.invoke(null);}
+          public static String keptWhenPaused(){
+            StringBuilder out=new StringBuilder();
+            for(Registry.Entry e:Settings.registry().entries)if(e.keepWhenPaused)out.append(e.key).append(',');
+            return out.toString();}
         }''',
 }
 
@@ -202,6 +253,12 @@ public class SettingsProbe {
       case "empty":Access.context(new Context());empty(a.length>1?read(a[1]):null);break;
       case "chatfilter":Access.context(new Context());chatFilter();break;
       case "logger":logger();break;
+      case "pause":Access.context(new Context());pause(read(a[1]));break;
+      case "crash":crash();break;
+      case "restart":Access.context(new Context());restart(read(a[1]));break;
+      case "backup":Access.context(new Context());backup(read(a[1]));break;
+      case "report":Access.context(new Context());report(read(a[1]));break;
+      case "shortcut":shortcut();break;
       default:throw new AssertionError(args[0]);
     }
     System.out.println("PASS settings "+a[0]+(a.length>1?" "+Paths.get(a[1]).getFileName():"")+": "+checks+" checks");
@@ -386,6 +443,206 @@ public class SettingsProbe {
     check(!lines.contains("D/lurk: broken"),"d wrote with an unreadable registry");
   }
 
+  static Preferences state(){return FILES.computeIfAbsent("lurk_state",n->new Preferences());}
+  static String registry(String... entries){
+    return "{\"name\":\"Lurk\",\"version\":\"1.12.0\",\"app\":\"Test\",\"settings\":["+String.join(",",entries)+"]}";
+  }
+
+  /** Pause Lurk: every switch off from the next start except the kept ones; nothing stored changes. */
+  static void pause(String json)throws Exception{
+    Object r=install(json);
+    Preferences p=prefs();
+    String kept=Access.keptWhenPaused();
+    // Store the opposite of every default, so the paused reading can't be a default by accident.
+    Map<String,Boolean> stored=new HashMap<>();
+    for(String[] e:Access.entries(r))if(e[1].equals("switch")){boolean v=!Boolean.parseBoolean(e[2]);p.values.put(e[0],v);stored.put(e[0],v);}
+    for(String[] e:Access.entries(r))if(e[1].equals("choice")&&!e[3].isEmpty())p.values.put(e[0],e[3]);
+    state().values.put("paused",true);
+    check(Access.pausedNow()&&Access.pauseRequested()&&!Access.autoPaused(),"paused state not read");
+    for(String[] e:Access.entries(r)){
+      if(e[1].equals("switch")){
+        boolean keep=kept.contains(e[0]+",");
+        check(Settings.isEnabled(e[0])==(keep&&stored.get(e[0])),e[0]+": paused reading "+Settings.isEnabled(e[0])+" keep="+keep);
+        check(Access.stored(e[0])==stored.get(e[0]),e[0]+": pausing changed the stored value");
+      }else if(e[1].equals("choice")&&!e[3].isEmpty()){
+        check(Access.getString(e[0]).equals(e[3]),e[0]+": a choice changed while paused");
+      }
+    }
+    // Unpausing applies from the next start: this process stays paused and needs a restart.
+    Access.setPaused(false);
+    check(Access.pausedNow()&&!Access.pauseRequested(),"unpausing applied at once");
+    check(Access.restartNeeded(),"no restart offered after unpausing");
+    for(String[] e:Access.entries(r))if(e[1].equals("switch")&&!kept.contains(e[0]+","))check(!Settings.isEnabled(e[0]),e[0]+" on before the restart");
+    // Reset forgets the pause too.
+    Access.setPaused(true);Access.reset();
+    check(!Access.pauseRequested(),"reset kept the pause");
+    check(p.values.isEmpty(),"reset kept settings: "+p.values);
+  }
+
+  /** Three crashes in a row within a minute of starting pause Lurk; later ones and a minute of running don't count. */
+  static void crash()throws Exception{
+    Context context=new Context();
+    install(registry(entry("block_ads","switch","true",null)));
+    List<Throwable> passedOn=new ArrayList<>();
+    Thread.setDefaultUncaughtExceptionHandler((t,e)->passedOn.add(e));
+    android.os.Process.start=100_000;android.os.SystemClock.now=105_000;
+    Settings.init(context);
+    Thread.UncaughtExceptionHandler guard=Thread.getDefaultUncaughtExceptionHandler();
+    check(guard!=null&&!guard.getClass().getName().startsWith("SettingsProbe"),"no crash guard installed");
+    Settings.init(context);
+    check(Thread.getDefaultUncaughtExceptionHandler()==guard,"a second init wrapped the guard again");
+    Preferences s=state();
+    RuntimeException boom=new RuntimeException("boom");
+    guard.uncaughtException(Thread.currentThread(),boom);
+    check(passedOn.size()==1&&passedOn.get(0)==boom,"the crash wasn't passed on");
+    check(s.getInt("crash_streak",0)==1&&!Access.pauseRequested(),"first early crash: "+s.values);
+    guard.uncaughtException(Thread.currentThread(),boom);
+    check(s.getInt("crash_streak",0)==2&&!Access.pauseRequested(),"second early crash: "+s.values);
+    // A crash after the first minute doesn't count, and doesn't end the streak either.
+    android.os.SystemClock.now=100_000+60_000;
+    guard.uncaughtException(Thread.currentThread(),boom);
+    check(s.getInt("crash_streak",0)==2,"a late crash counted");
+    android.os.SystemClock.now=110_000;
+    guard.uncaughtException(Thread.currentThread(),boom);
+    check(Access.pauseRequested()&&Access.autoPaused(),"three early crashes didn't pause: "+s.values);
+    check(s.getInt("crash_streak",0)==0,"the streak survived the pause");
+    check(passedOn.size()==4,"crashes weren't all passed on");
+    check(android.util.Log.lines.stream().anyMatch(l->l.startsWith("W/lurk: Lurk paused itself")),"auto-pause not logged");
+    // Turning Pause Lurk off forgets that Lurk paused itself.
+    Access.setPaused(false);
+    check(!Access.autoPaused()&&!Access.pauseRequested(),"unpausing kept the auto-pause");
+    // A run that lasts a minute ends the streak (the main-thread callback init scheduled).
+    s.edit().putInt("crash_streak",2).apply();
+    android.os.Handler.advance(60_000);
+    check(s.getInt("crash_streak",-1)==0,"a minute of running didn't end the streak");
+    check(android.os.Process.killed==0,"the guard killed the process itself despite a previous handler");
+  }
+
+  /** The restart bar: a restart-flagged setting or Pause Lurk differs from what the process started with. */
+  static void restart(String json)throws Exception{
+    Object r=install(json);
+    String flagged=null,plain=null;
+    for(String[] e:Access.entries(r)){
+      if(!e[1].equals("switch"))continue;
+      boolean restart=Boolean.parseBoolean(e[4]);
+      if(restart&&flagged==null)flagged=e[0];
+      if(!restart&&plain==null)plain=e[0];
+    }
+    check(!Access.restartNeeded(),"restart offered before any change");
+    if(plain!=null){Access.putBoolean(plain,!Access.stored(plain));check(!Access.restartNeeded(),plain+" isn't read at startup");}
+    if(flagged!=null){
+      boolean was=Access.stored(flagged);
+      Access.putBoolean(flagged,!was);check(Access.restartNeeded(),flagged+" changed without a restart offered");
+      Access.putBoolean(flagged,was);check(!Access.restartNeeded(),flagged+" changed back, restart still offered");
+    }
+    Access.setPaused(true);check(Access.restartNeeded(),"pausing needs a restart");
+    Access.setPaused(false);check(!Access.restartNeeded(),"unpausing again still offers a restart");
+  }
+
+  /** Export writes every setting; importing the same file changes nothing; changes, bad values and unknown keys are listed. */
+  @SuppressWarnings("unchecked")
+  static void backup(String json)throws Exception{
+    Object r=install(json);
+    Map<String,String> before=Access.values();
+    String file=Access.export("app.test");
+    org.json.JSONObject root=new org.json.JSONObject(file);
+    check(root.getInt("lurk")==1&&root.getString("app").length()>0&&root.getString("package").equals("app.test"),"export header: "+file);
+    org.json.JSONObject settings=root.getJSONObject("settings");
+    check(settings.length()==Access.size(r),"export left settings out");
+    for(String[] e:Access.entries(r)){
+      Object v=settings.get(e[0]);
+      check(e[1].equals("switch")?v instanceof Boolean:v instanceof String,e[0]+": exported as "+v.getClass().getSimpleName());
+    }
+    Object[] same=(Object[])Access.plan(file);
+    check(((Map<String,String>)same[1]).isEmpty()&&(Integer)same[3]==Access.size(r)&&((List<String>)same[4]).isEmpty(),"re-importing an export changes something");
+    // Change everything that can change, then import the export: every value comes back.
+    Map<String,String> other=new LinkedHashMap<>();
+    for(String[] e:Access.entries(r)){
+      if(e[1].equals("switch"))other.put(e[0],String.valueOf(!Boolean.parseBoolean(before.get(e[0]))));
+      else if(e[1].equals("choice")&&!e[3].isEmpty())other.put(e[0],before.get(e[0]).equals(e[3])?e[2]:e[3]);
+      else if(e[1].equals("text"))other.put(e[0],"lurk test");
+    }
+    Access.putAll(other);
+    check(!Access.values().equals(before),"putAll changed nothing");
+    Object[] back=(Object[])Access.plan(file);
+    Map<String,String> changes=(Map<String,String>)back[1];
+    check(changes.size()==other.size(),"import would change "+changes.size()+" of "+other.size());
+    check(((List<String>)back[2]).size()==changes.size(),"a change has no line");
+    Access.putAll(changes);
+    check(Access.values().equals(before),"export, change, import didn't restore every value");
+    // Values a setting can't take and keys this build doesn't have are left out, and say so.
+    String firstSwitch=null,firstChoice=null;
+    for(String[] e:Access.entries(r)){if(firstSwitch==null&&e[1].equals("switch"))firstSwitch=e[0];if(firstChoice==null&&e[1].equals("choice"))firstChoice=e[0];}
+    settings.put(firstSwitch,"maybe");
+    if(firstChoice!=null)settings.put(firstChoice,"no such choice");
+    settings.put("lurk_test_unknown",true);
+    Object[] odd=(Object[])Access.plan(root.toString());
+    List<String> skipped=(List<String>)odd[4];
+    check(skipped.contains("lurk_test_unknown"),"unknown key not listed: "+skipped);
+    check(skipped.size()==(firstChoice==null?2:3),"bad values not listed: "+skipped);
+    check(((Map<String,String>)odd[1]).isEmpty(),"bad values would change something");
+    // Strings for switches and numbers for choices are what people type when editing a file.
+    settings=new org.json.JSONObject().put(firstSwitch,String.valueOf(!Boolean.parseBoolean(before.get(firstSwitch))).toUpperCase());
+    Object[] typed=(Object[])Access.plan(new org.json.JSONObject().put("lurk",1).put("settings",settings).toString());
+    check(((Map<String,String>)typed[1]).size()==1,"\"TRUE\"/\"FALSE\" for a switch not taken");
+    for(String bad:new String[]{"","[]","{}","{\"lurk\":2,\"settings\":{}}","{\"lurk\":1}","not json"}){
+      try{Access.plan(bad);check(false,"not a settings file, but read: "+bad);}catch(org.json.JSONException expected){checks++;}
+    }
+  }
+
+  /** The bug report URL: the form, the app, versions, device and every switch, never what was typed into a list. */
+  static void report(String json)throws Exception{
+    Object r=install(json);
+    String text=null;
+    for(String[] e:Access.entries(r))if(e[1].equals("text")){text=e[0];Access.putString(e[0],"secretword, other");}
+    String url=Access.report(false,"31.7.0","Android 16 (API 36), Google Pixel Test");
+    check(url.startsWith("https://github.com/jordanwoodson/lurk-morphe-patches/issues/new?template=bug_report.yml&"),"form URL: "+url);
+    check(url.length()<=7000,"report URL too long: "+url.length());
+    Map<String,String> query=new HashMap<>();
+    for(String part:url.substring(url.indexOf('?')+1).split("&")){
+      String[] kv=part.split("=",2);
+      check(!kv[1].contains("+")&&!kv[1].contains(" "),"unencoded "+kv[0]);
+      query.put(kv[0],java.net.URLDecoder.decode(kv[1],"UTF-8"));
+    }
+    String app=new org.json.JSONObject(json).getString("app");
+    check(query.get("app").equals(app),"app field: "+query.get("app"));
+    check(query.get("versions").startsWith(app+" 31.7.0, Lurk v1.12.0"),"versions field: "+query.get("versions"));
+    check(query.get("device").equals("Android 16 (API 36), Google Pixel Test"),"device field");
+    String patches=query.get("patches");
+    for(String[] e:Access.entries(r)){
+      if(!e[1].equals("switch"))continue;
+      String list=Access.stored(e[0])?"- On: ":"- Off: ";
+      String line=patches.substring(patches.indexOf(list));
+      line=line.substring(0,line.indexOf('\n'));
+      check((", "+line.substring(list.length())+",").contains(", "+e[0]+","),e[0]+" not listed under "+list.trim());
+    }
+    check(!url.contains("secretword")&&!patches.contains("secretword"),"a list's words went into the report");
+    if(text!=null)check(patches.contains("Lists filled in: ")&&patches.contains(text),"filled-in list not named");
+    check(patches.contains("- Pause Lurk: off"),"pause state missing");
+    check(Access.reportSettings(true).startsWith("Patches selected"),"changed-only variant");
+  }
+
+  /** The launcher shortcut: added once, updated when its label or the app/Lurk version changed. */
+  static void shortcut()throws Exception{
+    android.content.pm.ShortcutManager manager=new android.content.pm.ShortcutManager();
+    Context.services=type->type==android.content.pm.ShortcutManager.class?manager:null;
+    Access.context(new Context());
+    install(registry(entry("block_ads","switch","true",null)));
+    Access.publishShortcut();
+    check(manager.added==1&&manager.updated==0,"first start: added "+manager.added+" updated "+manager.updated);
+    check(manager.dynamic.get(0).getShortLabel().toString().equals("Lurk")&&manager.dynamic.get(0).getLongLabel().toString().equals("Lurk settings"),"labels");
+    Access.publishShortcut();
+    check(manager.added==1&&manager.updated==0,"an unchanged shortcut was published again");
+    manager.dynamic.get(0).longLabel="Lurk settings (old)";
+    Access.publishShortcut();
+    check(manager.updated==1&&manager.dynamic.get(0).getLongLabel().toString().equals("Lurk settings"),"an old label wasn't refreshed");
+    android.content.pm.PackageManager.versionName="31.8.0";
+    Access.publishShortcut();
+    check(manager.updated==2,"an app update didn't refresh the shortcut");
+    Access.publishShortcut();
+    check(manager.added==1&&manager.updated==2,"refreshed again without a change");
+  }
+
   static void unknownIsOff(){
     for(String key:new String[]{"lurk_test_unregistered","lurk_test_choice",""}){
       check(!Settings.isRegistered(key),key+" registered");
@@ -431,6 +688,9 @@ def check_layout(app, root):
         assert isinstance(entry['default'], str), f'{app} {key}: default'
         if entry['type'] == 'switch':
             assert entry['default'] in ('true', 'false'), f'{app} {key}: switch default'
+        else:
+            assert 'keep' not in entry, f'{app} {key}: only a switch can be kept on while paused'
+        assert entry.get('keep', False) in (True, False), f'{app} {key}: keep flag'
         if entry['type'] == 'choice':
             values = [value for _, value in entry['choices']]
             assert len(values) >= 2 and len(set(values)) == len(values), f'{app} {key}: choices'
@@ -461,7 +721,8 @@ def compare_dump(app, root, dump):
         expected.append('\x1f'.join([
             entry['key'], entry['type'], entry['title'], entry['summary'], entry['section'],
             'null' if entry['parent'] is None else entry['parent'],
-            entry['default'], str(entry['restart']).lower(), '\x1e'.join(label for label, _ in choices),
+            entry['default'], str(entry['restart']).lower(), str(entry.get('keep', False)).lower(),
+            '\x1e'.join(label for label, _ in choices),
             '\x1e'.join(value for _, value in choices)]))
     actual = [line for line in lines[1:] if line]
     for want, got in zip(expected, actual):
@@ -498,10 +759,12 @@ def main(argv):
             fixture = Path(scratch) / f'{app}.json'
             fixture.write_text(text, encoding='utf-8')
             scenarios += [f'registry|{fixture}|{Path(scratch) / (app + ".dump")}', f'defaults|{fixture}',
-                          f'stored|{fixture}', f'nocontext|{fixture}', f'empty|{fixture}']
-        scenarios += ['empty', 'chatfilter', 'logger']
+                          f'stored|{fixture}', f'nocontext|{fixture}', f'empty|{fixture}', f'pause|{fixture}',
+                          f'restart|{fixture}', f'backup|{fixture}', f'report|{fixture}']
+        scenarios += ['empty', 'chatfilter', 'logger', 'crash']
         run('SettingsProbe', ['settings/Settings.java', 'settings/Registry.java', 'settings/ResumedActivityTracker.java',
-                              'Logger.java', 'ChatFilter.java'], PROBE, scenarios, extra=JSON_DOUBLE | ANDROID)
+                              'settings/Backup.java', 'settings/Report.java', 'Logger.java', 'ChatFilter.java'],
+            PROBE, scenarios, extra=JSON_DOUBLE | ANDROID)
         for app, root in roots.items():
             compare_dump(app, root, Path(scratch) / f'{app}.dump')
             print(f'PASS {app}: {len(root["settings"])} settings, layout and Java/Python reading agree')

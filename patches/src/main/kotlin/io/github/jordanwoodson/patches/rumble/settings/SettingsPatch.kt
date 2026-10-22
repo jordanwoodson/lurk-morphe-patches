@@ -62,8 +62,8 @@ val settingsPatch = bytecodePatch(
                             // Launched from the launcher shortcut, it gets a task of its own instead of
                             // joining Rumble's, which may be a picture-in-picture window.
                             setAttribute("android:taskAffinity", "")
-                            // Only for the window shown while it starts; the activity picks a day/night theme.
-                            setAttribute("android:theme", "@android:style/Theme.DeviceDefault.Light.NoActionBar")
+                            // Only for the window shown while it starts (dark, like the apps); the activity picks dark or light.
+                            setAttribute("android:theme", "@android:style/Theme.DeviceDefault.NoActionBar")
                         },
                     )
                 }
