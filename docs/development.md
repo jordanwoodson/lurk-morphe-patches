@@ -34,6 +34,7 @@ Everything regenerable (decompiled code, patched APKs, the emulator, logs) goes 
 |---|---|
 | `patches/src/main/kotlin/io/github/jordanwoodson/patches/<app>/` | Patches for one app, one folder per feature with `<Name>Patch.kt` and its `Fingerprints.kt`. `shared/Constants.kt` holds the app's package, target versions and pinned signing cert. |
 | `patches/.../patches/shared/` | Code shared across apps: extension paths, the settings screen builders. |
+| `patches/.../patches/shared/apps/` | The patches every app has (its hidden settings patch and React Native bundle loader, Lurk icon, Clone app, Change app name, Remove tracking permissions), built from one `LurkApp` per app in `Apps.kt`. The app's folder still declares each of them with its name, description and default; what differs between apps is a `LurkApp` field or a builder parameter. |
 | `extensions/shared/` | Java injected into patched apps (`extensions/shared.mpe`): the Lurk settings screen, `Logger` (tag `lurk`), per-app helpers under `twitch/` and `kick/`. Add `extensions/<app>/` when an app needs its own module. |
 | `tests/<app>/` | Output checks and on-device probes, run through `bin/test-<app>*`. See [Testing](#testing). |
 | `docs/<app>.md` | Per-app notes: what each patch hooks, how it was found, how it was tested. |
