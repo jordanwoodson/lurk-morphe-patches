@@ -16,8 +16,10 @@ KickChat.onPage
 KickChat.onPageDisposed
 KickChat.onMessage
 
-# Third-party emotes
+# Kick's HTTP clients: Third-party emotes, Anonymous chat
 KickHttp.withInterceptor
+
+# Third-party emotes
 KickComposer.afterMain
 KickComposer.afterFile
 CompiledBundle.release

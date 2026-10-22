@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Kick's structural checks, no device needed: the Hermes edits of a patched APK decoded independently (hermes-dec),
-# executed where they matter (Interface patches, Stay on channel, Default video quality), the literal-buffer edits, the
-# JVM Hermes helper probe on the stock bundle, the emitted smali hooks, the player and privacy helpers, and the sources.
+# executed where they matter (Interface patches, Stay on channel, Anonymous chat, Default video quality), the
+# literal-buffer edits, the JVM Hermes helper probe on the stock bundle, the emitted smali hooks, the player and privacy
+# helpers, and the sources.
 # Usage: bin/test-kick-hermes <patched.apk> [stock index.android.bundle]
 # The stock bundle defaults to $MORPHE_WORK/kick/<version>/hermes/index.android.bundle (bin/decompile kick).
 # HERMES_PYTHON names a Python with hermes-dec; by default the mise-installed one (bin/bootstrap) is used.
@@ -45,6 +46,11 @@ if [[ "$keys" == *" stay_on_host "* ]]; then
     run "$hermes_python" -I "$ROOT/tests/kick/verify_hosting.py" "$stock" "$apk"
 else
     note "skipped verify_hosting.py: the APK has no Stay on channel when it hosts"
+fi
+if [[ "$keys" == *" chat_anonymous "* ]]; then
+    run "$hermes_python" -I "$ROOT/tests/kick/verify_chat_config.py" "$stock" "$apk"
+else
+    note "skipped verify_chat_config.py: the APK has no Anonymous chat"
 fi
 if [[ "$keys" == *" default_video_quality "* ]]; then
     run "$hermes_python" -I "$ROOT/tests/kick/verify_quality.py" "$stock" "$apk" --height "${KICK_QUALITY:-1080}"

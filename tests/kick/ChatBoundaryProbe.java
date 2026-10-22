@@ -154,6 +154,57 @@ public final class ChatBoundaryProbe {
         ProbeSupport.check(result==response && proceeds[0]==1,"response identity and one proceed");
         ProbeSupport.check(json.equals(call(body,"string",new Class<?>[]{})),"peek preserves unread response body");
     }
+    /**
+     * Anonymous chat: with its switch on, KickHttp refuses what posts to a chat on Kick's API (a message, a reply or a
+     * quick emote, and a celebration's action) before it reaches the network, and lets everything else through; with
+     * it off (and 7TV off) no interceptor is added.
+     */
+    static void anonymous()throws Exception {
+        if(!ProbeSupport.registered("chat_anonymous")){System.out.println("SKIP: Anonymous chat isn't in this APK");return;}
+        setting("emotes_7tv",false);setting("chat_anonymous",true);
+        Object b=builder();
+        call(c(HTTP),"withInterceptor",new Class<?>[]{c("okhttp3.OkHttpClient$Builder")},b);
+        List<?> interceptors=(List<?>)call(call(b,"build",new Class<?>[]{}),"interceptors",new Class<?>[]{});
+        ProbeSupport.check(interceptors.size()==1,"Anonymous chat adds one interceptor");
+        Object interceptor=interceptors.get(0);
+        Object body=call(c("okhttp3.RequestBody"),"create",new Class<?>[]{c("okhttp3.MediaType"),String.class},null,"{}");
+        String[][] cases={
+            {"POST","https://kick.com/api/v2/messages/send/123","blocked"},
+            {"POST","https://web.kick.com/api/v2/messages/send/123","blocked"},
+            {"POST","https://kick.com/api/v2/chatrooms/5/celebrations/abc/action","blocked"},
+            {"GET","https://kick.com/api/v2/messages/send/123","sent"},
+            {"POST","https://kick.com/api/v2/channels/xqc/follow","sent"},
+            {"POST","https://example.com/api/v2/messages/send/123","sent"},
+            {"POST","https://mobile.kick.com/api/v1/stream/1/playback","sent"},
+        };
+        for(String[] each:cases){
+            Object rb=c("okhttp3.Request$Builder").getConstructor().newInstance();
+            call(rb,"url",new Class<?>[]{String.class},each[1]);
+            call(rb,"method",new Class<?>[]{String.class,c("okhttp3.RequestBody")},each[0],each[0].equals("GET")?null:body);
+            Object request=call(rb,"build",new Class<?>[]{});
+            int[] proceeds={0};
+            Object chain=Proxy.newProxyInstance(c("okhttp3.Interceptor$Chain").getClassLoader(),new Class<?>[]{c("okhttp3.Interceptor$Chain")},(p,m,a)->{
+                if(m.getName().equals("request"))return request;
+                if(m.getName().equals("proceed")){proceeds[0]++;return null;}
+                throw new AssertionError("unexpected chain call " + m);
+            });
+            String outcome;
+            try{call(interceptor,"intercept",new Class<?>[]{c("okhttp3.Interceptor$Chain")},chain);outcome="sent";}
+            catch(InvocationTargetException e){
+                ProbeSupport.check(e.getCause() instanceof java.io.IOException,"a refused send fails as I/O: "+e.getCause());
+                outcome="blocked";
+            }
+            ProbeSupport.check(outcome.equals(each[2]) && proceeds[0]==(outcome.equals("sent")?1:0),
+                "Anonymous chat: "+each[0]+" "+each[1]+" was "+outcome+" with "+proceeds[0]+" proceeds");
+        }
+        setting("chat_anonymous",false);
+        b=builder();
+        call(c(HTTP),"withInterceptor",new Class<?>[]{c("okhttp3.OkHttpClient$Builder")},b);
+        interceptors=(List<?>)call(call(b,"build",new Class<?>[]{}),"interceptors",new Class<?>[]{});
+        ProbeSupport.check(interceptors.isEmpty(),"Anonymous chat off: no interceptor");
+        setting("emotes_7tv",true);
+        System.out.println("PASS: Anonymous chat refuses chat sends on Kick's API and passes everything else; off adds nothing");
+    }
     public static void main(String[] args){ProbeSupport.run("Kick native response-to-page options",()->{
         try(ZipFile apk=new ZipFile(args[0])){
             String script=new String(apk.getInputStream(apk.getEntry("assets/lurk-chat.js")).readAllBytes(),StandardCharsets.UTF_8);
@@ -207,5 +258,6 @@ public final class ChatBoundaryProbe {
         lifecycle();
         keywords();
         look();
+        anonymous();
     });}
 }

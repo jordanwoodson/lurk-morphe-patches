@@ -263,6 +263,7 @@ details and validation follow.
 | Chat timestamps | Yes | Off | The time next to each chat message, signed out too. |
 | Chat text size | Yes | Kick's size; Compact chat, off | Chat text from 12 to 24 px; less space between messages. |
 | Chat keywords | Yes | Off; mentions on, vibration off, lists empty | Tints messages that mention you or contain highlight words, optionally vibrating; hides blocked words and users. |
+| Anonymous chat | Yes | Off | The chat page opens without the sign-in token and the account, as when signed out; sending chat messages is refused. |
 
 The second batch follows one switch policy, the same in all three apps: every patch whose
 effect can be decided at run time has a Lurk setting that turns it fully off, and a new
@@ -774,6 +775,52 @@ Mentions need an account and were checked on ART only: `bin/test-kick-chat` runs
 and `ChatFilter` with a batch from a page whose config names a signed-in user (blocked by name and
 by handle, blocked word, mention, own message, highlight words and phrases, a malformed ID, a stale
 generation and a foreign origin), and `test_chat_page.py` checks the page side in headless Chrome.
+
+### Anonymous chat
+
+The chat page's config (see [Show deleted messages](#show-deleted-messages)) is built by an anonymous function in
+`HTMLChatWrapper`, found as the one that reads `getRequestBaseHeaders` and `searchParams` and loads
+`https://chat.mobile.kick.com`. Besides the chatroom and the chat settings it carries three things from the app:
+`headers`, from `getRequestBaseHeaders()`, which are the app's fixed request headers (`Cache-Control`, Kick's
+`User-Agent`, `x-app-platform`, `x-app-version`, `x-kick-app` and a constant `x-req-trace`) and nothing about the
+account; `token`, the secure store's sign-in token; and `selfUser`, `{id, slug, username}`, built only when there is
+an account. The page keeps the token (`setToken`) and sends it as a Bearer token on its `authenticated` requests: the
+realtime connection and channel tokens (`/api/v1/realtime/auth/connection` and `/channel`) and Pusher's
+`/broadcasting/auth`, so its connection to Kick's chat is the account's. The config is in the page's address, so the
+token and the account also reach `chat.mobile.kick.com` with every chat open.
+
+With `chat_anonymous` on, two instructions of the config builder load undefined instead: the token's store into the
+literal (its slot keeps the literal's `null`) and the account's load before the `selfUser` branch (the branch then
+leaves `selfUser` undefined, which `JSON.stringify` drops). That is the config a signed-out app builds; `headers` and
+everything else stay. The edit is one 8-byte window, found by its instructions (the token slot's store on the
+literal, the environment load the `JmpFalse` tests, and the `selfUser` store it jumps to), not by register numbers.
+It is a Hermes switch, so it applies after a restart.
+
+Sending is disabled with it, as on Twitch: the app sends chat itself, signed in, through its own API, which would put
+your name in the chat you read as a guest. `KickHttp`, the OkHttp interceptor that every React Native client gets from
+`OkHttpClientProvider.createClientBuilder()` (shared with 7TV emotes), refuses `POST` requests to Kick's
+`/api/v2/messages/send/{chatroom}` (messages, replies and quick emotes) and
+`/api/v2/chatrooms/{id}/celebrations/{id}/action` (which can post a celebration message) with an `IOException`, before
+they reach the network. React Native's fetch then rejects as on a lost connection and Kick's send handler gets
+an error; what Kick shows for it couldn't be seen without an account. The interceptor is added when Kick builds its
+clients at start, so this also applies after a restart, together with the config edit. Mentions of you aren't
+highlighted while it's on, by Kick's page or by Chat keywords, since both take your name from `selfUser`.
+
+What it doesn't change: the app's own realtime connection, which subscribes to the channel's chatroom events for the
+stream screen (hosting, subs and gifts) and authenticates with the account, and the player's playback request
+(`postPlayerTelemetry`, which returns the stream URLs), both still identify you to Kick. Whether Kick's chatter list
+comes from the chat page's connection, and so leaves you off it, couldn't be checked: there is no Kick account to
+look at the list with, so the signed-in effect is known from the code only, and the description says so.
+
+Checked: `verify_chat_config.py` (run by `bin/test-kick-hermes`) executes the config builder from its object literal
+to `JSON.stringify` with the APK's edit off and on: off, the config carries the token, `selfUser` and the headers; on,
+the token is `null`, `selfUser` absent, the headers and every other value unchanged, and the JSON holds neither the
+token nor the account, as the stock code builds it signed out. `bin/test-kick-chat` runs the real `KickHttp` on ART:
+with the switch on it refuses message, reply and celebration posts on `kick.com` and its subdomains without calling
+the network, and passes a `GET` of the same path, other `POST`s, other hosts and the playback request; off, no
+interceptor is added. On the emulator, signed out, on a live channel with about 130,000 viewers: with the switch on and
+Kick restarted (37 Hermes edits selected), chat loaded and drew new messages, and the page's config, read through the
+WebView debugger, was the same as with the switch off (`token` null, no `selfUser`), as a signed-out app's is.
 
 ### Third-party emotes
 
