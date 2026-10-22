@@ -950,6 +950,10 @@ for the target methods:
 - `bin/test-twitch-interface-hermes <stock.bundle> [patched.bundle]`: production transforms and
   actual caller instructions for the two-tab model/pager, initial selection, swipe
   bounds, explicit native clip callbacks and empty-feed initial-effect deduplication.
+- `bash bin/test-twitch-emotes <patched.apk>`: the emote picker presenter's section building and the
+  autocomplete filter with *Emotes in the picker* on and off (`EmotePickerArtProbe`).
+- `bash bin/test-twitch-drops <patched.apk>`: *Auto-claim Drops* through the drops notification's own Claim
+  handler, once per drop, only for claimable drops (`DropsArtProbe`).
 
 The Python verifiers under `tests/twitch/` inspect emitted DEX and use the original
 JavaScript/Hermes as behavioral inputs. They check callback completion, untouched
