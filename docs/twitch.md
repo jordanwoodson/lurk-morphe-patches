@@ -83,7 +83,7 @@ ReVive, bttv-android, TwitchMod, Xtra, Twire and Frosty.
 | Chat timestamps | Chat timestamps |
 | Highlights and blacklist | Chat keywords |
 | Chat appearance | Chat appearance |
-| 7TV/BTTV/FFZ emotes | Third-party emotes (opt-in) |
+| 7TV/BTTV/FFZ emotes | Third-party emotes (opt-in), in the emote picker and autocomplete too |
 | Third-party badges and pronouns | Third-party badges, with pronouns (opt-in) |
 | Recent chat history | Declined: Twitch already loads it |
 | Danmaku | Chat overlay (opt-in) |
@@ -500,6 +500,30 @@ mounted rows. Last release, all-off and module disposal stop polling. Lists are 
 failed/missing data leaves codes as text. Queues, per-room caches and snapshots are bounded. Queued
 work rechecks switches and surviving owners before each new request, preserving shared native demand.
 
+*Emotes in the picker* (`emotes_picker`, off by default) puts the same emotes in the native emote picker and
+the chat input's autocomplete. The picker's presenter (`EmotePickerPresenter`, found by its
+`createEmotePickerState` reducer name) combines the user's emote sets with the channel's in one Function3 case
+that R8 merged into a shared lambda class; the case is found by its argument casts (presenter, `Tuid`, `List`,
+two `Optional`s). Right after the `List` cast, `TwitchEmotes.pickerSets` appends one `OwnerEmoteSet` per
+service, owned by an `EmoteOwner` with a negative ID no account has and the service's name as login and
+display name. Twitch then groups it like any channel's set and builds the section itself: a header with the
+service's name (no avatar), the emote items made with its own `D2`, and its own tap handling, which inserts the
+code. The emote objects are the `WithOwner` ones chat's matcher uses, so their images go through the same URL
+hook. Autocomplete's filter asks its current source (chatters, emotes or commands) for matches through one
+interface call; that call goes through `TwitchEmotes.autocomplete`, which makes the same call and, for the emote
+source only, merges in the services' emotes of the channel whose chat connected last: codes starting with the
+typed text after Twitch's own, then codes containing it, without codes Twitch already has. Both read the cached
+lists chat loads; no other request is made. The constructors, the source's interface methods and the emote's
+code getter are reached through bridge stubs filled at patch time.
+
+Signed out, Twitch shows "Login to Chat" in place of the chat input, so neither the picker nor autocomplete can
+be opened on the emulator. `bin/test-twitch-emotes <apk>` (`EmotePickerArtProbe`) runs the real presenter case
+with Lurk's cache filled as if the services had answered: with the switch on it builds a "7TV" and a
+"BetterTTV" section holding the channel's and global emotes, with it off (or no service on) none. It runs the
+real autocomplete filter over Twitch's emote source for `:pe` and checks the order and the duplicate rule, and
+that a chatter source keeps its own answer. Drawing the sections and inserting a tapped emote are Twitch's
+unchanged code but were not seen in the app.
+
 Badges download FrankerFaceZ's and Chatterino's public lists of badge holders and match them on the
 device, so no chatter is looked up. Badge images come from the https addresses in those lists:
 FrankerFaceZ's are on cdn.frankerfacez.com; Chatterino's are on fourtf.com today, but the host is
@@ -788,7 +812,8 @@ patched APK as `assets/lurk/locators.json`:
   `twitch.show_deleted.name_span`, `twitch.mute_stitched_ads.native_player`/`root_view`,
   `twitch.block_client_ads.request`, `twitch.disable_analytics.crashlytics_permission`,
   `twitch.block_cookie_notice.options_constructor`, `twitch.hide_chat_highlights.dispatch`/`highlight_*`,
-  `twitch.hide_clips.home_tabs` and `twitch.hide_subscription_upsells.subscribe_renderer`/`turbo_dialog_route`.
+  `twitch.hide_clips.home_tabs`, `twitch.hide_subscription_upsells.subscribe_renderer`/`turbo_dialog_route` and
+  `twitch.emote_picker.section`/`autocomplete_map`/`autocomplete_order`/`autocomplete_order_type`.
 
 `ChatArtProbe`, `AdsProbe`, `PrivacyAdsProbe` and `HighlightsArtProbe` read the file through
 `ProbeLocators.java`, and `verify_privacy.py` and `verify_interface_emitted.py` through `locators.py`;

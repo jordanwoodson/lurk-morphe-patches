@@ -114,6 +114,10 @@ TwitchEmotes.onChatChannel
 TwitchEmotes.rnFrame
 TwitchEmotes.url
 
+# if emotes_picker
+TwitchEmotes.autocomplete
+TwitchEmotes.pickerSets
+
 # if badges_ffz
 TwitchBadges.badges
 
