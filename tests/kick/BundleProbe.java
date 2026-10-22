@@ -24,6 +24,21 @@ public final class BundleProbe {
     private static final Map<String, Boolean> switches = new HashMap<>();
     private static final Map<String, String> choices = new HashMap<>();
 
+    /** Names the patches matched, from the APK's assets/lurk/locators.json (Locators.record); empty without it. */
+    private static JSONObject locators = new JSONObject();
+
+    /**
+     * The class and method name of the Disable analytics hook recorded as kick.disable_analytics.[name], or the given
+     * fallback while the APK has no locator for it.
+     */
+    private static String[] locate(String name, String className, String method) {
+        String value = locators.optString("kick.disable_analytics." + name, "");
+        if (value.isEmpty()) return new String[]{className, method};
+        java.util.regex.Matcher reference = java.util.regex.Pattern.compile("L([^;]+);->([^(]+)\\(").matcher(value);
+        check(reference.lookingAt(), "Malformed locator " + name + ": " + value);
+        return new String[]{reference.group(1).replace('/', '.'), reference.group(2)};
+    }
+
     private static void check(boolean value, String message) {
         if (!value) throw new AssertionError(message);
     }
@@ -62,10 +77,13 @@ public final class BundleProbe {
             Object unsafe = unsafeClass.getMethod("getUnsafe").invoke(null);
             Method allocate = unsafeClass.getMethod("allocateInstance", Class.class);
             Class<?> parameters = Class.forName("android.app.job.JobParameters");
-            for (String name : new String[]{"SessionPayloadJobService", "InsiderAmplificationService"}) {
-                Class<?> type = Class.forName("com.useinsider.insider." + name);
+            for (String[] job : new String[][]{
+                    locate("insider_session_upload_job", "com.useinsider.insider.SessionPayloadJobService", "onStartJob"),
+                    locate("insider_amplification_job", "com.useinsider.insider.InsiderAmplificationService", "onStartJob")}) {
+                Class<?> type = Class.forName(job[0]);
+                String name = type.getSimpleName();
                 Object service = allocate.invoke(unsafe, type);
-                Object result = type.getMethod("onStartJob", parameters).invoke(service, new Object[]{null});
+                Object result = type.getMethod(job[1], parameters).invoke(service, new Object[]{null});
                 check(Boolean.FALSE.equals(result), name + " did not complete synchronously");
             }
             System.out.println("PASS: two actual Insider job guards complete synchronously without SDK dispatch");
@@ -94,25 +112,31 @@ public final class BundleProbe {
         Object expo = Proxy.newProxyInstance(expoPromise.getClassLoader(), new Class<?>[]{expoPromise},
             (proxy, method, values) -> { calls.add(method.getName() + Arrays.toString(values)); return null; });
 
-        Class<?> firebase = Class.forName("io.invertase.firebase.analytics.NativeRNFBTurboAnalytics");
-        firebase.getMethod("logEvent", String.class, readableMap, reactPromise)
+        String[] logEvent = locate("firebase_log_event", "io.invertase.firebase.analytics.NativeRNFBTurboAnalytics", "logEvent");
+        Class<?> firebase = Class.forName(logEvent[0]);
+        firebase.getMethod(logEvent[1], String.class, readableMap, reactPromise)
             .invoke(allocate.invoke(unsafe, firebase), "screen_view", null, promise);
         check(calls.equals(List.of("resolve[null]")), "Firebase logEvent: " + calls);
         calls.clear();
-        Class<?> datadog = Class.forName("com.datadog.reactnative.DdSdkImplementation");
-        datadog.getMethod("initialize", readableMap, reactPromise).invoke(allocate.invoke(unsafe, datadog), null, promise);
+        String[] initialize = locate("datadog_initialize", "com.datadog.reactnative.DdSdkImplementation", "initialize");
+        Class<?> datadog = Class.forName(initialize[0]);
+        datadog.getMethod(initialize[1], readableMap, reactPromise).invoke(allocate.invoke(unsafe, datadog), null, promise);
         check(calls.equals(List.of("resolve[null]")), "Datadog initialize: " + calls);
         calls.clear();
-        Class<?> pal = Class.forName("com.kick.mobile.kickivsplayerv2.PalSDKModuleBridge");
-        pal.getMethod("generateNonce", Context.class, Class.forName("com.kick.mobile.kickivsplayerv2.PalNonceRequestConfig"),
+        String[] nonce = locate("pal_generate_nonce", "com.kick.mobile.kickivsplayerv2.PalSDKModuleBridge", "generateNonce");
+        Class<?> pal = Class.forName(nonce[0]);
+        pal.getMethod(nonce[1], Context.class, Class.forName("com.kick.mobile.kickivsplayerv2.PalNonceRequestConfig"),
             expoPromise).invoke(allocate.invoke(unsafe, pal), null, null, expo);
         check(calls.size() == 1 && calls.get(0).startsWith("resolve[{") && calls.get(0).contains("sdkAvailable=false"),
             "PAL nonce: " + calls);
         calls.clear();
 
-        Class<?> fpjs = Class.forName("com.fingerprintjs.reactnative.RNFingerprintjsProModule");
-        Object module = allocate.invoke(unsafe, fpjs);
-        for (String name : new String[]{"getVisitorDataWithTimeout", "getVisitorIdWithTimeout"}) {
+        for (String[] visitor : new String[][]{
+                locate("fingerprintjs_visitor_data", "com.fingerprintjs.reactnative.RNFingerprintjsProModule", "getVisitorDataWithTimeout"),
+                locate("fingerprintjs_visitor_id", "com.fingerprintjs.reactnative.RNFingerprintjsProModule", "getVisitorIdWithTimeout")}) {
+            Class<?> fpjs = Class.forName(visitor[0]);
+            Object module = allocate.invoke(unsafe, fpjs);
+            String name = visitor[1];
             Method method = fpjs.getMethod(name, readableMap, String.class, Integer.class, reactPromise);
             switches.put("block_fingerprinting", false);
             method.invoke(module, null, null, null, promise);
@@ -197,6 +221,12 @@ public final class BundleProbe {
         directory.mkdirs();
         AssetManager assets = AssetManager.class.getDeclaredConstructor().newInstance();
         AssetManager.class.getMethod("addAssetPath", String.class).invoke(assets, args[0]);
+        try {
+            locators = new JSONObject(new String(read(assets, "lurk/locators.json"), "UTF-8"));
+            System.out.println("Locators: " + locators.length() + " names from the APK");
+        } catch (java.io.IOException absent) {
+            System.out.println("Locators: no assets/lurk/locators.json, using the names BundleProbe knows");
+        }
         byte[] embedded = read(assets, "index.android.bundle");
         JSONObject manifest = new JSONObject(new String(read(assets, "lurk-hermes.json"), "UTF-8"));
         check(stock.equals(manifest.getString("sourceSha256")), "Unexpected source hash");

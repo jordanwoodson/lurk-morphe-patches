@@ -3,6 +3,8 @@ package io.github.jordanwoodson.patches.kick.analytics
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
+import app.morphe.patcher.Fingerprint
+import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.resourcePatch
@@ -13,6 +15,7 @@ import io.github.jordanwoodson.patches.kick.settings.kickMatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.settings.kickSettingsPatch
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.shared.requireLowRegisters
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -43,6 +46,14 @@ private val firebaseStartsDisabledPatch = resourcePatch {
     }
 }
 
+/**
+ * The matched method, recorded as the locator `kick.disable_analytics.<name>`: tests/kick/BundleProbe.java runs these
+ * methods on ART and reads their classes and names from the patched APK's assets/lurk/locators.json.
+ */
+context(context: BytecodePatchContext)
+private fun Fingerprint.located(description: String, name: String) =
+    kickMatch(description).method.also { Locators.record("kick.disable_analytics.$name", it) }
+
 @Suppress("unused")
 val disableAnalyticsPatch = bytecodePatch(
     name = "Disable analytics",
@@ -60,7 +71,7 @@ val disableAnalyticsPatch = bytecodePatch(
     execute {
         // Resolve the original React Native completion contract, without dispatching an event task. The method has
         // one local, so the promise stays in its parameter register: refuse a version where that is above v15.
-        FirebaseEventFingerprint.kickMatch("Firebase event bridge").method.apply {
+        FirebaseEventFingerprint.located("Firebase event bridge", "firebase_log_event").apply {
             requireLowRegisters("Firebase event bridge", parameterRegister(3))
             addInstructionsIfEnabled(KEY, """
                 const/4 v0, 0x0
@@ -91,20 +102,20 @@ val disableAnalyticsPatch = bytecodePatch(
             InsiderSessionJobFingerprint to "Insider session upload job",
             InsiderAmplificationJobFingerprint to "Insider amplification job",
         ).forEach { (fingerprint, description) ->
-            fingerprint.kickMatch(description).method.addInstructionsIfEnabled(KEY, """
+            fingerprint.located(description, description.lowercase().replace(' ', '_')).addInstructionsIfEnabled(KEY, """
                 const/4 v0, 0x0
                 return v0
             """)
         }
         // The promise is copied next to the value, so the call never depends on how many locals Datadog adds.
-        DatadogBridgeFingerprint.kickMatch("Datadog React initialization").method.addInstructionsIfEnabled(KEY, """
+        DatadogBridgeFingerprint.located("Datadog React initialization", "datadog_initialize").addInstructionsIfEnabled(KEY, """
             move-object/from16 v0, p2
             const/4 v1, 0x0
             invoke-interface { v0, v1 }, $REACT_PROMISE->resolve(Ljava/lang/Object;)V
             return-void
         """, locals = 2)
         // Hermes already handles this unavailable result. An unresolved Promise blocks its playback payload.
-        PalNonceFingerprint.kickMatch("PAL nonce bridge").method.apply {
+        PalNonceFingerprint.located("PAL nonce bridge", "pal_generate_nonce").apply {
             requireLowRegisters("PAL nonce bridge", parameterRegister(3))
             addInstructionsIfEnabled(KEY, """
                 invoke-static { }, $PRIVACY->unavailablePalNonce()Ljava/util/Map;
@@ -138,7 +149,7 @@ val disableAnalyticsPatch = bytecodePatch(
         // points keep the promise in p4 after seven locals: copy it low.
         listOf(FingerprintDataFingerprint to "FingerprintJS visitor data", FingerprintIdFingerprint to "FingerprintJS visitor ID")
             .forEach { (fingerprint, description) ->
-                fingerprint.kickMatch(description).method.apply {
+                fingerprint.located(description, description.lowercase().replace(' ', '_')).apply {
                     requireLocals(3)
                     addInstructionsWithLabels(0, """
                         invoke-static { }, $PRIVACY->blockFingerprint()Z

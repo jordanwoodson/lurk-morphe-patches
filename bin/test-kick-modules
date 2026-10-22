@@ -5,13 +5,13 @@ from pathlib import Path
 import subprocess
 import sys
 
-if len(sys.argv) != 2 or not Path(sys.argv[1]).is_file():
-    raise SystemExit('usage: bin/test-kick-modules <stock index.android.bundle>')
+if len(sys.argv) not in (2, 3) or not all(Path(path).is_file() for path in sys.argv[1:]):
+    raise SystemExit('usage: bin/test-kick-modules <stock index.android.bundle> [patched.apk with assets/lurk/locators.json]')
 root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(root / 'tests/kick'))
 from kotlin_probe import compile_kotlin  # noqa: E402
 
 work = Path(os.environ.get('MORPHE_WORK', Path.home() / 'build/lurk-morphe-patches')) / 'tests/kick-modules'
 classpath = compile_kotlin(work, [root / 'tests/kick/ModuleProbe.kt'])
-subprocess.run(['java', '-cp', classpath, 'io.github.jordanwoodson.patches.kick.shared.ModuleProbeKt', sys.argv[1]],
+subprocess.run(['java', '-cp', classpath, 'io.github.jordanwoodson.patches.kick.shared.ModuleProbeKt', *sys.argv[1:]],
                check=True)

@@ -772,6 +772,19 @@ ANDROID_SERIAL=emulator-5580 bin/test-kick "$MORPHE_WORK/out/kick-<version>-patc
 ANDROID_SERIAL=emulator-5580 bin/test-kick-chat "$MORPHE_WORK/out/kick-<version>-patched.apk"
 ```
 
+Probes that call Kick's own methods take their names from the patched APK where they can: the
+patches record what they matched with `Locators.record` (`patches/shared/Locators.kt`), and the
+settings patch writes the records into `assets/lurk/locators.json`. Kick records the Disable
+analytics hooks (`kick.disable_analytics.firebase_log_event`, `datadog_initialize`,
+`pal_generate_nonce`, `insider_session_upload_job`, `insider_amplification_job`,
+`fingerprintjs_visitor_data`, `fingerprintjs_visitor_id`, each a full method reference), which
+`BundleProbe` runs on ART, and the Metro module IDs the 7TV composer found
+(`kick.third_party_emotes.module_store`, `module_images`, `module_session`, `module_host`,
+`module_input`), which `bin/test-kick-modules <stock bundle> <patched.apk>` compares with a fresh
+discovery. While an APK has no locator file, both fall back to the names and IDs written in the
+probe, and say so. Kick's own classes keep their names (R8 doesn't rename them), so today this
+mostly protects against library renames and Metro renumbering.
+
 `bin/test-kick-hermes` runs `verify_sources.py`, `test_hermes.py`, `verify_literals.py`,
 `verify_hosting.py`, `verify_quality.py`, `HermesProbe.kt`, `verify_player.py`, `verify_privacy.py`,
 `verify_sleep_queue.py` and `verify_analytics_jobs.py`, and skips (saying so) the ones for patches

@@ -17,6 +17,7 @@ import io.github.jordanwoodson.patches.kick.settings.kickMatch
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.shared.parameterRegisters
@@ -38,6 +39,9 @@ private val composerResources = rawResourcePatch {
         val session = kickHermes.metroModule(listOf("useSessionStore", "AppSessionTiming"))
         val host = kickHermes.metroModule(listOf("getInternalInstanceHandleFromPublicInstance", "getNativeTagFromPublicInstance"), direct = true)
         val input = kickHermes.metroModule(listOf("Commands", "__INTERNAL_VIEW_CONFIG", "AndroidTextInput"))
+        // bin/test-kick-modules compares a fresh discovery on the stock bundle with these.
+        mapOf("store" to store, "images" to images, "session" to session, "host" to host, "input" to input)
+            .forEach { (name, id) -> Locators.record("kick.third_party_emotes.module_$name", "$id") }
         get("assets/lurk-kick-chat-contract.json").writeText(
             """{"store":$store,"images":$images,"session":$session,"host":$host,"input":$input,"files":"https://files.kick.com/","enabled":true}"""
         )
