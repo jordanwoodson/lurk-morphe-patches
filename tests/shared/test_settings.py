@@ -608,7 +608,8 @@ public class SettingsProbe {
     }
     String app=new org.json.JSONObject(json).getString("app");
     check(query.get("app").equals(app),"app field: "+query.get("app"));
-    check(query.get("versions").startsWith(app+" 31.7.0, Lurk v1.12.0"),"versions field: "+query.get("versions"));
+    String lurk=new org.json.JSONObject(json).optString("version");
+    check(query.get("versions").startsWith(app+" 31.7.0, Lurk v"+lurk),"versions field: "+query.get("versions"));
     check(query.get("device").equals("Android 16 (API 36), Google Pixel Test"),"device field");
     String patches=query.get("patches");
     for(String[] e:Access.entries(r)){
