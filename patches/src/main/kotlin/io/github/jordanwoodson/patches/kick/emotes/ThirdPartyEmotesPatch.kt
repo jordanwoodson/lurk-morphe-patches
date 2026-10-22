@@ -29,8 +29,10 @@ private val OKHTTP_API = mapOf(
 val thirdPartyEmotesPatch = bytecodePatch(
     name = "Third-party emotes",
     description = "Adds optional 7TV emotes to chat, the native picker and autocomplete, with zero-width layers " +
-        "and live set updates. Sends the channel owner's Kick user ID to 7tv.io, subscribes to set IDs at " +
-        "events.7tv.io and loads images from cdn.7tv.app. Starts off. Turn it on in Lurk settings > Chat." + OTA_UPDATES_OFF,
+        "and live set updates. Sends the channel owner's Kick user ID to 7tv.io, asks again every 5 minutes while " +
+        "the chat is open, keeps a websocket to events.7tv.io open for the channel's emote sets and loads images " +
+        "from cdn.7tv.app, so 7TV can see which channels you watch and for how long. Starts off. Turn it on in " +
+        "Lurk settings > Chat." + OTA_UPDATES_OFF,
 ) {
     compatibleWith(COMPATIBILITY_KICK)
     dependsOn(kickChatPagePatch, kickComposerPatch)
@@ -55,8 +57,9 @@ val thirdPartyEmotesPatch = bytecodePatch(
             SwitchSetting(
                 "emotes_7tv",
                 "7TV emotes",
-                "Shows 7TV in chat, picker and autocomplete. Sends the channel owner's Kick user ID to 7tv.io, " +
-                    "subscribes to live set changes at events.7tv.io and loads images from cdn.7tv.app.",
+                "Shows 7TV in chat, picker and autocomplete. Sends the channel owner's Kick user ID to 7tv.io every " +
+                    "5 minutes and keeps a connection to events.7tv.io while chat is open, so 7TV can see which " +
+                    "channels you watch and for how long.",
                 Section.CHAT,
                 default = false,
                 restart = true,

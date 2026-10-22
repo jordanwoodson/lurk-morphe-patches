@@ -643,8 +643,10 @@ backoff (at most eight attempts per burst). Visible pages revalidate every five 
 to find changed channel sets. Hidden pages abort requests and close sockets; page
 teardown cancels observers, timers, sockets and fetches. Provider GETs omit cookies and
 referrers; images use no-referrer. 7TV receives the channel owner's Kick ID, set IDs and
-normal request IP metadata; it receives no Kick credentials or chat draft. Images load
-from **cdn.7tv.app**. With the patch excluded or the switch off, Lurk makes no provider
+normal request IP metadata; it receives no Kick credentials or chat draft. Because the
+lookup repeats every five minutes and the socket stays open while a chat is visible, 7TV can
+tell from your IP address which channels you watch and for how long; the patch description and
+the switch say so. Images load from **cdn.7tv.app**. With the patch excluded or the switch off, Lurk makes no provider
 requests. 7TV badges and paints are not included.
 
 The WebView sends only bounded catalog snapshots for its current native document token
