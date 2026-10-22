@@ -1,5 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.ads
 
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
@@ -43,6 +44,7 @@ val muteStitchedAdsPatch = bytecodePatch(
             it.type == IVS_MEDIA_PLAYER && !AccessFlags.STATIC.isSet(it.accessFlags)
         } ?: throw PatchException("Twitch: native player has no unique IVS player")
         val playerField = "${cue.classDef.type}->${player.name}:$IVS_MEDIA_PLAYER"
+        Locators.record("twitch.mute_stitched_ads.native_player", playerField)
         cue.method.apply {
             requireLocals(1)
             val p = lowParameters(0, 1, firstLocal = 1)
@@ -76,6 +78,7 @@ val muteStitchedAdsPatch = bytecodePatch(
         val root = classDefBy(BASE_VIEW_DELEGATE).fields.singleOrNull {
             it.type == "Landroid/view/View;" && !AccessFlags.STATIC.isSet(it.accessFlags)
         } ?: throw PatchException("Twitch: view delegate has no unique root view")
+        Locators.record("twitch.mute_stitched_ads.root_view", "$BASE_VIEW_DELEGATE->${root.name}:Landroid/view/View;")
         overlay.requireLocals(2)
         overlay.addInstructions(0, """
             move-object/from16 v0, p1

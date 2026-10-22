@@ -1,5 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.clips
 
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
@@ -40,6 +41,7 @@ internal fun BytecodePatchContext.hideNativeHomeClipsTab() {
         method.name == name && method.returnType == "Ljava/util/List;" && method.parameterTypes.map { it.toString() } == listOf("Z")
     } ?: throw PatchException("Twitch: the Home tab interface does not declare the matched List(boolean) method")
     val call = "$provider->$name(Z)Ljava/util/List;"
+    Locators.record("twitch.hide_clips.home_tabs", call)
     val sites = mutableListOf<Pair<String, MethodReference>>()
     classDefForEach { type ->
         type.methods.forEach { method ->

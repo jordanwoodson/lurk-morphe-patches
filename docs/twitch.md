@@ -769,6 +769,34 @@ functions and switch targets using the production interface probe's manifest.
 with boundary fixtures. The existing Rumble and Kick Android probes also pass on
 APKs made with the expanded patch bundle.
 
+### Locators
+
+The probes and verifiers exercise R8-renamed classes, which change with every Twitch build. The patches
+record what they matched with `Locators.record`, and the settings patch writes the records into the
+patched APK as `assets/lurk/locators.json`:
+
+- every `twitchMatch` records its method as `twitch.match.<name>`, from the fingerprint object's name
+  (`ChatRestrictionFingerprint` gives `twitch.match.chat_restriction`, value `Lyn6;->b(...)`), or for a
+  fingerprint built in place, from its description;
+- every native UI flag a patch filters records its field as `twitch.ui_flag.<state>.<flag>`;
+- members found without a fingerprint are recorded by their patch: `twitch.auto_claim.action`,
+  `twitch.chat_timestamps.line_config`/`message_source`, `twitch.ignore_chat_clears.ignored_result`,
+  `twitch.show_deleted.name_span`, `twitch.mute_stitched_ads.native_player`/`root_view`,
+  `twitch.block_client_ads.request`, `twitch.disable_analytics.crashlytics_permission`,
+  `twitch.block_cookie_notice.options_constructor`, `twitch.hide_chat_highlights.dispatch`/`highlight_*`,
+  `twitch.hide_clips.home_tabs` and `twitch.hide_subscription_upsells.subscribe_renderer`/`turbo_dialog_route`.
+
+`ChatArtProbe`, `AdsProbe`, `PrivacyAdsProbe` and `HighlightsArtProbe` read the file through
+`ProbeLocators.java`, and `verify_privacy.py` and `verify_interface_emitted.py` through `locators.py`;
+other classes come from the located ones by reflection (constructor and parameter types, the one
+method of a signature). Each lookup carries the 31.7.0 name as a fallback, used while an APK has no
+locators. Still pinned: what no patch matches (in `HighlightsArtProbe` the state flag fields, the raid
+highlight, notice kinds and callout lambda; the deleted-message string ID in `ChatArtProbe`; the
+compile-time `kx50`/`akg` stubs of `PrivacyAdsProbe`; `verify_interface_emitted.py`'s preservation
+controls), and the probes not converted yet (`ChatStyleArtProbe`, `InterfaceArtProbe`,
+`PlaybackArtProbe`, `RNBridgeProbe`). `verify_playback_bytecode.py` finds its methods by content and
+pins no names.
+
 Guest native VOD, replay, chapters and PiP, and the RN consumer, provider and reload paths, were
 checked on the emulator and on a phone on 2026-10-18. The following account limits remain:
 **signed-in playback and chat, sending messages, actual server ad delivery, purchases,

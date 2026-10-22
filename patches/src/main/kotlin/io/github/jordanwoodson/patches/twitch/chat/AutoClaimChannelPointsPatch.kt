@@ -1,5 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.chat
 
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
@@ -60,6 +61,7 @@ private fun BytecodePatchContext.autoClaimBonus() {
     }
     val (actionField, claim) = actions.singleOrNull() ?: throw PatchException("Twitch: no unique channel points claim action")
     requireNullableChatMode(actionField.type, claim.name)
+    Locators.record("twitch.auto_claim.action", "$presenter->${actionField.name}:${actionField.type}")
     // The bonus on offer: CommunityPointsModel.getClaim(), whose only String field is the claim ID.
     val getClaim = classDefBy(POINTS_MODEL).methods.singleOrNull { it.name == "getClaim" && it.parameterTypes.isEmpty() }
         ?: throw PatchException("Twitch: no channel points claim getter")

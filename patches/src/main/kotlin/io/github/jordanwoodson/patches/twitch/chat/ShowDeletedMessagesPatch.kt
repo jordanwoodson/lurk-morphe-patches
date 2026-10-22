@@ -1,5 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.chat
 
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
@@ -129,6 +130,9 @@ private fun BytecodePatchContext.keepMessagesDeletedAfterShown() {
         throw PatchException("Twitch: unexpected deleted line registers")
     }
     method.requireNotBranchTarget(copy + 1, "deleted line placeholder")
+    // The span the line marks its sender's name with: the class the message start is found from.
+    instructions.subList(0, copy).lastOrNull { it.opcode == Opcode.CONST_CLASS }?.typeRef
+        ?.let { Locators.record("twitch.show_deleted.name_span", it) }
     method.addInstructionsWithLabels(copy + 1, """
         invoke-static { v$line, v$bodyStart }, $CHAT->deletedLine(${SPANNED}I)Landroid/text/Spanned;
         move-result-object v$line
@@ -157,6 +161,7 @@ private fun BytecodePatchContext.ignoreChatClears() {
     val event = instructions[clear].fieldRef!!.type
     if (classDefBy(event).superclass != classDefBy(userClear).superclass) throw PatchException("Twitch: unexpected chat clear event")
     val eventRegister = (instructions[clear] as OneRegisterInstruction).registerA
+    Locators.record("twitch.ignore_chat_clears.ignored_result", ignored.toString())
     // Right after it, a goto to code that sets a register before reading anything: that register is free.
     val jump = clear + 1
     if (instructions[jump].opcode != Opcode.GOTO) throw PatchException("Twitch: unexpected chat clear flow")

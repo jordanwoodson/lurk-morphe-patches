@@ -37,7 +37,7 @@ val thirdPartyBadgesPatch = bytecodePatch(
         val spanGroup = SpanGroupFingerprint.twitchMatch("chat line span group").classDef.type
         val user = ChatLineSenderFingerprint.twitchMatch("chat message user").classDef.type
         val badge = BadgeViewModelFingerprint.twitchMatch("badge view model").classDef.type
-        val method = ChatLineSpansFingerprint.twitchMatch("chat line span builder").method
+        val method = ChatLineSpanBuilderFingerprint.twitchMatch("chat line span builder").method
         if (method.returnType != spanGroup || method.parameterTypes[3].toString() != user) {
             throw PatchException("Twitch: chat line span builder changed")
         }

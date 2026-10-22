@@ -20,7 +20,7 @@ internal object BadgeViewModelFingerprint : Fingerprint(
 )
 
 // Builds a chat line's spans from its badges, sender and tokens. Used by live chat, VOD replay, clips and more.
-internal object ChatLineSpansFingerprint : Fingerprint(
+internal object ChatLineSpanBuilderFingerprint : Fingerprint(
     accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
     returnType = "L",
     parameters = listOf(

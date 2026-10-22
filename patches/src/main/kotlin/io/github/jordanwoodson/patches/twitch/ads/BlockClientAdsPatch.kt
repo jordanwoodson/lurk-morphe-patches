@@ -1,5 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.ads
 
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.PatchException
@@ -39,6 +40,9 @@ val blockClientAdsPatch = bytecodePatch(
             instruction.opcode == Opcode.IGET_OBJECT &&
                 ((instruction as? ReferenceInstruction)?.reference as? FieldReference)?.type == "Landroid/content/SharedPreferences;"
         }.singleOrNull()?.index ?: throw PatchException("Twitch: no unique ad preferences read")
+        // The ad request that holds those preferences.
+        ((instructions[start] as ReferenceInstruction).reference as FieldReference).definingClass
+            .let { Locators.record("twitch.block_client_ads.request", it) }
         if (start < 2 || instructions[start - 1].opcode != Opcode.CHECK_CAST || instructions[start - 2].opcode != Opcode.CHECK_CAST) {
             throw PatchException("Twitch: ad eligibility synthetic branch changed")
         }

@@ -1,5 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.upsells
 
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.BytecodePatchContext
@@ -100,6 +101,7 @@ private fun BytecodePatchContext.hideNativeSubscribeButtons() {
     }
     val (type, name) = renderers.singleOrNull() ?: throw PatchException("Twitch: expected one native Subscribe renderer, found ${renderers.size}")
     val method = mutableClassDefBy(type).methods.single { it.name == name && it.parameterTypes.map { it.toString() } == listOf(state) }
+    Locators.record("twitch.hide_subscription_upsells.subscribe_renderer", method)
     val view = method.implementation!!.instructions.mapNotNull {
         ((it as? ReferenceInstruction)?.reference as? FieldReference)?.takeIf { field -> field.definingClass == type && field.type == "Landroid/view/ViewGroup;" }
     }.distinctBy { it.toString() }.singleOrNull() ?: throw PatchException("Twitch: Subscribe renderer has no unique button ViewGroup")
@@ -131,6 +133,7 @@ private fun BytecodePatchContext.hideTurboStartDialog() {
     }
     val (type, name) = callers.singleOrNull() ?: throw PatchException("Twitch: expected one Turbo start dialog caller, found ${callers.size}")
     val method = mutableClassDefBy(type).methods.single { it.name == name }
+    Locators.record("twitch.hide_subscription_upsells.turbo_dialog_route", method)
     val instructions = method.implementation!!.instructions.toList()
     val start = instructions.indices.single { instructions[it].opcode == Opcode.SGET_OBJECT && (instructions[it] as ReferenceInstruction).reference.toString() == reference }
     if (instructions[start + 1].opcode != Opcode.IGET_OBJECT || instructions[start + 2].opcode != Opcode.INVOKE_VIRTUAL) {

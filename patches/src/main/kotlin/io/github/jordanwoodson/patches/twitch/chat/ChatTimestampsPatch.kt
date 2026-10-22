@@ -1,5 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.chat
 
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
@@ -53,6 +54,8 @@ private fun BytecodePatchContext.showTimeOnLiveMessages() {
     if (source == null || source.fields.none { it.name == "Chat" } || source.fields.none { it.name == "Whisper" }) {
         throw PatchException("Twitch: chat line configuration has no unique message source")
     }
+    Locators.record("twitch.chat_timestamps.line_config", config.type)
+    Locators.record("twitch.chat_timestamps.message_source", source.type)
     // p3 (configuration) and p4 (show the time) are adjacent parameters. p4 is only passed on to the line's
     // span builder, so replacing it at the start changes nothing else.
     method.addInstructions(0, """

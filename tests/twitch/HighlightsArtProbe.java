@@ -122,42 +122,48 @@ public final class HighlightsArtProbe {
 
     private static void highlights() throws Exception {
         // Community highlight dispatch: Add events by type id.
-        Method dispatch = method("k89", "M2");
-        Object presenter = allocate("k89");
-        Class<?> typeBase = Class.forName("m99");
-        Object hypeTrain = Class.forName("z89").getDeclaredConstructors()[0].newInstance(3, null, null);
+        Method dispatch = method(ProbeLocators.type("twitch.match.highlight_presenter", "k89"),
+            ProbeLocators.method("twitch.hide_chat_highlights.dispatch", "M2"));
+        Object presenter = allocate(ProbeLocators.type("twitch.match.highlight_presenter", "k89"));
+        // A highlight's type is a subclass of one base that holds its id; only the id decides. The raid (kept)
+        // is Twitch's own instance; its class isn't one the patches match.
+        Class<?> typeBase = Class.forName(ProbeLocators.type("twitch.hide_chat_highlights.highlight_id", "m99"));
+        String idField = ProbeLocators.field("twitch.hide_chat_highlights.highlight_id", "a");
+        Object hypeTrain = Class.forName(ProbeLocators.type("twitch.match.hype_train_highlight_type", "z89")).getDeclaredConstructors()[0].newInstance(3, null, null);
         Object raid = Class.forName("g99").getField("c").get(null);
-        Object gift = allocate("y89");
-        set(gift, typeBase, "a", "gift_sub");
+        Object gift = allocate(ProbeLocators.type("twitch.match.hype_train_highlight_type", "z89"));
+        set(gift, typeBase, idField, "gift_sub");
+        String modelType = ProbeLocators.fieldType("twitch.hide_chat_highlights.highlight_model", "fa9");
         for (boolean enabled : new boolean[]{true, false}) {
             switches.put("hide_hype_train", enabled);
             switches.put("hide_sub_notices", enabled);
             for (Object type : new Object[]{hypeTrain, gift, raid}) {
-                Object model = allocate("fa9");
-                set(model, Class.forName("fa9"), "b", type);
-                Object add = Class.forName("n99").getConstructors()[0].newInstance(model);
+                Object model = allocate(modelType);
+                set(model, Class.forName(modelType), ProbeLocators.field("twitch.hide_chat_highlights.highlight_type", "b"), type);
+                Object add = Class.forName(ProbeLocators.type("twitch.match.add_highlight", "n99")).getConstructors()[0].newInstance(model);
                 boolean hidden = enabled && type != raid;
                 check(returns(dispatch, presenter, add) == hidden, "Highlight " + type.getClass().getName() + " enabled=" + enabled);
             }
         }
 
         // Chat notice lines: subscription kinds, gift notices, watch streaks; charity always stays.
-        Method notice = method("ci6", "c");
-        Object mapper = allocate("ci6");
+        Method notice = method(ProbeLocators.type("twitch.match.chat_notice_line", "ci6"),
+            ProbeLocators.method("twitch.match.chat_notice_line", "c"));
+        Object mapper = allocate(ProbeLocators.type("twitch.match.chat_notice_line", "ci6"));
         Class<?> kinds = Class.forName("ot6");
         for (boolean enabled : new boolean[]{true, false}) {
             switches.put("hide_sub_notices", enabled);
             switches.put("hide_watch_streaks", enabled);
             for (String kind : new String[]{"Sub", "Resub", "SubGift", "SubMassGift", "ExtendSub", "Charity"}) {
-                Object subscription = allocate("lt6");
+                Object subscription = allocate(ProbeLocators.type("twitch.match.subscription_notice", "lt6"));
                 set(subscription, subscription.getClass(), "h", kinds.getField(kind).get(null));
-                Object event = allocate("th6");
+                Object event = allocate(ProbeLocators.type("twitch.match.subscription_notice_event", "th6"));
                 set(event, event.getClass(), "c", subscription);
                 boolean hidden = enabled && !kind.equals("Charity");
                 if (hidden) check(notice.invoke(mapper, event, null) == null, "Hidden " + kind + " notice produced a line");
                 else check(!returns(notice, mapper, event, null), kind + " notice skipped the original mapper");
             }
-            for (String type : new String[]{"lh6", "sh6", "vh6"}) {
+            for (String type : new String[]{ProbeLocators.type("twitch.match.gift_sub_match_notice_event", "lh6"), ProbeLocators.type("twitch.match.reward_gift_notice_event", "sh6"), ProbeLocators.type("twitch.match.viewer_milestone_notice_event", "vh6")}) {
                 if (enabled) check(notice.invoke(mapper, allocate(type), null) == null, "Hidden " + type + " produced a line");
                 else check(!returns(notice, mapper, allocate(type), null), type + " skipped the original mapper");
             }
@@ -173,7 +179,7 @@ public final class HighlightsArtProbe {
             switches.put("hide_watch_streaks", enabled);
             switches.put("hide_hype_train", enabled);
             for (String type : new String[]{"WATCH_STREAK_REACHED", "HYPE_TRAIN_REWARD", "MOD_VIEW_AVAILABLE"}) {
-                Object model = allocate("c7v");
+                Object model = allocate(ProbeLocators.type("twitch.match.private_callout_model", "c7v"));
                 set(model, model.getClass(), "e", calloutTypes.getField(type).get(null));
                 boolean hidden = enabled && !type.equals("MOD_VIEW_AVAILABLE");
                 check(returns(invoke, callout, model) == hidden, "Callout " + type + " enabled=" + enabled);
@@ -186,30 +192,31 @@ public final class HighlightsArtProbe {
             switches.put("hide_pinned_cheers", enabled);
             switches.put("hide_celebrations", enabled);
             switches.put("hide_tipping", enabled);
-            Object leaderboard = construct("i85", true);
+            Object leaderboard = construct(ProbeLocators.type("twitch.match.leaderboard_settings", "i85"), true);
             check(flag(leaderboard, "b") == !enabled && flag(leaderboard, "c") == !enabled &&
                 flag(leaderboard, "d") == !enabled && flag(leaderboard, "f") == !enabled, "Leaderboard settings enabled=" + enabled);
-            check(flag(construct("g2t", true), "a") == !enabled, "Pinned cheers enabled=" + enabled);
-            Object celebration = construct("tv4", true);
+            check(flag(construct(ProbeLocators.type("twitch.match.paid_pinned_chat_loaded", "g2t"), true), "a") == !enabled, "Pinned cheers enabled=" + enabled);
+            Object celebration = construct(ProbeLocators.type("twitch.match.celebration_enable_event", "tv4"), true);
             check(flag(celebration, "a") == !enabled && flag(celebration, "b") == true, "Celebrations enabled=" + enabled);
-            Object unchanged = construct("tv4", false);
+            Object unchanged = construct(ProbeLocators.type("twitch.match.celebration_enable_event", "tv4"), false);
             check(!flag(unchanged, "a") && flag(unchanged, "b") == enabled, "Celebration update enabled=" + enabled);
-            Object input = construct("k86", true);
+            Object input = construct(ProbeLocators.type("twitch.match.message_input_config", "k86"), true);
             check(flag(input, "a") && flag(input, "b") == !enabled && flag(input, "c"), "Chat input Bits picker enabled=" + enabled);
         }
         for (boolean enabled : new boolean[]{true, false}) {
             switches.put("hide_clip_button", enabled);
             switches.put("hide_share_button", enabled);
-            Object clip = construct("zua", true);
+            Object clip = construct(ProbeLocators.type("twitch.match.clip_button_state", "zua"), true);
             check(flag(clip, "a") == !enabled && flag(clip, "b"), "Clip button state enabled=" + enabled);
-            Object overlay = construct("o3u", true);
+            Object overlay = construct(ProbeLocators.type("twitch.match.player_overlay_options", "o3u"), true);
             check(flag(overlay, "a") == !enabled && flag(overlay, "b") == !enabled && flag(overlay, "d") && flag(overlay, "e"),
                 "Player overlay options enabled=" + enabled);
         }
 
         // Mature content: every label counts as acknowledged only while the switch is on.
-        Method acknowledged = Class.forName("azo").getMethod("p", String.class);
-        Object labels = allocate("azo");
+        Method acknowledged = Class.forName(ProbeLocators.type("twitch.match.mature_label_acknowledged", "azo"))
+            .getMethod(ProbeLocators.method("twitch.match.mature_label_acknowledged", "p"), String.class);
+        Object labels = allocate(ProbeLocators.type("twitch.match.mature_label_acknowledged", "azo"));
         switches.put("hide_mature_warning", true);
         check((Boolean) acknowledged.invoke(labels, "MatureGame"), "Mature label not acknowledged");
         switches.put("hide_mature_warning", false);
@@ -229,7 +236,8 @@ public final class HighlightsArtProbe {
         Object live = page.newInstance(Class.forName("tv.twitch.android.models.feed.FeedLocation$Live").getField("INSTANCE").get(null));
         Object clips = page.newInstance(Class.forName("tv.twitch.android.models.feed.FeedLocation$Clips").getField("INSTANCE").get(null));
         Object signedOut = Class.forName("njo").getField("a").get(null);
-        List<?> stock = (List<?>) Class.forName("lih").getMethod("b", boolean.class).invoke(signedOut, false);
+        List<?> stock = (List<?>) Class.forName(ProbeLocators.type("twitch.hide_clips.home_tabs", "lih"))
+            .getMethod(ProbeLocators.method("twitch.hide_clips.home_tabs", "b"), boolean.class).invoke(signedOut, false);
         check(stock.equals(Arrays.asList(live, clips)), "Unexpected signed-out Home tabs " + stock);
         Method filter = Class.forName("io.github.jordanwoodson.extension.shared.twitch.TwitchInterface")
             .getMethod("homeTabs", List.class, Object.class);
@@ -252,7 +260,7 @@ public final class HighlightsArtProbe {
         Method sections = Class.forName("io.github.jordanwoodson.extension.shared.twitch.TwitchHighlights")
             .getMethod("followingSections", List.class);
         List<Object> all = new ArrayList<>();
-        for (String type : new String[]{"dai", "fai", "gai", "cai", "eai"}) all.add(allocate(type));
+        for (String type : new String[]{"dai", "fai", ProbeLocators.type("twitch.match.resume_watching_section", "gai"), "cai", "eai"}) all.add(allocate(type));
         for (boolean enabled : new boolean[]{true, false}) {
             switches.put("hide_home_continue_watching", enabled);
             switches.put("hide_home_offline_channels", enabled);
@@ -267,6 +275,8 @@ public final class HighlightsArtProbe {
     }
 
     public static void main(String[] args) throws Exception {
+        if (args.length > 0) ProbeLocators.load(args[0]);
+        System.out.println(ProbeLocators.loaded() ? "names from the APK's locators" : "no locators in the APK: 31.7.0 names");
         settings();
         highlights();
         home();
