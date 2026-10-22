@@ -37,7 +37,9 @@ public class RumbleStateProbe {
         Settings.values.put("chat_keywords","false");
         check(RumbleChat.messages(messages,first)==messages,"disabled keywords changed messages");
         Settings.values.put("chat_keywords","true");
-        check(mention("hi @lurker")==ChatFilter.HIGHLIGHT,"keywords-off join did not learn identity");break;
+        check(mention("hi @lurker")==ChatFilter.NONE,"keywords-off join read the users list");
+        RumbleChat.messages(messages,first);
+        check(mention("hi @lurker")==ChatFilter.HIGHLIGHT,"keywords-on update did not learn identity");break;
       case "account":
         RumbleChat.messages(messages,first);
         check(mention("hi @lurker")==ChatFilter.HIGHLIGHT,"first account not learned");

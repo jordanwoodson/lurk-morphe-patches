@@ -8,6 +8,7 @@ import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -92,15 +93,16 @@ public final class RumbleChat {
      */
     public static List<?> messages(List<?> messages, Object dto) {
         if (dto == null) return messages;
+        boolean raids = on(HIDE_RAIDS);
+        boolean gifts = on(HIDE_GIFTS);
+        boolean keywords = on(ChatFilter.KEY);
+        // Nothing to hide or match: no reflection at all on Rumble's chat DTOs.
+        if (!raids && !gifts && !keywords) return messages;
         try {
-            // Joining can carry users with no history, or while keywords are off. Learn the account
-            // independently of filtering so a later mention can use it without another users update.
-            Map<Long, String> names = userNames(dto);
+            // Joining can carry users with no history. While keywords are on, learn the account from it even
+            // then, so a later mention can use it without another users update.
+            Map<Long, String> names = keywords ? userNames(dto) : Collections.emptyMap();
             if (messages == null || messages.isEmpty()) return messages;
-            boolean raids = on(HIDE_RAIDS);
-            boolean gifts = on(HIDE_GIFTS);
-            boolean keywords = on(ChatFilter.KEY);
-            if (!raids && !gifts && !keywords) return messages;
             ChatFilter.Lists lists = keywords ? ChatFilter.lists(self, "") : null;
             String settings = raids + "," + gifts + "," + System.identityHashCode(lists);
             synchronized (FILTERED) {

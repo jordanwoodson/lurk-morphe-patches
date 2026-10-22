@@ -773,8 +773,11 @@ Compose rows draw the entities.
 `LiveChatMessageData.messages` (each event's messages) and `LiveChatInitData.messages` (the history sent on
 joining) pass their list through `RumbleChat.messages`. It drops the messages a switch hides before any
 entity is built, so they don't count as unread either. It returns Rumble's own list while nothing is hidden,
-and the same filtered list when the getter runs again on the same DTO. Switches of patches that weren't
-included count as off there, because unknown keys normally count as on.
+and the same filtered list when the getter runs again on the same DTO. While no chat switch is on (raid
+notices, gift notices, Chat keywords) it returns at once, without reading the DTO. Switches of patches that
+weren't included count as off there, because unknown keys normally count as on. The signed-in user's name
+for mentions is learned from the users list only while Chat keywords is on, so turning it on during a
+stream highlights mentions after the next chat update that lists you (reopening the chat does).
 
 ### Hide chat clutter
 

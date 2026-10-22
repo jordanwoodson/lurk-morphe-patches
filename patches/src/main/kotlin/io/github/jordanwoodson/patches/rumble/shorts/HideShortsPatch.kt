@@ -52,6 +52,7 @@ val hideShortsPatch = bytecodePatch(
         // Home: treat a "shorts" section like one the server hides, so it is neither loaded nor drawn.
         HomeSectionKindFingerprint.single("HomeSectionKind parser").method.apply {
             val kind = parameterRegister(1)
+            val hide = classDefBy(returnType).enumConstant("HIDE")
             addInstructionsIfEnabled(
                 KEY,
                 """
@@ -59,7 +60,7 @@ val hideShortsPatch = bytecodePatch(
                     ${invoke("invoke-virtual", "Ljava/lang/String;->equals(Ljava/lang/Object;)Z", 0, kind)}
                     move-result v0
                     if-eqz v0, :lurk_off
-                    sget-object v0, Lcom/rumble/network/dto/home/HomeSectionKind;->HIDE:Lcom/rumble/network/dto/home/HomeSectionKind;
+                    sget-object v0, $hide
                     return-object v0
                 """,
             )
