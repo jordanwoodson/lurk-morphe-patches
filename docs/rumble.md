@@ -277,6 +277,7 @@ finds its switch off after updating, unless it was changed on the screen before.
 | Remember playback speed | `remember_speed` | at the next speed read or pick |
 | Default playback speed (a choice in hundredths; "1x (Rumble's)" is 0) | `default_speed` | at the next video |
 | Fill screen | `fill_screen` | when the player is laid out again |
+| Player gestures | `player_gestures` | at the next touch |
 | Keep playing during other sounds (a choice; "Pause" is 0) | `audio_focus` | at the next interruption |
 | Keep screen on while paused | `keep_screen_on_paused` | at the next pause |
 | Sleep timer (a choice in minutes; "Off" is 0) | `sleep_timer` | when playback next starts |
@@ -813,6 +814,27 @@ changes, so the patch changes it where `AspectRatioFrameLayout` (inflated from X
 reads it in `onMeasure`. While `fill_screen` is on, in landscape and outside picture-in-picture,
 `RumblePlayer.resizeMode` turns FIT into ZOOM: the video fills the screen and the edges are cropped. Each
 rotation re-measures, so portrait goes back to FIT.
+
+### Player gestures
+
+The phone player is Media3's `PlayerView` under Rumble's Compose controls, which take the touches, so the patch
+takes them where they enter the app: `RumbleMainActivity` (named in the manifest; it has no
+`dispatchTouchEvent` of its own, which the patch checks) gets one that asks `RumbleGestures.dispatch` first and
+otherwise calls the superclass's. While `player_gestures` is on, a touch starts a candidate only in landscape,
+outside picture-in-picture and TalkBack, on the left or right 35% of the largest `AspectRatioFrameLayout` (the
+video frame, at least half the window wide), away from its top 15% and bottom 20% (the close button and seek
+bar). It becomes a swipe once it moves vertically past the touch slop and twice as far as sideways; the rest of
+the app then gets `ACTION_CANCEL`, so Rumble's taps, double-taps and drags work as before. Up on the left raises
+the window's brightness, on the right the media volume, with an indicator over the video. Back in portrait, the
+next touch hands brightness back to the system.
+
+Rumble already skips 15 s on a double-tap at either side of the video (Seek interval changes that distance
+through the same default-argument twins), so the patch adds no double-tap.
+
+Checked on 2026-10-22 on the emulator, landscape, a VOD playing: a swipe up on the right raised the media volume
+from 5 to 12 (of 25); a swipe up on the left set the window's brightness override (display manager
+`mWindowManagerBrightnessOverride=0.447`). A double-tap on the right of the playing video in portrait jumped it
+from 16 s to 34 s in stock behavior.
 
 ### Keep playing during other sounds
 

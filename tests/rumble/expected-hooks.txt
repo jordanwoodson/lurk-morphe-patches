@@ -39,6 +39,7 @@ audio_focus  RumblePlayback.ignoreFocusLoss
 sleep_timer  RumblePlayback.onPlayingChanged
 
 fill_screen  RumblePlayer.resizeMode
+player_gestures  RumbleGestures.dispatch
 keep_screen_on_paused  RumblePlayer.keepScreenOn
 refresh_stream  RumblePlayer.onVideoLoaded
 refresh_stream  RumblePlayer.refreshable
