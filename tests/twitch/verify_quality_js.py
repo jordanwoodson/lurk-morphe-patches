@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute Twitch 31.6.0's actual decompiled RN initial-quality effect, with boundary doubles.
+"""Execute Twitch's actual decompiled RN initial-quality effect, with boundary doubles.
 
 Usage: python3 tests/twitch/verify_quality_js.py /path/to/hermes/decompiled.js
 No bundle is modified. The effect consumes the preference returned by the native storage fallback.

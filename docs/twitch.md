@@ -399,9 +399,8 @@ text/emote colors, player, gutters and actions keep their original styles. A sta
 carries primitive opacity or neutral null without adding a native View or remounting chat when
 opacity changes. While wrappers are installed, neutral paths preserve original native styles and
 child objects, rather than literal outer React object identity; full configure-off restores the
-original exports. Unknown shapes keep stock handling. The
-[dated verification record](verification-2026-10-17.md) distinguishes actual visible opacity
-controls from the earlier style-only readback, and real provider images from controlled cached
+original exports. Unknown shapes keep stock handling. The visible opacity controls and real provider
+images were checked on a phone on 2026-10-18, after the earlier style-only readback with cached
 badge/pronoun metadata.
 
 The original RN live store is keyed by channel login. Keyword notification ownership preserves that
@@ -518,8 +517,8 @@ These features appear in other Twitch bundles and mods but are deliberately not 
 - **Disable Google Play services** (PurpleTV): Play services carries push (see *Fix notifications*),
   Google and FIDO sign-in, Cast, Play Integrity attestation and billing. A blanket switch would break
   them; the analytics SDKs that use it are blocked individually instead.
-- **VOD unlock / VODHunter** (PurpleTV: sub-only and deleted VODs): not implemented. Building the
-  sub-only part was stopped by the assistant's safety checks, so it was left out. Recovering deleted
+- **VOD unlock / VODHunter** (PurpleTV: sub-only and deleted VODs): not implemented. The sub-only
+  part was not built. Recovering deleted
   VODs doesn't work in any case: for broadcasts whose VODs are gone, every VOD CDN host answered 403
   for the computed playlist path, so the segments are removed.
 - **Third-party recent chat history** (PurpleTV, Xtra: recent-messages.robotty.de): Twitch already
@@ -623,7 +622,7 @@ Settings initialize before affected SDK providers and at Application startup, on
 per process. Long-pressing the launcher icon opens the Lurk shortcut.
 
 The original Hermes v98 bundle SHA-256 is
-`50e73cce33e67272f9eb9a38b8d8e6f1ecd06ceccf4b88cc9dbc091743493fc9`.
+`928f89c5766562e9cb266485282e90c058dd7947f73c9bcafa1d0fc626debf5e` (31.7.0).
 Patch-time parsing pins that hash/version, verifies function boundaries and unique
 instruction patterns, and permits only equal-length non-overlapping edits. The
 runtime loader snapshots switches. When every switch is at its patch-time default it
@@ -687,9 +686,8 @@ functions and switch targets using the production interface probe's manifest.
 with boundary fixtures. The existing Rumble and Kick Android probes also pass on
 APKs made with the expanded patch bundle.
 
-The [dated verification record](verification-2026-10-17.md) adds current guest native
-VOD/replay/chapters/PiP and qualified RN consumer/provider/reload observations, with
-artifact-specific provenance. The following account limits remain:
+Guest native VOD, replay, chapters and PiP, and the RN consumer, provider and reload paths, were
+checked on the emulator and on a phone on 2026-10-18. The following account limits remain:
 **signed-in playback and chat, sending messages, actual server ad delivery, purchases,
 subscription/member screens and Amazon sign-in remain unverified.** Stock Twitch
 requires Log In or Sign Up, including for a direct channel URL, and no test account

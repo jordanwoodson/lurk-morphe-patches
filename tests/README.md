@@ -104,9 +104,8 @@ per-video mapping and repeated taps. Null sources, disabled refresh, absent play
 quality changes are controls. A caught player Exception, escaping logger RuntimeException and escaping
 Error check callback restoration. These are synthetic boundaries, not observed playback failures.
 `verify_refresh.py` additionally checks the emitted fatal-state/mobile-panel branch and catch metadata.
-Actual emulator fatal-panel/tap/recovery evidence now exists under an explicitly qualified
-three-method error-policy fixture; see [the dated verification record](../docs/verification-2026-10-17.md).
-Physical-phone and authenticated playback remain separate gates.
+The fatal panel, the tap and the recovery were also observed on the emulator on 2026-10-18 under a
+three-method error-policy fixture. Authenticated playback remains untested.
 
 
 Twitch RN and provider checks:
@@ -144,6 +143,5 @@ JsonReader/Canvas/PNG, controlled HTTP responses and isolated preferences (no pr
 the original host/store/ChatLine boundary with committed immutable authority, canonical/protected
 matching, retired publishers and unchanged host state, plus the measured nested column fills,
 neutral/off/unsupported guards, sibling isolation and child state across opacity/PiP/docked changes.
-These are controlled React/store boundaries. The [dated verification record](../docs/verification-2026-10-17.md)
-separately records actual L floating provider images/local deletion controls and final N visible
-column opacity, with explicit source linkage and cached badge/pronoun/default-control qualifications.
+These are controlled React/store boundaries; provider images, local deletion and the landscape column
+opacity were also checked on a phone on 2026-10-18.

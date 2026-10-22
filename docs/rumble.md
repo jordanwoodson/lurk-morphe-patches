@@ -123,9 +123,8 @@ Turning the switch off uses the cached consent again.
 The switch offers a restart after either toggle. It blocks future Ketch calls immediately, but cannot
 undo SDK initialization or replace consent already applied to the running process. Restart to apply the
 startup consent path consistently; turning it off also needs a restart to restore that path. The
-actual-process consent/restart SDK-state matrix is recorded in
-[the 2026-10-17 verification record](verification-2026-10-17.md); notification delivery and
-live queued-event drain remain untested.
+consent and restart SDK-state matrix was checked in a running process on 2026-10-18; notification
+delivery and live queued-event drain remain untested.
 
 Validated on 2026-10-14 on the Android 16 emulator, fresh data each time, location resolved by Ketch as
 US-MO:
@@ -786,8 +785,7 @@ repeated taps, disabled/null cases and preserved quality callbacks. The generate
 its callback in a catch-all handler too: stock `x4` catches ordinary Exceptions, but an escaping Error
 or failure inside its logger previously left the no-op callback installed. These exceptions are
 synthetic regression inputs; no live occurrence is claimed. `tests/rumble/verify_refresh.py` checks
-emitted catch metadata and the fatal-state branch to the mobile panel. The
-[dated verification record](verification-2026-10-17.md) adds real emulator network failure,
-fatal-panel tap and continuing nonzero playback under an explicit three-method error-policy
-fixture. Unchanged production recovered automatically from the observed outage; natural fatal
+emitted catch metadata and the fatal-state branch to the mobile panel. A real emulator network
+failure, the fatal-panel tap and continuing playback were observed on 2026-10-18 under a
+three-method error-policy fixture. Unchanged production recovered automatically from the observed outage; natural fatal
 entry, physical-phone and authenticated/Premium behavior are not established by that fixture.

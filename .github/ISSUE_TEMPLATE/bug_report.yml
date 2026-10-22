@@ -28,7 +28,7 @@ body:
     attributes:
       label: Versions
       description: App version, Lurk release and Morphe Manager (or Desktop) version.
-      placeholder: "Twitch 31.6.0, Lurk v1.9.0, Manager x.y.z"
+      placeholder: "Twitch 31.x.y, Lurk v1.x.y, Manager 1.x.y"
     validations:
       required: true
   - type: input
