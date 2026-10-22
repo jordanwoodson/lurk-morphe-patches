@@ -1,3 +1,34 @@
+## [1.14.0](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.13.0...v1.14.0) (2026-10-22)
+
+### Kick
+
+#### ✨ New Features
+
+* add **Anonymous chat** ([c678f9e](https://github.com/jordanwoodson/lurk-morphe-patches/commit/c678f9e620b121c473aad907fd1f8b091a41aa22))
+* add **Mute stitched live ads** (experimental) ([21a7e9a](https://github.com/jordanwoodson/lurk-morphe-patches/commit/21a7e9ad711a42cc2c101ca7e2fbd46e729207eb))
+* add **Show video stats** ([a009788](https://github.com/jordanwoodson/lurk-morphe-patches/commit/a0097887379f69293b4d833aa3212e4828c69d49))
+* **Chat timestamps:** choose a 24-hour or 12-hour clock ([5fb3699](https://github.com/jordanwoodson/lurk-morphe-patches/commit/5fb3699e4d7a741c4646a28319ba9e648ae10554))
+
+### Rumble
+
+#### ✨ New Features
+
+* add **AMOLED black** ([51ef1f1](https://github.com/jordanwoodson/lurk-morphe-patches/commit/51ef1f105cde3fb97d6679441e936725d435b61f))
+
+### Twitch
+
+#### ✨ New Features
+
+* add **AMOLED black** ([157a1b0](https://github.com/jordanwoodson/lurk-morphe-patches/commit/157a1b0cc6be4fa5bd5cef2ac907a765499bd0c9))
+* add **Auto-claim Drops** ([b421b10](https://github.com/jordanwoodson/lurk-morphe-patches/commit/b421b10978b6e5265512b229c73a41f46565a9a7))
+* add **Clip download** ([777e264](https://github.com/jordanwoodson/lurk-morphe-patches/commit/777e2642ebb457c1de0aa7da9ca8cc83bbe10a9e))
+* add Compact chat and **Highlight first-time chatters** ([7f97d3c](https://github.com/jordanwoodson/lurk-morphe-patches/commit/7f97d3c7005316c2d4c9c534934ba1398742c983))
+* add **Force landscape** for the theatre ([7713d07](https://github.com/jordanwoodson/lurk-morphe-patches/commit/7713d07f11c7d20e93e2fba6da4c6f1e11eeac9d))
+* add **Latency badge** with tap to jump to live ([fe470bf](https://github.com/jordanwoodson/lurk-morphe-patches/commit/fe470bf765635dfd8e0316631fb82406f8b7f3b9))
+* **Default video quality:** a lower rendition on mobile data ([16b5f24](https://github.com/jordanwoodson/lurk-morphe-patches/commit/16b5f24ec9327691da97a19f09187df4f1db4277))
+* **Show video stats:** add the stream's uptime ([12961cb](https://github.com/jordanwoodson/lurk-morphe-patches/commit/12961cb64db3c063fa5332382137ed3cc2c0a7d8))
+* **Third-party emotes:** list them in the emote picker and autocomplete ([b27d46f](https://github.com/jordanwoodson/lurk-morphe-patches/commit/b27d46fd2812dd54f440ed2fabfab25a9625071d))
+
 ## [1.13.0](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.12.0...v1.13.0) (2026-10-22)
 
 ### Kick
