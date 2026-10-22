@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Run Auto-claim Drops on ART with the real Twitch classes (drops need an account, so the notification can't
+# be shown in the app). ANDROID_SERIAL picks the device (default emulator-5580).
+source "$(dirname "$0")/lib/common.sh"
+compile_only=false
+if [[ ${1:-} == --compile-only ]]; then compile_only=true; shift; fi
+[[ $# == 1 && -f "$1" ]] || die "usage: bash bin/test-twitch-drops [--compile-only] <patched.apk>"
+serial=${ANDROID_SERIAL:-emulator-5580}
+out="$WORK/twitch-drops/art-probe"
+remote=/data/local/tmp/lurk-twitch-drops
+rm -rf "$out"
+mkdir -p "$out/classes" "$out/dex" "$WORK/tmp"
+export TMPDIR="$WORK/tmp"
+android="$ANDROID_HOME/platforms/android-36/android.jar"
+javac --release 17 -classpath "$android" -d "$out/classes" "$ROOT/tests/twitch/DropsArtProbe.java" "$ROOT/tests/twitch/ProbeLocators.java"
+"$(build_tool d8)" --min-api 29 --lib "$android" --output "$out/dex" "$out/classes/"*.class
+(cd "$out/dex" && jar cf "$out/probe.jar" classes.dex)
+if $compile_only; then
+    note "Drops probe compiled: $out/probe.jar"
+    exit 0
+fi
+adb -s "$serial" shell mkdir -p "$remote"
+trap 'adb -s "$serial" shell rm -rf "$remote" >/dev/null 2>&1 || true' EXIT
+adb -s "$serial" push "$1" "$remote/app.apk" >/dev/null
+adb -s "$serial" push "$out/probe.jar" "$remote/probe.jar" >/dev/null
+adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin DropsArtProbe $remote/app.apk"

@@ -87,6 +87,9 @@ TwitchChat.timestamps
 # if chat_auto_claim
 TwitchChat.autoClaim
 
+# if drops_auto_claim
+TwitchDrops.presented
+
 # if chat_hide_badges
 TwitchChatCompact.badges
 

@@ -103,6 +103,7 @@ ReVive, bttv-android, TwitchMod, Xtra, Twire and Frosty.
 | Tablet UI | Tablet layout |
 | Navigation bar position | Navigation bar position |
 | Auto-claim channel points | Auto-claim channel points |
+| Auto-claim Drops | Auto-claim Drops (presses the drops notification's Claim) |
 | Twitch debug mode | Declined |
 | Twitch's newer React Native player bypassing native hooks | Use native player |
 
@@ -454,6 +455,28 @@ stand-in for the action, so the request itself is unverified.
 
 `bin/test-twitch-chat <apk>` runs the real classes with each switch on and off. Signed-in IRC login
 and bonus claims are verified only through bytecode and the probe.
+
+*Auto-claim Drops* (`drops_auto_claim`, off by default, needs an account) has the same shape: it presses the
+Claim button of Twitch's drops notification for you. The notification presenter of a channel (found by its
+`translateChannelAvailableDropsResponse`/`translateAvailableDrops` lambda names) shows the first drop
+presentation (`DropPresentation(change=…)`) of its list in one case of a merged Function1: it makes the view
+state from the presentation and pushes it with `RxPresenter`'s state call. Right after that push,
+`TwitchDrops.presented(presenter, presentation)` runs. When the presentation's drop is a `Claimable(…)` whose
+instance ID it hasn't claimed in this process, it makes the presenter's own view-event handler (the
+`(presenter, case)` lambda its view binding subscribes to the view's `EventDispatcher` with) and hands it the
+Claim button's event, `Claim(claimingState=<the drop>, secondsPassedUntilClaim=0)`, through bridge stubs. That
+is the handler a tap reaches: it marks the drop as claiming, sends Twitch's `ClaimDropRewardsMutation` with the
+drop instance ID through the account's GraphQL client, and reports its "claim" analytics event (blocked by
+Disable analytics). Drops earned while no notification is up (another channel, another device) stay in the
+inventory; a failed claim isn't retried until the next start.
+
+`bin/test-twitch-drops <apk>` (`DropsArtProbe`) runs the injection point with real `Claimable` and
+`DropPresentation` objects and the real presenter, repository and claim service, with the GraphQL client left
+out: off claims nothing; on, Twitch's handler runs and stops at the client's request method (`yuj.k` in
+31.7.0), so the claim got as far as the request; the same drop isn't claimed twice, another one is, and a
+presentation without a claimable drop isn't. The request, its account and integrity headers and the server's
+answer were not exercised: Twitch's Apollo client can't be pointed at a loopback server on ART without
+rebuilding the app's dependency graph, and no account exists to run it for real.
 
 *Chat keywords* highlights native and React Native chat lines that mention you (your signed-in login) or contain one
 of your highlight words, with a tinted row and an optional vibration. It hides lines with blocked
@@ -879,7 +902,7 @@ patched APK as `assets/lurk/locators.json`:
   `twitch.block_cookie_notice.options_constructor`, `twitch.hide_chat_highlights.dispatch`/`highlight_*`,
   `twitch.hide_clips.home_tabs`, `twitch.hide_subscription_upsells.subscribe_renderer`/`turbo_dialog_route` and
   `twitch.emote_picker.section`/`autocomplete_map`/`autocomplete_order`/`autocomplete_order_type` and
-  `twitch.latency_badge.latency`.
+  `twitch.latency_badge.latency` and `twitch.auto_claim_drops.handler`/`handler_case`.
 
 `ChatArtProbe`, `AdsProbe`, `PrivacyAdsProbe` and `HighlightsArtProbe` read the file through
 `ProbeLocators.java`, and `verify_privacy.py` and `verify_interface_emitted.py` through `locators.py`;
