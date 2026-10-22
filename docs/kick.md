@@ -786,7 +786,8 @@ probe, and say so. Kick's own classes keep their names (R8 doesn't rename them),
 mostly protects against library renames and Metro renumbering.
 
 `bin/test-kick-hermes` runs `verify_sources.py`, `test_hermes.py`, `verify_literals.py`,
-`verify_hosting.py`, `verify_quality.py`, `HermesProbe.kt`, `verify_player.py`, `verify_privacy.py`,
+`verify_interface.py`, `verify_hosting.py`, `verify_quality.py`, `HermesProbe.kt`, `verify_player.py`,
+`verify_privacy.py`,
 `verify_sleep_queue.py` and `verify_analytics_jobs.py`, and skips (saying so) the ones for patches
 the APK doesn't have; patch with `-e "Default video quality"` to include the quality check. The
 stock bundle's hash and the Kick version come from the patch sources (`tests/kick/pins.py`), so a
@@ -818,8 +819,18 @@ version bump edits them in `Hermes.kt` and `Constants.kt` only.
   locals first (Datadog's `initialize`, whose promise is `v11` today) or call
   `requireLowRegisters`, so a later Kick version with more locals fails at patch time instead
   of losing the call.
-- `tests/kick/verify_privacy.py`: production share/PAL helpers with boundary doubles;
-  31 assertions, including host spoofing, functional parameters and switch isolation.
+- `tests/kick/verify_privacy.py`: production share/PAL helpers with boundary doubles,
+  including host spoofing, functional parameters, switch isolation and the opt-in
+  fingerprinting block.
+- `tests/kick/verify_interface.py`: executes the emitted Interface edits, off and on, in a
+  small interpreter with boundary doubles: the Browse and channel tab lists lose Clips with no
+  hole and Chat moves up, the category header keeps Live only, the PopularClipsRow element
+  becomes null, ChannelSubButton returns null only on its unsubscribed path, the tipping, gift,
+  leaderboard, Home row and update components return null at entry, and the AMOLED surface
+  object holds each choice's colours with its other values unchanged. It also shows that the
+  registers Hide Clips overwrites with undefined hold undefined there in stock code; the patch
+  checks the same at patch time (every instruction naming the register first must load
+  undefined or return it).
 - `tests/kick/verify_quality.py`: interprets actual reset/setter instructions to
   verify first playback, Auto, explicit selections and clearing a selection. Its
   negative control reproduces the initial-only patch's 1080p-to-720p reset bug.

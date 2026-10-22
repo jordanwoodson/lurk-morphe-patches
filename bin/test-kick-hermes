@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Kick's structural checks, no device needed: the Hermes edits of a patched APK decoded independently (hermes-dec),
-# executed where they matter (Stay on channel, Default video quality), the literal-buffer edits, the JVM Hermes helper
-# probe on the stock bundle, the emitted smali hooks, the player and privacy helpers, and the patch sources.
+# executed where they matter (Interface patches, Stay on channel, Default video quality), the literal-buffer edits, the
+# JVM Hermes helper probe on the stock bundle, the emitted smali hooks, the player and privacy helpers, and the sources.
 # Usage: bin/test-kick-hermes <patched.apk> [stock index.android.bundle]
 # The stock bundle defaults to $MORPHE_WORK/kick/<version>/hermes/index.android.bundle (bin/decompile kick).
 # HERMES_PYTHON names a Python with hermes-dec; by default the mise-installed one (bin/bootstrap) is used.
@@ -36,6 +36,11 @@ keys=" $(unzip -p "$apk" assets/lurk-hermes.json | python3 -I -c \
 run python3 -I "$ROOT/tests/kick/verify_sources.py"
 run "$hermes_python" -I "$ROOT/tests/kick/test_hermes.py" "$stock" "$apk"
 run "$hermes_python" -I "$ROOT/tests/kick/verify_literals.py" "$stock" "$apk"
+if [[ "$keys" =~ \ (hide_clips|hide_subscription_upsells|hide_kicks|hide_home_[a-z]+|block_update_prompts|amoled_black)\  ]]; then
+    run "$hermes_python" -I "$ROOT/tests/kick/verify_interface.py" "$stock" "$apk"
+else
+    note "skipped verify_interface.py: the APK has none of the Interface patches it executes"
+fi
 if [[ "$keys" == *" stay_on_host "* ]]; then
     run "$hermes_python" -I "$ROOT/tests/kick/verify_hosting.py" "$stock" "$apk"
 else
