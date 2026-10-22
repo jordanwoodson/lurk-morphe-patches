@@ -1,3 +1,10 @@
+## [1.12.0-dev.2](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.12.0-dev.1...v1.12.0-dev.2) (2026-10-22)
+
+### 🐛 Bug Fixes
+
+* **kick:** support Kick 40.32.3 ([0e935b1](https://github.com/jordanwoodson/lurk-morphe-patches/commit/0e935b10a462ed511d0d28b7fd01a0248fc08027))
+* **twitch:** support Twitch 31.7.0 ([ffc22a1](https://github.com/jordanwoodson/lurk-morphe-patches/commit/ffc22a1b81c90031464989e0069fafa3c47be7bf))
+
 ## [1.12.0-dev.1](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.11.1...v1.12.0-dev.1) (2026-10-19)
 
 ### 🐛 Bug Fixes

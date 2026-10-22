@@ -64,14 +64,14 @@ Lurk. Kick's and Twitch's JavaScript settings apply after a restart, which the s
 ## Patches
 
 <!-- PATCHES_START EXPANDED -->
-> **[v1.12.0-dev.1](https://github.com/jordanwoodson/lurk-morphe-patches/releases/tag/v1.12.0-dev.1)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;103 patches total
+> **[v1.12.0-dev.2](https://github.com/jordanwoodson/lurk-morphe-patches/releases/tag/v1.12.0-dev.2)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;103 patches total
 <details open>
 <summary><img src="assets/kick-icon-round.webp" width="28" height="28" align="center" alt="">&nbsp;&nbsp;<b>Kick</b>&nbsp;&nbsp;•&nbsp;&nbsp;26 patches</summary>
 <br>
 
 **🎯 Supported versions:**
 
-| 40.32.1 |
+| 40.32.3 |
 | :---: |
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
@@ -111,7 +111,7 @@ Lurk. Kick's and Twitch's JavaScript settings apply after a restart, which the s
 
 **🎯 Supported versions:**
 
-| 31.6.0 |
+| 31.7.0 |
 | :---: |
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
