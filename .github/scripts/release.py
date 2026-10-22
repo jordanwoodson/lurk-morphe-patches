@@ -276,15 +276,25 @@ def release_exists(repo: str, tag: str) -> bool:
 
 
 def latest_release(pre: str | None, head: str) -> tuple[str, Version, str] | None:
-    """The newest matching release commit, including one still needing stable finalization."""
+    """
+    The newest release commit of this branch's kind (stable, or the `pre` pre-release), including one still
+    needing stable finalization. Release commits of the other kind are skipped, since merges put them in
+    both branches' logs: dev's pre-releases reach main with every merge, and stable releases reach dev
+    with the backmerge, either of them possibly newer than the release to recover. A pre-release that a
+    newer stable release in the log has superseded is not recovered.
+    """
+    newest_stable = None
     for line in git("log", "--format=%H%x1f%s", "-E", "--grep=^chore: Release v", head).splitlines():
         sha, subject = line.split("\x1f", 1)
         match = RELEASE_SUBJECT.fullmatch(subject)
         version = Version.parse(match.group(1)) if match else None
         if version is None:
             continue
-        # The newest release commit may come from the other branch (a stable release merged into dev).
         if version.pre != pre:
+            if version.pre is None and newest_stable is None:
+                newest_stable = version
+            continue
+        if pre is not None and newest_stable and newest_stable.order() > version.order():
             return None
         text = git("log", "-1", "--format=%b", sha)
         if not text:
