@@ -183,8 +183,9 @@ player's "Ad" label (`player.controls.ad.label`) can't appear. The IVS SDK's own
 `AdCue` (start, duration, pod position and count, PRE/MID/POST roll type, tracking URLs), arrives
 through `Player.Listener.onCue`, which Kick's listener ignores; on the most-watched English live
 stream no cue of any kind arrived in eight minutes. A patch that mutes and covers the player during
-a stitched ad break could key on either signal, but neither could be observed, so there is none
-yet. Ads stitched into the media itself can't be skipped by a client patch, only muted and covered.
+a stitched ad break could key on either signal, but neither could be observed. Ads stitched into the
+media itself can't be skipped by a client patch, only muted and covered. (Mute stitched live ads, added later and
+experimental, keys on both and on IVS's own ad break events; see [Mute stitched live ads](#mute-stitched-live-ads).)
 
 ## Shared infrastructure and implementation order
 
@@ -242,6 +243,7 @@ details and validation follow.
 | Hide Clips | Yes | Off | Browse/channel/category tabs and channel clip rail. Direct playback routes remain. |
 | Clean share links | Yes | On | Known campaign/click parameters on Kick URLs only; functional parameters, other hosts and attachments remain. |
 | Bypass VOD ad sessions | No | Off (Playback) | Experimental original-VOD-URL fallback. No live-ad removal claim. |
+| Mute stitched live ads | Yes | Off (Playback) | Experimental: mutes and covers a live ad break the player reports, until it ends; the ad still plays. Not observed with a real ad. |
 | Block update prompts | Yes | On | Kick's forced-update screen and update sheet, and the Play Store version lookup behind them. |
 | Hide rating prompt | Yes | On | Kick's automatic "rate the app" prompts. |
 | Show deleted messages | Yes | On; Ignore chat clears, on | Moderator-style struck-through deleted, timed-out and banned messages in chat, set inside the chat page so Kick's server sees no change; a moderator's clear keeps the messages. |
@@ -587,6 +589,58 @@ gone a second after the switch was turned off. `bin/test-kick` runs Kick's real 
 (`PlayerProbe`) with a stand-in IVS player and Amazon's own `Statistics` and `Quality`: the six expected lines with the
 switch on, drawn in the top left corner only, Kick's own code still running after the hook, nothing read from the
 player while off, a player that throws tolerated, and the panel removed once the switch is off.
+
+### Mute stitched live ads
+
+Experimental, off by default, and not seen working on a real ad: none reached a signed-out session (see the live
+ads notes under [Analytics and ads](#analytics-and-ads)). Kick's player can learn of a stitched ad break three ways,
+and the patch listens to all three:
+
+- IVS's `AdCue` (start, duration, pod position and count, roll type, tracking URLs), through
+  `Player.Listener.onCue`, which Kick's listener ignores. The listener is the anonymous class that is the type of the
+  view's `playerListener` field and keeps the view in a synthetic field. The hook goes at the start of its `onCue`:
+  Kick's first instruction overwrites `this` with the name for `checkNotNullParameter`, so the patch borrows that
+  register to load the view, and fails if that instruction moves. Only an `AdCue` starts a break. Any other cue (IVS
+  timed metadata, `TextMetadataCue`) is logged with Debug logging on and otherwise ignored: nothing says which timed
+  metadata would mark an ad, and streamers use it for other things.
+- IVS's own ad break events, `onAdBreakStarted` and `onAdBreakEnded(AdBreak)`, for breaks IVS inserts itself. Kick's
+  listener keeps `Player.Listener`'s empty ones; the patch adds the two methods to it, and fails if Kick ever
+  overrides them.
+- The ads of a MediaTailor session. `DatazoomAnalyticsManager` hands every forwarded session event to the view's
+  `onMuxAdEvent` callback, the constructor's lambda that takes a `MuxAdEventData`: `adStart` starts a break for the
+  ad's `durationSeconds`, `adEnd` ends it 1.5 s later unless the next ad of the pod starts. Kick only makes a session
+  when the playback response carries a MediaTailor tracking URL and Datazoom runs, so with Disable analytics on (its
+  default), which stops Datazoom, this signal never comes.
+
+A break mutes the player through the view's own `setMuted`, so the command goes through Kick's player thread like
+Kick's own, and sets the view's foreground to opaque black with "Ad break" in the middle: over the video's
+`SurfaceView` and the Show video stats panel, under Kick's React Native controls. `setMuted` itself is hooked:
+`KickAds` remembers the mute React Native last asked for, keeps the player muted when Kick asks for sound during a
+break, and restores that request at the end, so a player Kick had muted stays muted. A break ends when its time is up,
+when the IVS break or the last MediaTailor ad ends, or when the view loads another stream (`setStreamUrl`,
+`loadSource`) or is destroyed. Its time: an `AdCue`'s duration for each ad left in its pod, else the cue's own span; an
+`AdBreak`'s duration; a MediaTailor ad's; else 30 s; at most 4 minutes, plus 2 s, since a cue can come a little before
+its ad. IVS gives cue times in milliseconds, and a duration under 1,000 is taken as seconds. With the switch off
+nothing starts, and a break already running still ends, so Lurk never leaves a player muted or covered. The ad keeps
+playing for its full length; this only silences and hides it, and Kick's player still reports it. In
+picture-in-picture Kick moves the video into a window-sized host, which the cover doesn't reach; the sound stays off.
+
+Checked with synthetic signals only. `PlayerProbe` (run by `bin/test-kick`) makes IVS `AdCue`, `AdBreak` and
+`TextMetadataCue` objects with Amazon's own classes and Kick's own `MuxAdEventData`, and feeds them to Kick's real
+listener (`onCue` and the added methods) and to the view's MediaTailor callback on ART, with the view's real `setMuted`
+and player thread in front of a stand-in IVS player that records what it's told. Off, an ad cue changes nothing; on,
+a timed-metadata cue changes nothing; an ad cue mutes and covers at once (opaque black with the label drawn), Kick's
+own unmute during the break doesn't reach the player, and both come back when the cue's time is up and not before; a
+cue for the first of three ads covers the whole pod; another stream ends a break at once; a player Kick had muted
+stays muted afterwards; the IVS break start and end and MediaTailor's `adStart`, a quick `adEnd` and `adStart` between
+two ads, and the last `adEnd` each do what they should; turning the switch off during a break still ends it. The cue
+lengths come out as expected for milliseconds, seconds, a cue's own span and none.
+On the emulator (Android 16), signed out, with the switch on and Debug logging on, 12 minutes of the most-watched live
+channel (Arabic, about 130,000 viewers) and 15 minutes of a large English one (xQc), sampled every 30 s: Kick's
+audio track was playing in 50 of 54 samples (paused in the rest while the stream rebuffered), the player was never
+covered, and neither an ad cue nor any other cue, IVS ad break or MediaTailor event arrived, so no real ad could be
+recorded; together with the earlier eight minutes, about 35 minutes of top live streams carried no ad signal of any
+kind to a signed-out client.
 
 ### Sleep timer
 
@@ -1012,7 +1066,7 @@ version bump edits them in `Hermes.kt` and `Constants.kt` only.
   bytes of each choice value, exact stock restoration and the reuse of the private copy;
   invokes the two Insider job guards and checks synchronous completion without SDK dispatch. A second probe,
   `PlayerProbe`, runs the player view's hooks in a fresh process with Kick's real player classes and a stand-in IVS
-  player (Show video stats).
+  player (Show video stats, Mute stitched live ads).
   Hand-written invokes in the Kick patches either use `/range`, copy a parameter into low
   locals first (Datadog's `initialize`, whose promise is `v11` today) or call
   `requireLowRegisters`, so a later Kick version with more locals fails at patch time instead

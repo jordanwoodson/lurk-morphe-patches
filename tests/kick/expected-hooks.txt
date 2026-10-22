@@ -61,5 +61,13 @@ KickPlayer.resizeMode
 # Show video stats
 KickStats.onStatistics
 
+# Mute stitched live ads
+KickAds.onCue
+KickAds.onAdBreakStarted
+KickAds.onAdBreakEnded
+KickAds.onMediaTailorEvent
+KickAds.muteRequest
+KickAds.onLoad
+
 # Default video quality (not selected by default)
 # KickPlayer.autoQualityCeiling

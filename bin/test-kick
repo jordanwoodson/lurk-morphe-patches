@@ -30,7 +30,9 @@ printf '%s\n' "$result"
 [[ "$result" == *"PASS: loader defaults"* && "$result" != *"Exception"* && "$result" != *"Error"* ]] ||
     die "bundle loader probe did not pass"
 # A fresh process: the player probe prepares its own main Looper and settings.
-result=$(adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin PlayerProbe $remote/app.apk" 2>&1)
+result=$(adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin PlayerProbe $remote/app.apk" 2>&1) ||
+    true # Its output says what failed; the check below fails the run.
 printf '%s\n' "$result"
 [[ "$result" == *"PASS: Show video stats"* || "$result" == *"SKIP: Show video stats"* ]] &&
+    [[ "$result" == *"PASS: Mute stitched live ads"* || "$result" == *"SKIP: Mute stitched live ads"* ]] &&
     [[ "$result" != *"Exception"* && "$result" != *"Error"* ]] || die "player probe did not pass"
