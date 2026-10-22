@@ -27,6 +27,8 @@ import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.twitch.shared.lowParameters
 import io.github.jordanwoodson.patches.shared.invoke
+import io.github.jordanwoodson.patches.twitch.shared.requireFreeRegister
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.twitchHermes
 import io.github.jordanwoodson.patches.twitch.shared.twitchHermesPatch
@@ -74,6 +76,9 @@ private fun BytecodePatchContext.hideAccountTurboPromotion() {
     }
     val scratch = (instructions[row - 5] as TwoRegisterInstruction).registerB
     if (scratch > 255) throw PatchException("Twitch: account Turbo scratch register is too large")
+    // With the switch off the row call runs as before, so prove the flags register is dead there.
+    method.requireNotBranchTarget(row, "account Turbo row call")
+    method.requireFreeRegister(row, scratch, "account Turbo row")
     method.addInstructionsWithLabels(row, """
         ${isEnabled(KEY, "v$scratch")}
         if-eqz v$scratch, :lurk_keep_turbo_account_row

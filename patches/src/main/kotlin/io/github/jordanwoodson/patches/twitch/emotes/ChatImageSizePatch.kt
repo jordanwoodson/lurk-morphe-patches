@@ -10,6 +10,10 @@ import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.TypeReference
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
+import io.github.jordanwoodson.patches.twitch.shared.freeRegister
+import io.github.jordanwoodson.patches.twitch.shared.requireFreeRegister
+import io.github.jordanwoodson.patches.twitch.shared.requireKept
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 

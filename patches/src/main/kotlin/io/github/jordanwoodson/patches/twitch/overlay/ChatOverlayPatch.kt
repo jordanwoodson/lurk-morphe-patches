@@ -21,8 +21,8 @@ import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.shared.settings.requireLocals
 import io.github.jordanwoodson.patches.shared.invokeStatic
-import io.github.jordanwoodson.patches.twitch.emotes.freeRegister
-import io.github.jordanwoodson.patches.twitch.emotes.requireNotBranchTarget
+import io.github.jordanwoodson.patches.twitch.shared.freeRegister
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
