@@ -20,8 +20,8 @@ TwitchBundle.prepare
 TwitchStartup.firstRoute
 TwitchStartup.watchStart
 
-# if refresh_stream vod_chapters
-# The player-view attach hook both patches share.
+# if refresh_stream vod_chapters latency_badge
+# The player-view attach hook these patches share.
 TwitchPlayerViews.attached
 
 # if fix_notifications

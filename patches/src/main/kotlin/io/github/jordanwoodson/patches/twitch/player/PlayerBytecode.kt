@@ -13,6 +13,7 @@ import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.methodCall
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.shared.requireLowRegisters
@@ -26,6 +27,25 @@ internal const val PLAYER = "Lio/github/jordanwoodson/extension/shared/twitch/Tw
 context(context: BytecodePatchContext)
 internal fun playerPresenterClass(): ClassDef =
     PlayerPresenterFingerprint.twitchMatch("player presenter base class").originalClassDef
+
+/**
+ * The player presenter method the error screen's Retry calls, with (0, true): a new access token and playlist
+ * for live streams, the same position for videos. An interface method of the presenter base class.
+ */
+context(context: BytecodePatchContext)
+internal fun playerRetry(): MethodReference {
+    val presenter = playerPresenterClass()
+    val errorScreen = PlayerErrorRetryFingerprint.twitchMatch("player error screen").originalMethod
+    val action = context.classDefBy(errorScreen.parameterTypes.last().toString())
+    val retry = action.methods.flatMap { method -> method.implementation?.instructions?.toList().orEmpty() }
+        .filter { it.opcode == Opcode.INVOKE_INTERFACE }
+        .mapNotNull { (it as ReferenceInstruction).reference as? MethodReference }
+        .filter { it.returnType == "V" && it.parameterTypes.map { type -> type.toString() } == listOf("Ljava/lang/Integer;", "Z") }
+        .distinct().singleOrNull()
+        ?: throw PatchException("Twitch: the player error screen's Retry changed")
+    if (retry.definingClass !in presenter.interfaces) throw PatchException("Twitch: Retry is not a player presenter call")
+    return retry
+}
 
 private const val VIEW_DELEGATE = "Ltv/twitch/android/core/mvp/viewdelegate/BaseViewDelegate;"
 private const val PLAYER_VIEWS = "Lio/github/jordanwoodson/extension/shared/twitch/TwitchPlayerViews;"

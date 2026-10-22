@@ -93,7 +93,7 @@ ReVive, bttv-android, TwitchMod, Xtra, Twire and Frosty.
 | Refresh stream | Refresh stream |
 | Brightness/volume gestures, seek interval | Player gestures |
 | Hide Clip/Cast/Share buttons | Hide player buttons |
-| Video stats / latency | Show video stats |
+| Video stats / latency | Show video stats (with uptime), Latency badge |
 | Disable low latency, force ExoPlayer | Normal latency, Force ExoPlayer |
 | VOD chapters | VOD chapters |
 | VODHunter (sub-only and deleted VODs) | Declined |
@@ -272,6 +272,21 @@ players opened afterwards (`UiBoundaryProbe refresh-off`).
 
 *Normal latency* sets `setLiveLowLatencyEnabled(false)` before native loads and overrides the React
 Native and portal calls. On the emulator, latency rose from about 2 s to 6–7 s.
+
+*Latency badge* (`latency_badge`, off by default) puts a small pill with the live latency ("2.4 s") at the
+top left of the native player in the theatre. It is added through the shared player-view hook
+(`TwitchPlayerViews.attached`) to the presenter's player view, a `FrameLayout`, only while the switch is on,
+and polls once a second while attached to a window. The latency is the presenter's own getter: the base
+presenter method returning `long` that calls the IVS wrapper's latency method (found by its `MediaPlayer`
+field read and `getLiveLatency()` call), reached through a bridge stub. The pill shows only for a positive
+latency and when the view sits under `theatre_root_container`, so Home's feed previews, VODs and clips get
+nothing. Twitch's native player has no seek to live (only the React Native theatre has a DVR "jump to live"
+pill), so a tap calls the presenter's Retry with `(0, true)`, the same call the error screen and *Refresh
+stream* make: a new access token and playlist, which start at the live edge. Verified on the emulator on a
+live channel: the pill read 2.3–2.7 s with low latency, a tap logged `jump to live from 2342 ms`, the stream
+reloaded on a new serving ID, and Home's previews showed no pill. A stream far behind live wasn't reproduced
+(the emulator's network throttle didn't raise IVS's latency), so recovery from a large delay is the reload's
+usual behavior rather than something measured here.
 
 Verified on the emulator, signed out, in the classic theatre. The React Native, portal and vertical
 theatres are checked statically only. `UiBoundaryProbe gesture-hook` calls the patched
@@ -837,7 +852,8 @@ patched APK as `assets/lurk/locators.json`:
   `twitch.block_client_ads.request`, `twitch.disable_analytics.crashlytics_permission`,
   `twitch.block_cookie_notice.options_constructor`, `twitch.hide_chat_highlights.dispatch`/`highlight_*`,
   `twitch.hide_clips.home_tabs`, `twitch.hide_subscription_upsells.subscribe_renderer`/`turbo_dialog_route` and
-  `twitch.emote_picker.section`/`autocomplete_map`/`autocomplete_order`/`autocomplete_order_type`.
+  `twitch.emote_picker.section`/`autocomplete_map`/`autocomplete_order`/`autocomplete_order_type` and
+  `twitch.latency_badge.latency`.
 
 `ChatArtProbe`, `AdsProbe`, `PrivacyAdsProbe` and `HighlightsArtProbe` read the file through
 `ProbeLocators.java`, and `verify_privacy.py` and `verify_interface_emitted.py` through `locators.py`;

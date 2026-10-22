@@ -6,8 +6,8 @@ import io.github.jordanwoodson.extension.shared.settings.Settings;
 
 /**
  * The one hook on native player presenters attaching their player view, shared by Refresh stream (which
- * player a long-press is on) and VOD chapters (which video an overlay belongs to). Each gets the view only
- * when its patch is included.
+ * player a long-press is on), VOD chapters (which video an overlay belongs to) and Latency badge (which player
+ * to read). Each gets the view only when its patch is included.
  */
 @SuppressWarnings("unused")
 public final class TwitchPlayerViews {
@@ -18,5 +18,6 @@ public final class TwitchPlayerViews {
     public static void attached(Object presenter, View view) {
         if (Settings.isRegistered("refresh_stream")) TwitchPlayer.playerView(presenter, view);
         if (Settings.isRegistered("vod_chapters")) TwitchVod.playerView(presenter, view);
+        if (Settings.isRegistered(TwitchLatency.KEY)) TwitchLatency.playerView(presenter, view);
     }
 }

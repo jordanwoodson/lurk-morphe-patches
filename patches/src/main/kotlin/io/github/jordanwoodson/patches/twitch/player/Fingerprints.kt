@@ -12,6 +12,15 @@ import com.android.tools.smali.dexlib2.Opcode
 
 private const val DRAGGABLE = "Ltv/twitch/android/shared/ui/elements/draggable/"
 
+// Twitch's IVS player wrapper: the live latency of its MediaPlayer, -1 without one.
+internal object NativePlayerLatencyFingerprint : Fingerprint(
+    returnType = "J", parameters = emptyList(),
+    filters = listOf(
+        fieldAccess(type = "Lcom/amazonaws/ivs/player/MediaPlayer;", opcode = Opcode.IGET_OBJECT),
+        methodCall(name = "getLiveLatency", returnType = "J"),
+    ),
+)
+
 // The base class of the native player presenters (live, VOD, clips, vertical): its property delegates
 // keep their Kotlin names.
 internal object PlayerPresenterFingerprint : Fingerprint(
