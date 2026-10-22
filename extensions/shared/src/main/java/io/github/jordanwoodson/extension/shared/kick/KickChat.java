@@ -15,12 +15,14 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.lang.ref.WeakReference;
 import java.util.UUID;
 
+import io.github.jordanwoodson.extension.shared.ChatFilter;
 import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
 
@@ -59,10 +61,21 @@ public final class KickChat {
     private static final class Page {
         final String url, generation = UUID.randomUUID().toString();
         final Object channel, slug;
-        Page(String url, JSONObject options) {
+        /** The signed-in account from the page's config (selfUser), lowercase, "" when signed out: for mentions. */
+        final String self, selfName;
+        Page(String url, JSONObject options, JSONObject selfUser) {
             this.url = url; channel = options.opt("channelId"); slug = options.opt("sevenTvChannel");
+            // Lines are matched by the name shown in chat, so that is "self" (never a mention of yourself); the
+            // kick.com handle also counts as a mention.
+            String username = selfUser == null ? "" : selfUser.optString("username").toLowerCase(Locale.ROOT);
+            String handle = selfUser == null ? "" : selfUser.optString("slug").toLowerCase(Locale.ROOT);
+            self = username.isEmpty() ? handle : username;
+            selfName = handle.equals(self) ? "" : handle;
         }
     }
+    /** The type of the page script's Chat keywords batches, and the most lines one batch may hold. */
+    private static final String KEYWORDS = "lurkKeywords";
+    private static final int KEYWORD_BATCH = 200;
     private static String script;
     private static String moderatorScript;
 
@@ -127,13 +140,18 @@ public final class KickChat {
             if (!HOST.equals(uri.getHost()) || uri.getQueryParameter("preview") != null) return;
             JSONObject options = options(uri);
             if (options.length() == 0) return;
-            if (options.optBoolean("sevenTv")) {
+            boolean sevenTv = options.optBoolean("sevenTv");
+            if (sevenTv || options.optBoolean("keywords")) {
+                // The page's messages to the app are taken only from this document of this WebView.
                 Page page = PAGES.get(view);
                 if (page == null || !page.url.equals(url)) {
-                    page = new Page(url, options); PAGES.put(view, page); active = new WeakReference<>(view);
-                    JSONObject context = new JSONObject().put("enabled", true).put("generation", page.generation)
-                            .put("channelId", page.channel == null ? JSONObject.NULL : page.channel);
-                    KickComposer.send("channel", context.toString());
+                    page = new Page(url, options, selfUser(uri)); PAGES.put(view, page);
+                    if (sevenTv) {
+                        active = new WeakReference<>(view);
+                        JSONObject context = new JSONObject().put("enabled", true).put("generation", page.generation)
+                                .put("channelId", page.channel == null ? JSONObject.NULL : page.channel);
+                        KickComposer.send("channel", context.toString());
+                    }
                 }
                 options.put("generation", page.generation);
             }
@@ -146,17 +164,23 @@ public final class KickChat {
     }
 
     /**
-     * Consume only our catalog message; every ordinary stock bridge message keeps its original path. Only the 7TV
-     * page script sends catalog messages, so with its switch off nothing is parsed here.
+     * Consume only our messages (7TV catalogs, Chat keywords batches); every ordinary stock bridge message keeps its
+     * original path. Only Lurk's page script sends ours, so with both switches off nothing is parsed here.
      */
     public static synchronized boolean onMessage(WebView view, String message, String sourceUrl) {
-        if (!on(SEVEN_TV)) return false;
+        boolean sevenTv = on(SEVEN_TV), keywords = on(ChatFilter.KEY);
+        if (!sevenTv && !keywords) return false;
         if (message == null || message.length() > 1024 * 1024 || !message.startsWith("{")) return false;
         JSONObject data;
         try { data = new JSONObject(message); }
         catch (JSONException e) { return false; }
         String type = data.optString("type");
+        if (KEYWORDS.equals(type)) {
+            if (keywords) keywordBatch(view, data, sourceUrl);
+            return true;
+        }
         if (!"lurk7tvCatalog".equals(type) && !"lurk7tvDispose".equals(type)) return false;
+        if (!sevenTv) return true;
         try {
             Page page = PAGES.get(view);
             if (page == null || active.get() != view || !chatOrigin(sourceUrl) ||
@@ -174,6 +198,56 @@ public final class KickChat {
             Logger.d("Kick composer: rejected catalog");
         }
         return true;
+    }
+
+    /**
+     * Chat keywords: classifies a batch of new chat lines from this page with ChatFilter (blocked users, by the
+     * name shown and the kick.com handle; blocked words; mentions of the signed-in account; highlight words),
+     * vibrates once per highlighted line when that switch is on, and hands the page its verdicts for those lines:
+     * 1 tints one, 2 hides it.
+     */
+    private static void keywordBatch(WebView view, JSONObject data, String sourceUrl) {
+        try {
+            Page page = PAGES.get(view);
+            if (page == null || !chatOrigin(sourceUrl) || !chatOrigin(view.getUrl()) ||
+                    !page.generation.equals(data.optString("generation"))) return;
+            JSONArray items = data.optJSONArray("items");
+            if (items == null) return;
+            ChatFilter.Lists lists = ChatFilter.lists(page.self, page.selfName);
+            boolean vibrate = Settings.isEnabled(ChatFilter.VIBRATE);
+            JSONObject verdicts = new JSONObject();
+            for (int i = 0; i < Math.min(items.length(), KEYWORD_BATCH); i++) {
+                JSONObject item = items.optJSONObject(i);
+                if (item == null) continue;
+                String id = item.optString("id");
+                if (!id.matches("[0-9A-Za-z-]{1,64}")) continue;
+                String name = item.optString("name").toLowerCase(Locale.ROOT);
+                String handle = item.optString("slug").toLowerCase(Locale.ROOT);
+                String text = item.optString("text");
+                if (text.length() > 2000) text = text.substring(0, 2000);
+                int verdict = ChatFilter.classify(name, text, lists);
+                if (verdict != ChatFilter.HIDE && !handle.isEmpty() && !handle.equals(name) &&
+                        ChatFilter.classify(handle, "", lists) == ChatFilter.HIDE) verdict = ChatFilter.HIDE;
+                if (verdict == ChatFilter.NONE) continue;
+                verdicts.put(id, verdict);
+                if (verdict == ChatFilter.HIGHLIGHT && vibrate) ChatFilter.vibrate(view.getContext(), "kick:" + id);
+            }
+            if (verdicts.length() == 0) return;
+            view.evaluateJavascript("window.lurkChat && window.lurkChat.verdicts && window.lurkChat.verdicts("
+                    + verdicts + ");", null);
+        } catch (RuntimeException | JSONException e) {
+            Logger.d("chat keywords: " + e);
+        }
+    }
+
+    /** The page config's selfUser (id, slug, username) when signed in, else null. */
+    private static JSONObject selfUser(Uri uri) {
+        try {
+            String config = uri.getQueryParameter("config");
+            return config == null ? null : new JSONObject(config).optJSONObject("selfUser");
+        } catch (JSONException e) {
+            return null;
+        }
     }
 
     private static boolean chatOrigin(String url) {
@@ -206,6 +280,7 @@ public final class KickChat {
         // Only reported: the moderator view itself comes from the document-start script.
         if (on(SHOW_DELETED)) options.put("moderatorView", true);
         if (on(IGNORE_CLEARS)) options.put("ignoreClears", true);
+        if (on(ChatFilter.KEY)) options.put("keywords", true);
         JSONArray hide = new JSONArray();
         for (String[] lines : HIDE) {
             if (!on(lines[0])) continue;

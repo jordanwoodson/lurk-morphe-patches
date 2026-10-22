@@ -7,6 +7,8 @@
 //   hide          CSS selectors of chat lines to hide (subs and gifts, hosts, reward redemptions)
 //   sevenTv       show 7TV emotes. sevenTvChannel is the channel's slug and sevenTvUser its owner's Kick user ID,
 //                 each null when the app hasn't seen them; without either only global emotes show.
+//   keywords      Chat keywords: send each chat line to the app and tint or hide it by the app's verdict.
+//   generation    this page's token, which the app requires on every message the page sends it.
 // The page is served by Kick and can change at any time, so every step only touches what it finds and does
 // nothing otherwise.
 (function (options) {
@@ -60,6 +62,58 @@
     if (options.sevenTv) {
         sevenTv(options.sevenTvChannel, options.sevenTvUser);
         applied.push('7tv ' + (options.sevenTvUser || options.sevenTvChannel || 'global only'));
+    }
+
+    if (options.keywords && options.generation && window.ReactNativeWebView) {
+        keywords();
+        applied.push('keywords');
+    }
+
+    // Chat keywords: each chat line, already shown or new, goes to the app (sender's name and kick.com handle, the
+    // text as sent), which matches it against the Lurk lists and answers through window.lurkChat.verdicts:
+    // 1 tints the line, 2 hides it. Lines are sent in batches; a hidden line can show for a moment first.
+    function keywords() {
+        const pending = new Map();
+        let timer = null, observer;
+        const send = () => {
+            clearTimeout(timer); timer = null;
+            if (!pending.size) return;
+            const items = Array.from(pending.values());
+            pending.clear();
+            window.ReactNativeWebView.postMessage(JSON.stringify({type: 'lurkKeywords', generation: options.generation, items}));
+        };
+        const queue = (line) => {
+            const id = line.dataset.messageId;
+            if (!id || line.dataset.lurkKeywords) return;
+            line.dataset.lurkKeywords = '1';
+            const content = line.querySelector('.message-content');
+            const text = line.dataset.originalContent != null ? line.dataset.originalContent : (content ? content.textContent : '');
+            pending.set(id, {id, name: line.dataset.senderUsername || '', slug: line.dataset.senderSlug || '', text: text.slice(0, 2000)});
+            if (pending.size >= 200) send();
+            else if (!timer) timer = setTimeout(send, 50);
+        };
+        window.lurkChat.verdicts = (verdicts) => {
+            for (const id of Object.keys(verdicts || {})) {
+                const line = document.querySelector('.message-container[data-message-id="' + CSS.escape(id) + '"]');
+                if (line) line.classList.add(verdicts[id] === 2 ? 'lurk-hidden' : 'lurk-highlight');
+            }
+        };
+        whenReady((app) => {
+            const style = document.createElement('style');
+            style.textContent = '.message-container.lurk-hidden{display:none!important}' +
+                '.message-container.lurk-highlight{background:rgba(83,252,24,.16)!important;box-shadow:inset 3px 0 #53fc18}';
+            (document.head || document.documentElement).appendChild(style);
+            app.querySelectorAll('.message-container').forEach(queue);
+            observer = new MutationObserver((records) => {
+                for (const record of records) for (const node of record.addedNodes) {
+                    if (node.nodeType !== 1) continue;
+                    if (node.matches('.message-container')) queue(node);
+                    node.querySelectorAll('.message-container').forEach(queue);
+                }
+            });
+            observer.observe(app, {childList: true, subtree: true});
+        });
+        window.addEventListener('pagehide', () => { if (observer) observer.disconnect(); clearTimeout(timer); }, {once: true});
     }
 
     // 7TV: a word of a message that is the name of one of the channel's 7TV emotes, or of a global one, becomes

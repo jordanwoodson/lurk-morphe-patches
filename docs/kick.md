@@ -245,6 +245,7 @@ details and validation follow.
 | Don't save searches | Yes | On | New searches aren't added to the search history. |
 | AMOLED black | Yes | Off (choice) | Pure black background, optionally near-black cards and sheets. |
 | Third-party emotes | Yes | 7TV emotes, off | The channel's and 7TV's global emotes in live chat. |
+| Chat keywords | Yes | Off; mentions on, vibration off, lists empty | Tints messages that mention you or contain highlight words, optionally vibrating; hides blocked words and users. |
 
 The second batch follows one switch policy, the same in all three apps: every patch whose
 effect can be decided at run time has a Lurk setting that turns it fully off, and a new
@@ -599,8 +600,8 @@ stays Kick's `#090A0B`, and colours hardcoded in components stay as they are.
 ### Chat page script
 
 The switches that change chat lines (Ignore chat clears, Hide sub and gift messages, Hide host
-messages, Hide reward redemptions and 7TV emotes) work inside Kick's chat page, since that is
-where the lines are drawn. Any patch with one of them adds a hook to react-native-webview's
+messages, Hide reward redemptions, Chat keywords and 7TV emotes) work inside Kick's chat page, since
+that is where the lines are drawn. Any patch with one of them adds a hook to react-native-webview's
 `RNCWebViewClient.onPageStarted` and `onPageFinished`, after their super calls. For a page on
 `chat.mobile.kick.com`, other than the single-gift KICKs preview (`preview=true`),
 `KickChat` evaluates the script (`patches/src/main/resources/kick/chat/chat-page.js`, copied
@@ -626,6 +627,33 @@ script and `KickChat` is one the captured page uses. The capture of 2026-10-22
 can change at any time: the script then does nothing for what it no longer finds, and Lurk
 can't check it at patch time. `tests/kick/test_chat_page.py` runs it in headless Chrome on a
 copy of the page's structure.
+
+### Chat keywords
+
+The same lists and matching as on Twitch and Rumble (`ChatFilter`, keys `chat_keywords`,
+`chat_highlight_mentions`, `chat_highlight_words`, `chat_highlight_vibrate`, `chat_blocked_words`,
+`chat_blocked_users`): blocked users and words hide a message, a mention of you or a highlight word
+tints it, whole words in any case, blocks first. Kick's chat page draws every line, and each line
+element carries its sender (`data-sender-username`, `data-sender-slug`), its text as sent
+(`data-original-content`) and its ID. With the switch on, the chat page script sends the lines
+already shown and each new one (batched every 50 ms, at most 200 a batch) to the app through
+react-native-webview's bridge, the way the 7TV catalog goes. `KickChat` takes only messages from
+the chat page's origin with the page's generation token, matches each line with `ChatFilter`, and
+answers through `evaluateJavascript` with the lines to tint (Kick green, a 16% background and a
+left bar) or hide (`display: none`). Blocked users match the name shown or the kick.com handle.
+Mentions use the signed-in account from the page's config (`selfUser`); your own messages never
+count. "Vibrate on highlights" vibrates once per highlighted line, at most every three seconds,
+through `ChatFilter.vibrate` (Kick declares `VIBRATE`). Nothing leaves the phone. The answer comes
+after the page has drawn the line, so a hidden line can show for a moment. The bridge hooks
+(`RNCWebView.onMessage`, `destroy`) live in the chat page patch and are shared with 7TV.
+
+Checked on the emulator, signed out, on a live channel with about 40,000 viewers: with "o" blocked
+and "e, kkk" highlighted, lines containing the word "o" had `display: none`, lines with "e" or "kkk"
+and no "o" had the tint, others were unchanged, and the system recorded a 120 ms vibration from Kick.
+Mentions need an account and were checked on ART only: `bin/test-kick-chat` runs the real `KickChat`
+and `ChatFilter` with a batch from a page whose config names a signed-in user (blocked by name and
+by handle, blocked word, mention, own message, highlight words and phrases, a malformed ID, a stale
+generation and a foreign origin), and `test_chat_page.py` checks the page side in headless Chrome.
 
 ### Third-party emotes
 

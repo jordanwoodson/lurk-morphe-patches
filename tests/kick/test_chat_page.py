@@ -303,6 +303,49 @@ async def moderator_scenario(page):
         page.html = HTML
 
 
+# Two chat lines as Kick's page draws them (the data attributes the keywords script reads), and a bridge double.
+KEYWORD_LINES = """(() => { window.sent = []; window.ReactNativeWebView = {postMessage: s => sent.push(JSON.parse(s))};
+    const app = document.getElementById('app'); app.innerHTML = '';
+    for (const [id, name, slug, text] of [['m1', 'Troll', 'troll', 'hello'], ['m2', 'Viewer', 'viewer', 'nice clutch']]) {
+        const line = document.createElement('div'); line.className = 'message-container';
+        Object.assign(line.dataset, {messageId: id, senderUsername: name, senderSlug: slug, originalContent: text});
+        line.innerHTML = '<span class="message-content">' + text + ' <img class="emote" alt="x"></span>';
+        app.append(line);
+    } })()"""
+
+
+async def keywords_scenario(page):
+    """Chat keywords: lines go to the app in batches, once each; its verdicts tint or hide them."""
+    await page.call("Page.enable")
+    await page.call("Fetch.enable", patterns=[{"urlPattern": "*"}])
+    await page.go(PAGE)
+    await page.eval(KEYWORD_LINES)
+    check(await page.apply({"keywords": True}) == "nothing", "without a page generation nothing is sent")
+    await page.go(PAGE)
+    await page.eval(KEYWORD_LINES)
+    check(await page.apply({"keywords": True, "generation": "g1"}) == "keywords", "reports Chat keywords")
+    await page.until("sent.length === 1")
+    first = await page.eval("sent[0]")
+    check(first == {"type": "lurkKeywords", "generation": "g1", "items": [
+        {"id": "m1", "name": "Troll", "slug": "troll", "text": "hello"},
+        {"id": "m2", "name": "Viewer", "slug": "viewer", "text": "nice clutch"}]},
+        "lines already shown go to the app in one batch: ID, name, handle and the text as sent")
+    await page.eval("""(() => { const line = document.createElement('div'); line.className = 'message-container';
+        Object.assign(line.dataset, {messageId: 'm3', senderUsername: 'Late', senderSlug: 'late', originalContent: 'late line'});
+        document.getElementById('app').append(line); })()""")
+    await page.until("sent.length === 2")
+    check([item["id"] for item in await page.eval("sent[1].items")] == ["m3"], "a later line goes in its own batch, once")
+    await page.eval("window.lurkChat.verdicts({m1: 2, m2: 1, missing: 2})")
+    styles = await page.eval("""Array.from(document.querySelectorAll('.message-container')).map(e =>
+        [e.dataset.messageId, getComputedStyle(e).display, getComputedStyle(e).backgroundColor])""")
+    check(styles[0][:2] == ["m1", "none"], "a hidden line takes no space")
+    check(styles[1][0] == "m2" and styles[1][2] == "rgba(83, 252, 24, 0.16)", "a highlighted line is tinted")
+    check(styles[2][1] != "none" and styles[2][2] == "rgba(0, 0, 0, 0)", "other lines are unchanged")
+    await page.eval("document.getElementById('app').append(document.querySelector('[data-message-id=m3]'))")
+    await asyncio.sleep(0.1)
+    check(await page.eval("sent.length") == 2, "a line that moves is not sent again")
+
+
 async def resilient_scenario(page):
     await page.call("Page.enable")
     await page.call("Fetch.enable", patterns=[{"urlPattern": "*"}])
@@ -461,6 +504,7 @@ async def main():
             reader = asyncio.create_task(page.run())
             try:
                 await moderator_scenario(page)
+                await keywords_scenario(page)
                 await resilient_scenario(page)
                 await scenario(page)
                 if args.native_captures:
