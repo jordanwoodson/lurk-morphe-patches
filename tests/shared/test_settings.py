@@ -26,7 +26,8 @@ doubles (no Android SDK, APK or device) and cover:
 - the restart bar: offered while a restart-flagged setting or the pause differs from the start;
 - Export and Import settings: every setting written with its type, re-importing changes nothing,
   export-change-import restores every value, bad values and unknown keys are listed, not applied;
-- the bug report URL: the form's fields, every switch under On or Off, list contents never sent.
+- the bug report URL: the form's fields, every switch under On or Off, list contents never sent;
+- the launcher shortcut is added once and refreshed when its label or the versions changed.
 """
 import json
 import re
@@ -761,7 +762,7 @@ def main(argv):
             scenarios += [f'registry|{fixture}|{Path(scratch) / (app + ".dump")}', f'defaults|{fixture}',
                           f'stored|{fixture}', f'nocontext|{fixture}', f'empty|{fixture}', f'pause|{fixture}',
                           f'restart|{fixture}', f'backup|{fixture}', f'report|{fixture}']
-        scenarios += ['empty', 'chatfilter', 'logger', 'crash']
+        scenarios += ['empty', 'chatfilter', 'logger', 'crash', 'shortcut']
         run('SettingsProbe', ['settings/Settings.java', 'settings/Registry.java', 'settings/ResumedActivityTracker.java',
                               'settings/Backup.java', 'settings/Report.java', 'Logger.java', 'ChatFilter.java'],
             PROBE, scenarios, extra=JSON_DOUBLE | ANDROID)

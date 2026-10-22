@@ -41,6 +41,7 @@ public final class Settings {
     static final String PAUSED = "paused";
     static final String AUTO_PAUSED = "auto_paused";
     static final String CRASH_STREAK = "crash_streak";
+    private static final String SHORTCUT_STAMP = "shortcut";
     private static final String SHORTCUT_ID = "lurk_settings";
     /** A crash this soon after the process started counts towards pausing Lurk. */
     static final long EARLY_CRASH_MS = 60_000;
@@ -472,28 +473,54 @@ public final class Settings {
         return current;
     }
 
-    /** A launcher shortcut (long-press the app icon) to the settings screen. */
+    /**
+     * A launcher shortcut (long-press the app icon) to the settings screen. An existing one is updated once
+     * per app or Lurk version, or when its label changed, so it never keeps an old label or icon.
+     */
     private static void publishShortcut() {
         Context current = context;
         if (current == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.N_MR1) return;
         try {
             ShortcutManager manager = current.getSystemService(ShortcutManager.class);
             if (manager == null) return;
-            for (ShortcutInfo shortcut : manager.getDynamicShortcuts()) {
-                if (SHORTCUT_ID.equals(shortcut.getId())) return;
-            }
             Registry registry = registry();
+            String shortLabel = registry.name;
+            String longLabel = registry.name + " settings";
             Intent intent = new Intent(Intent.ACTION_VIEW).setClassName(current, SettingsActivity.class.getName());
             ShortcutInfo shortcut = new ShortcutInfo.Builder(current, SHORTCUT_ID)
-                    .setShortLabel(registry.name)
-                    .setLongLabel(registry.name + " settings")
+                    .setShortLabel(shortLabel)
+                    .setLongLabel(longLabel)
                     .setIcon(Icon.createWithResource(current, current.getApplicationInfo().icon))
                     .setIntent(intent)
                     .build();
-            manager.addDynamicShortcuts(Collections.singletonList(shortcut));
+            ShortcutInfo existing = null;
+            for (ShortcutInfo published : manager.getDynamicShortcuts()) {
+                if (SHORTCUT_ID.equals(published.getId())) existing = published;
+            }
+            if (existing == null) {
+                manager.addDynamicShortcuts(Collections.singletonList(shortcut));
+                rememberShortcut(current, registry);
+                return;
+            }
+            boolean sameLabels = shortLabel.contentEquals(String.valueOf(existing.getShortLabel()))
+                    && longLabel.contentEquals(String.valueOf(existing.getLongLabel()));
+            if (!sameLabels || !shortcutStamp(current, registry).equals(state().getString(SHORTCUT_STAMP, ""))) {
+                manager.updateShortcuts(Collections.singletonList(shortcut));
+                rememberShortcut(current, registry);
+            }
         } catch (RuntimeException e) {
             Logger.w("settings: no launcher shortcut: " + e);
         }
+    }
+
+    private static void rememberShortcut(Context current, Registry registry) {
+        SharedPreferences state = state();
+        if (state != null) state.edit().putString(SHORTCUT_STAMP, shortcutStamp(current, registry)).apply();
+    }
+
+    /** What the shortcut was made for: the app's version and Lurk's. */
+    private static String shortcutStamp(Context current, Registry registry) {
+        return appVersion(current) + "/" + registry.version;
     }
 
     /** The patched app's version name, or "" when it can't be read. */
