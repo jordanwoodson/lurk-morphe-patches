@@ -8,6 +8,9 @@ https://chat.mobile.kick.com shaped like Kick's (the #app message list, its mess
 elements; none of Kick's code), plus fixed Kick and 7TV responses. Checks the host guard, running once per page,
 hidden highlight lines, ignored clears, 7TV words in existing and new messages (channel over global, exact words
 only, links and Kick emotes untouched), the owner lookup, and that no request carries a referrer or cookies.
+It also runs the Show deleted messages script at document start on a page that reads its config the way Kick's
+does, and first checks that every class Lurk selects is one Kick's real page used when
+tests/kick/chat-page-contract.json was captured (refresh_chat_page_contract.py refreshes it from the live page).
 The Chrome profile lives under $MORPHE_WORK (default ~/build/lurk-morphe-patches) and is removed.
 """
 import asyncio
@@ -15,6 +18,7 @@ import argparse
 import base64
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import socket
@@ -59,6 +63,24 @@ const o = ['object', 'function'].includes(typeof window.ReactNativeWebView.injec
 window.received = o ? JSON.parse(o) : null; } catch (e) { window.received = 'error'; } };</script></head>
 <body><div id="app"></div></body></html>"""
 CONFIG = {"chatroomId": 1, "userCanModerate": False, "channelId": 668, "headers": {"User-Agent": "fixture"}}
+
+
+def contract_check():
+    """Every class Lurk's chat code selects must be one Kick's real page uses (tests/kick/chat-page-contract.json,
+    refreshed from the live page by refresh_chat_page_contract.py), and everything it relies on was present."""
+    contract = json.loads((ROOT / "tests/kick/chat-page-contract.json").read_text())
+    classes = set(contract["classes"])
+    sources = [SCRIPT, MODERATOR,
+               (ROOT / "extensions/shared/src/main/java/io/github/jordanwoodson/extension/shared/kick/KickChat.java").read_text()]
+    # CSS selectors among the string literals; host names such as chat.mobile.kick.com look alike and are skipped.
+    selectors = {literal for source in sources for literal in re.findall(r"""['"]([^'"\n]+)['"]""", source)
+                 if re.fullmatch(r"(?:[a-z]*(?:\.[a-z][a-z0-9-]*)+(?:\[[^\]]*\])?)(?:,\s*[a-z]*(?:\.[a-z][a-z0-9-]*)+)*", literal)
+                 and not literal.endswith((".com", ".app", ".io", ".tv"))}
+    used = {name for selector in selectors for name in re.findall(r"\.([a-z][a-z0-9-]*)", selector)}
+    check(used and used <= classes, "the page's captured classes include every class Lurk selects: " + ", ".join(sorted(used)))
+    missing = [key for key, value in contract["required"].items() if not value["present"]]
+    check(not missing, f"the page captured on {contract['captured']} had everything Lurk relies on" +
+          (": missing " + ", ".join(missing) if missing else ""))
 
 
 def chrome():
@@ -414,6 +436,7 @@ async def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--native-captures", type=Path, help="bin/test-kick-chat ART capture log")
     args = parser.parse_args()
+    contract_check()
     work = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches"))
     work.mkdir(parents=True, exist_ok=True)
     profile = Path(tempfile.mkdtemp(prefix="chat-page-", dir=work))

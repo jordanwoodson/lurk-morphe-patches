@@ -26,7 +26,9 @@ val hideChatHighlightsPatch = bytecodePatch(
     name = "Hide chat highlights",
     description = "Hides pinned messages, polls and predictions, goals, sub and gift messages, host messages, " +
         "reward redemptions, event and drops banners, pinned KICKs gifts and celebration prompts, each with its own " +
-        "switch. Other chat messages are unchanged. Starts off. Turn them on in Lurk settings > Interface." + OTA_UPDATES_OFF,
+        "switch. Other chat messages are unchanged. The sub, gift, host and reward lines inside chat are found by " +
+        "the class names of Kick's chat web page, which Kick can change at any time; those switches then stop " +
+        "hiding the lines until Lurk is updated. Starts off. Turn them on in Lurk settings > Interface." + OTA_UPDATES_OFF,
 ) {
     compatibleWith(COMPATIBILITY_KICK)
     dependsOn(kickHermesPatch, kickChatPagePatch)

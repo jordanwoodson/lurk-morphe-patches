@@ -1,0 +1,148 @@
+{
+ "page": "https://chat.mobile.kick.com/",
+ "captured": "2026-10-22",
+ "scripts": [
+  "/assets/index-C_aD-CUl.js"
+ ],
+ "scriptSha256": "e6d38799969b5318eb4d86ab258329ba46637f7173ceaebe8e69f6763b13b639",
+ "required": {
+  "class:message-container": {
+   "present": true,
+   "for": "7TV emotes, Chat keywords, Chat timestamps (each chat line)"
+  },
+  "class:message-content": {
+   "present": true,
+   "for": "7TV emotes, Chat keywords (a line's text)"
+  },
+  "class:username": {
+   "present": true,
+   "for": "Chat keywords (a line's sender)"
+  },
+  "class:emote": {
+   "present": true,
+   "for": "7TV emotes (Kick's own emote images)"
+  },
+  "class:subscription-container": {
+   "present": true,
+   "for": "Hide chat highlights: Hide sub and gift messages"
+  },
+  "class:subgift-container": {
+   "present": true,
+   "for": "Hide chat highlights: Hide sub and gift messages"
+  },
+  "class:host-container": {
+   "present": true,
+   "for": "Hide chat highlights: Hide host messages"
+  },
+  "class:reward-redeem-container": {
+   "present": true,
+   "for": "Hide chat highlights: Hide reward redemptions"
+  },
+  "class:line-through": {
+   "present": true,
+   "for": "Show deleted messages (moderator view marks removed lines)"
+  },
+  "code:message-list": {
+   "present": true,
+   "for": "every chat page feature (the #app message list)"
+  },
+  "code:config-from-bridge-first": {
+   "present": true,
+   "for": "Show deleted messages (the page prefers ReactNativeWebView.injectedObjectJson)"
+  },
+  "code:moderator-view": {
+   "present": true,
+   "for": "Show deleted messages"
+  },
+  "code:clear-empties-list": {
+   "present": true,
+   "for": "Ignore chat clears (a clear empties the list through innerHTML)"
+  },
+  "code:sender-id-attribute": {
+   "present": true,
+   "for": "Chat keywords (blocked users, by sender ID)"
+  },
+  "code:timestamps-switch": {
+   "present": true,
+   "for": "Chat timestamps (the page's own timestamp switch)"
+  },
+  "code:text-size-switch": {
+   "present": true,
+   "for": "Chat text size (the page's own text size function)"
+  }
+ },
+ "classes": [
+  "ai-mod",
+  "ai-mod-rule",
+  "badge",
+  "bg-container",
+  "bg-effect",
+  "bg-effect-wrapper",
+  "bg-effect-wrapper-inner",
+  "border-glow-bg",
+  "border-glow-bg-wrapper",
+  "border-glow-bg-wrapper-outer",
+  "celebration-container",
+  "celebration-content",
+  "celebration-message",
+  "celebration-title",
+  "chat-break",
+  "delete-button",
+  "deleted",
+  "emote",
+  "highlight-border",
+  "highlight-message-text",
+  "highlighted-message",
+  "highlighted-message-icon",
+  "host-container",
+  "host-username",
+  "image-container",
+  "kicks-amount",
+  "kicks-delete-icon-svg",
+  "kicks-icon-svg",
+  "kicks-menu-icon-svg",
+  "kicks-timer",
+  "kicks-timer-value",
+  "line-through",
+  "link",
+  "main-container",
+  "main-message",
+  "mention",
+  "message-container",
+  "message-content",
+  "moderated-username",
+  "moderation-button",
+  "moderation-container",
+  "moderator-username",
+  "mutable-block",
+  "preview",
+  "product-name",
+  "reply-block",
+  "reply-container",
+  "reply-icon",
+  "reply-username-wrapper",
+  "reward-redeem-container",
+  "reward-redeem-content",
+  "reward-redeem-message",
+  "reward-redeem-title",
+  "reward-redeem-username",
+  "subgift-container",
+  "subgift-giftee",
+  "subgift-gifter",
+  "subgift-item",
+  "subgift-main",
+  "subgift-main-content",
+  "subgift-main-icon",
+  "subgift-main-title",
+  "subgift-username",
+  "subscriber-username",
+  "subscription-container",
+  "svg-timer-icon",
+  "timestamp",
+  "user-message",
+  "user-message-container",
+  "user-message-wrapper",
+  "user-wrapper",
+  "username"
+ ]
+}

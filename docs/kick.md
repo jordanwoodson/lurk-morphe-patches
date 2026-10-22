@@ -456,7 +456,9 @@ events inside the chat, and reward redemptions, which only appear there, come fr
 web page (see Show deleted messages); the app's own sub, gift, host and reward handlers are
 never called. The chat page script hides those lines by the page's own classes for them
 (`subscription-container`, `subgift-container`, `host-container`, `reward-redeem-container`),
-so they take no space; the page still receives them. Pinned KICKs sits here rather than under
+so they take no space; the page still receives them. Kick can rename those classes in its page at
+any time, and the switches would then silently stop hiding the lines, so the description says so
+and the page contract (see [Chat page script](#chat-page-script)) pins them. Pinned KICKs sits here rather than under
 Hide KICKs tipping because it shows a gift someone already sent. Checked on the emulator: the
 pinned KICKs and prediction cards disappear, and with the sub callbacks returning no sub card
 appeared above chat. On a channel with channel-point rewards, all 85 real redemptions in nine
@@ -608,7 +610,19 @@ previous document, so the script runs at both, checks the page's host and applie
 per page. It only adds a style rule, replaces the list's `innerHTML` setter and observes the
 list for new messages; everything else on the page is Kick's. With Show deleted messages on, it
 also reports, once the page has loaded, whether the moderator view script ran ("moderator view"
-or "no moderator view" in the `lurk` log). The page is served by Kick and
+or "no moderator view" in the `lurk` log).
+
+What the scripts rely on in Kick's page is pinned in `tests/kick/chat-page-contract.json`: the
+class names the live page uses (from its stylesheet and the classes its script adds, tests or
+writes), the script's name and hash at capture, and a yes/no for each behavior a patch needs (the
+list, a clear through `innerHTML`, the config read through `injectedObjectJson` first, the
+moderator view, the timestamp and text size functions). It holds names only, none of Kick's code.
+`python3 -I tests/kick/refresh_chat_page_contract.py --check` compares the live page with it and
+fails when something Lurk needs is gone; without `--check` it rewrites the file (and still fails
+on a missing item), so a refresh shows in the diff what Kick changed. `test_chat_page.py` checks
+offline, in `bin/test-host`, that every class selector in `chat-page.js`, the moderator view
+script and `KickChat` is one the captured page uses. The capture of 2026-10-22
+(`/assets/index-C_aD-CUl.js`) has 72 classes and every required item. The page is served by Kick and
 can change at any time: the script then does nothing for what it no longer finds, and Lurk
 can't check it at patch time. `tests/kick/test_chat_page.py` runs it in headless Chrome on a
 copy of the page's structure.
