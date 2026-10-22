@@ -331,10 +331,23 @@ answers each request with a result Rumble already handles:
 - **Feed and video page display ads** (`a.ads.rmbl.ws` / `a-delivery.rmbl.ws`, which receive the zone,
   keywords, user and video IDs, `ad_device_id` and the consent strings): `WaitingForAds`. Both injectors
   treat it like a failed request.
-- **Impression pixels and click/progress beacons**: success. Boosted (promoted) videos stay in feeds,
-  but their `d4.ads.rmbl.ws` impressions and clicks are no longer reported.
+- **Impression pixels and click/progress beacons**: success, so `d4.ads.rmbl.ws` gets no Boosted or ad
+  impressions and clicks.
+- **Boosted videos** are paid placements: the server sets a video's `boosted` (the advertiser's thumbnail and
+  title, the bid, and click and impression URLs), and the card shows that creative with a "Boosted" label.
+  The getters of the video lists that carry them (`HomeSectionDto.videos`, `RelatedVideoData.videos`,
+  `Video.related`, `VideoItems.items` for search, `CategoryVideoListData.items`; Gson DTOs, found by field
+  name) pass their list through `RumblePrivacy.withoutBoosted`, which leaves out every element whose
+  `boosted` field is set. `Video.boosted` returns null as well, so a Boosted video reaching the app through
+  another list shows as the plain video, without the creative, label or reports.
+- **Home's `ad_block` sections** (a display ad between Home's rows) parse as `HIDE`, like Hide Shorts does
+  for `shorts`, so they are neither loaded nor drawn.
 
 The Revcontent DTOs in the app are unused.
+
+Checked on 2026-10-22 on the emulator, signed out: with Block ads off, Home's Editor Picks row had a card
+labeled "Boosted"; with it on, scrolling all of Home shows none and nothing crashes. No `ad_block` section
+came up on Home in either run, so that hook is checked only in the code.
 
 ## Remove tracking permissions
 

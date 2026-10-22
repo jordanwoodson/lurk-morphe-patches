@@ -6,6 +6,8 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
@@ -52,6 +54,64 @@ public final class RumblePrivacy {
             Logger.d("consent: Airship features unchanged: " + e);
             return features;
         }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Block ads: Boosted videos
+
+    static final String BLOCK_ADS = "block_ads";
+    private static final Map<Class<?>, Field> BOOSTED = new ConcurrentHashMap<>();
+    private static final Field NO_FIELD;
+
+    static {
+        Field none = null;
+        try {
+            none = RumblePrivacy.class.getDeclaredField("NO_FIELD");
+        } catch (NoSuchFieldException ignored) {
+            // Never: the field exists.
+        }
+        NO_FIELD = none;
+    }
+
+    /**
+     * Injection point: a list of videos from Rumble's server (Home sections, related videos, search, categories).
+     * While Block ads is on, Boosted videos (paid placements, the Video DTO's "boosted" field set) are left out.
+     * The same list instance when there are none.
+     */
+    public static List<?> withoutBoosted(List<?> videos) {
+        if (videos == null || videos.isEmpty() || !Settings.isEnabled(BLOCK_ADS)) return videos;
+        try {
+            List<Object> kept = null;
+            for (int i = 0; i < videos.size(); i++) {
+                Object video = videos.get(i);
+                boolean boosted = video != null && boosted(video) != null;
+                if (boosted && kept == null) {
+                    kept = new ArrayList<>(videos.size());
+                    for (int j = 0; j < i; j++) kept.add(videos.get(j));
+                } else if (!boosted && kept != null) {
+                    kept.add(video);
+                }
+            }
+            return kept == null ? videos : kept;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            Logger.d("boosted: " + e);
+            return videos;
+        }
+    }
+
+    /** The "boosted" field of a Gson DTO (they keep their field names), or null when it has none. */
+    private static Object boosted(Object dto) throws ReflectiveOperationException {
+        Field field = BOOSTED.get(dto.getClass());
+        if (field == null) {
+            try {
+                field = dto.getClass().getDeclaredField("boosted");
+                field.setAccessible(true);
+            } catch (NoSuchFieldException e) {
+                field = NO_FIELD;
+            }
+            BOOSTED.put(dto.getClass(), field);
+        }
+        return field == NO_FIELD ? null : field.get(dto);
     }
 
     // ---------------------------------------------------------------------------------------------

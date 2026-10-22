@@ -1,16 +1,27 @@
 package io.github.jordanwoodson.patches.rumble.ads
 
+import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
+import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.ClassDef
+import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PRIVACY
+import io.github.jordanwoodson.patches.rumble.shared.enumConstant
 import io.github.jordanwoodson.patches.rumble.shared.kotlinObject
 import io.github.jordanwoodson.patches.rumble.shared.parameters
+import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.rumble.shared.singleMethod
 import io.github.jordanwoodson.patches.rumble.shared.staticFieldReads
 import io.github.jordanwoodson.patches.rumble.shared.unitReference
+import io.github.jordanwoodson.patches.rumble.shorts.HomeSectionKindFingerprint
+import io.github.jordanwoodson.patches.shared.invoke
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.shared.settings.addInstructionsIfEnabled
@@ -20,9 +31,10 @@ private const val KEY = "block_ads"
 @Suppress("unused")
 val blockAdsPatch = bytecodePatch(
     name = "Block ads",
-    description = "Removes video ads (before and during videos and live streams) and the ads in feeds and " +
-        "under videos, signed in or not. The app never requests them, so it never sends the ad server your " +
-        "advertising ID, and no ad or Boosted video impressions or clicks are reported.",
+    description = "Removes video ads (before and during videos and live streams), the ads in feeds and under " +
+        "videos and Home's ad sections, signed in or not. The app never requests them, so it never sends the ad " +
+        "server your advertising ID. Boosted (paid) videos are left out of Home, related videos, search and " +
+        "categories, and no ad or Boosted video impressions or clicks are reported.",
 ) {
     compatibleWith(COMPATIBILITY_RUMBLE)
     dependsOn(settingsPatch)
@@ -86,8 +98,59 @@ val blockAdsPatch = bytecodePatch(
             """,
         )
 
+        // Boosted videos are paid placements: the server marks a video with the advertiser's creative and
+        // click and impression URLs. They are dropped from the lists that carry them, and any left elsewhere
+        // shows as the plain video, without the creative, the Boosted label and its reports.
+        VideoListFingerprints.forEach { (what, fingerprint) ->
+            fingerprint.single("$what getter").method.apply {
+                val code = implementation!!.instructions
+                if (code.size != 2 || code[0].opcode != Opcode.IGET_OBJECT || code[1].opcode != Opcode.RETURN_OBJECT) {
+                    throw PatchException("Rumble: unexpected $what getter")
+                }
+                val list = getInstruction<OneRegisterInstruction>(0).registerA
+                addInstructions(
+                    1,
+                    """
+                        ${invokeStatic("$RUMBLE_PRIVACY->withoutBoosted(Ljava/util/List;)Ljava/util/List;", list)}
+                        move-result-object v$list
+                    """,
+                )
+            }
+        }
+        VideoBoostedFingerprint.single("Video.boosted getter").method.addInstructionsIfEnabled(
+            KEY,
+            """
+                const/4 v0, 0x0
+                return-object v0
+            """,
+        )
+
+        // Home's ad_block sections hold a display ad. Treat them like sections the server hides, so they are
+        // neither loaded nor drawn (with the display ads blocked, they would stay empty).
+        val homeSectionKind = HomeSectionKindFingerprint.single("HomeSectionKind parser").method
+        val hide = classDefBy(homeSectionKind.returnType).enumConstant("HIDE")
+        homeSectionKind.apply {
+            val kind = parameterRegister(1)
+            addInstructionsIfEnabled(
+                KEY,
+                """
+                    const-string v0, "ad_block"
+                    ${invoke("invoke-virtual", "Ljava/lang/String;->equals(Ljava/lang/Object;)Z", 0, kind)}
+                    move-result v0
+                    if-eqz v0, :lurk_off
+                    sget-object v0, $hide
+                    return-object v0
+                """,
+            )
+        }
+
         rumbleSettings.add(
-            SwitchSetting(KEY, "Block ads", "Video, feed and video page ads, and ad impression reports.", Section.PRIVACY),
+            SwitchSetting(
+                KEY,
+                "Block ads",
+                "Video, feed and video page ads, Boosted videos, Home's ad sections and ad impression reports.",
+                Section.PRIVACY,
+            ),
         )
     }
 }
