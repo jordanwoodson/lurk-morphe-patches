@@ -43,7 +43,11 @@ bash bin/test-rumble ~/build/lurk-morphe-patches/out/rumble-3.21.0-patched.apk
 ```
 
 `bin/test-rumble` runs every probe in `tests/rumble/`, or only the ones named after the APK
-(`bash bin/test-rumble <apk> PremiumProbe`). Each probe calls the patched APK's real methods; settings are
+(`bash bin/test-rumble <apk> PremiumProbe`). Running them all also checks the extension hooks: 
+`tests/rumble/expected_hooks.py` reads the settings registry out of the APK's dex and lists the hooks of
+`tests/rumble/expected-hooks.txt` whose setting is registered, and `tests/verify_extension_calls.py` fails
+unless app code calls each one. Add a line there with every new hook. Each probe calls the patched APK's
+real methods; settings are
 switched by rewriting their defaults in the registry, since there is no Context under `app_process`
 (`ProbeSupport.setting`). `tests/rumble/verify_settings.py <apktool-dir>` checks the settings registry of a
 decoded patched APK: unique keys, valid sections and choices, and the documented defaults. `PremiumProbe` executes the actual APK's profile
@@ -289,8 +293,12 @@ of the event use cases check consent, so Block cookie notice doesn't stop these.
 the top of the three upload methods: `Success` for event lists (as after an upload, so queued watch time is
 cleared rather than retried) and `Unit` for the other two.
 
-The Keep watch progress switch (initially the `keepWatchProgress` option) lets an upload through when its list holds a watch progress event (found
-by its `toString`, `"WatchProgressEvent(timeRange="`). Rumble's watch history is server side
+The Keep watch progress switch (initially the `keepWatchProgress` option) lets the watch progress events
+of an upload through, and only those: Rumble batches them with the other events, so the upload's list
+goes through `RumblePrivacy.watchProgressOnly` with the event's class (found by its `toString`,
+`"WatchProgressEvent(timeRange="`). A batch without any is answered with `Success`. The upload method hands
+its arguments straight to a coroutine, so replacing its list parameter is safe. Those events carry the
+user ID, advertising ID and AppsFlyer ID, which the switch's text says. Rumble's watch history is server side
 (`watch_history.clear`), probably fed by these events; that is untested, as it needs an account.
 
 ## Block ads
@@ -500,8 +508,8 @@ backslashes and a leading `@` or `?` are escaped.
 
 Every share sheet goes through one share use case: videos, live streams, Shorts, reposts, playlists and
 channels. It takes `(text, title)`, and `android.intent.extra.TITLE` appears nowhere else in the app. The
-patch cuts everything from the first `?` off the link when its host is `rumble.com` or a subdomain; other
-links are left alone.
+patch passes the text through `RumblePrivacy.cleanShareLink`, which cuts everything from the first `?` off
+the link when its host is `rumble.com` or a subdomain (any case); other links are left alone.
 
 3.21.0 doesn't tag the links it shares:
 

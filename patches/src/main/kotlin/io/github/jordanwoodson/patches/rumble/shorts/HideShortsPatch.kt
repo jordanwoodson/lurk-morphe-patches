@@ -23,6 +23,9 @@ import io.github.jordanwoodson.patches.rumble.shared.enumConstant
 import io.github.jordanwoodson.patches.rumble.shared.enumWith
 import io.github.jordanwoodson.patches.rumble.shared.hideBottomTab
 import io.github.jordanwoodson.patches.rumble.shared.single
+import io.github.jordanwoodson.patches.shared.invoke
+import io.github.jordanwoodson.patches.shared.parameterRegister
+import io.github.jordanwoodson.patches.shared.requireLowRegisters
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.shared.settings.addInstructionsIfEnabled
@@ -47,22 +50,26 @@ val hideShortsPatch = bytecodePatch(
         ShortsListViewFingerprint.single("ShortsListView composable").method.addInstructionsIfEnabled(KEY, "return-void")
 
         // Home: treat a "shorts" section like one the server hides, so it is neither loaded nor drawn.
-        HomeSectionKindFingerprint.single("HomeSectionKind parser").method.addInstructionsIfEnabled(
-            KEY,
-            """
-                const-string v0, "shorts"
-                invoke-virtual { v0, p1 }, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
-                move-result v0
-                if-eqz v0, :lurk_off
-                sget-object v0, Lcom/rumble/network/dto/home/HomeSectionKind;->HIDE:Lcom/rumble/network/dto/home/HomeSectionKind;
-                return-object v0
-            """,
-        )
+        HomeSectionKindFingerprint.single("HomeSectionKind parser").method.apply {
+            val kind = parameterRegister(1)
+            addInstructionsIfEnabled(
+                KEY,
+                """
+                    const-string v0, "shorts"
+                    ${invoke("invoke-virtual", "Ljava/lang/String;->equals(Ljava/lang/Object;)Z", 0, kind)}
+                    move-result v0
+                    if-eqz v0, :lurk_off
+                    sget-object v0, Lcom/rumble/network/dto/home/HomeSectionKind;->HIDE:Lcom/rumble/network/dto/home/HomeSectionKind;
+                    return-object v0
+                """,
+            )
+        }
 
         // Channel pages: drop the "shorts" tab, unless it is the channel's only one. The getter has
         // two registers (the list and this), so this doubles as the size and the copy.
         CreatorTabsFingerprint.single("Creator.tabs getter").method.apply {
             val list = getInstruction<OneRegisterInstruction>(0).registerA
+            requireLowRegisters("Hide Shorts", list, parameterRegister(0))
             addInstructionsWithLabels(
                 1,
                 """
