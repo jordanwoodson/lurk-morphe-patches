@@ -30,6 +30,7 @@ DEFAULTS = {
     "autoplay_next_video_off": "false",
     "feed_previews_off": "false",
     "background_audio": "false",
+    "default_speed": "0",
     "unlock_premium": "true",
     "block_update_prompts": "true",
     "exact_counts": "false",

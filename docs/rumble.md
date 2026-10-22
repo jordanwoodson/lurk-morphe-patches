@@ -272,6 +272,7 @@ finds its switch off after updating, unless it was changed on the screen before.
 | Don't save searches | `no_search_history` | at the next search |
 | Resume videos when signed out | `resume_signed_out` | at the next video |
 | Remember playback speed | `remember_speed` | at the next speed read or pick |
+| Default playback speed (a choice in hundredths; "1x (Rumble's)" is 0) | `default_speed` | at the next video |
 | Fill screen | `fill_screen` | when the player is laid out again |
 | Keep playing during other sounds (a choice; "Pause" is 0) | `audio_focus` | at the next interruption |
 | Keep screen on while paused | `keep_screen_on_paused` | at the next pause |
@@ -751,6 +752,20 @@ getter returns it for every scope, also after a restart. While off, picks don't 
 and the getter uses Rumble's own value. The saved value is retained: turning the switch on again restores
 the last speed picked while it was enabled, until another enabled pick replaces it. With no saved value,
 Rumble's own speed applies until that first enabled pick.
+
+### Default playback speed
+
+Shares the speed store hooks with Remember playback speed (a hidden patch): the setter reports picks to
+`RumblePlayback.onSpeedPicked`, the store's reset (its one `()V` method, which the player service calls to set
+every scope back to 1x) reports to `onSpeedReset`, and the getter asks `rememberedSpeed`. That returns, in
+order: the speed Remember playback speed saved, while it is on; the `default_speed` choice, until a speed is
+picked after the last reset; else nothing, so Rumble's own value applies. The choice's values are the speed
+in hundredths (150 for 1.5x), mapped to the speed enum's constant names (`SPEED_1_5`). Live streams without
+rewind ignore the getter and play at 1x.
+
+Checked on 2026-10-22 on the emulator: with 1.5x chosen, a VOD from Home starts with its media session at speed
+1.5; at "1x (Rumble's)" it plays at 1.0. `PlayerProbe` runs the real store (reset, default, a pick winning,
+the next reset) and `test_state_transitions.py` the extension's order on the JVM.
 
 ### Fill screen
 

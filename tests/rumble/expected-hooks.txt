@@ -32,8 +32,9 @@ video_quality  RumblePlayback.startHeight
 video_quality  RumblePlayback.capActive
 video_quality  RumblePlayback.liveUsesAutoByDefault
 resume_signed_out  RumblePlayback.signedOutPosition
-remember_speed  RumblePlayback.onSpeedPicked
-remember_speed  RumblePlayback.rememberedSpeed
+remember_speed|default_speed  RumblePlayback.onSpeedPicked
+remember_speed|default_speed  RumblePlayback.onSpeedReset
+remember_speed|default_speed  RumblePlayback.rememberedSpeed
 audio_focus  RumblePlayback.ignoreFocusLoss
 sleep_timer  RumblePlayback.onPlayingChanged
 

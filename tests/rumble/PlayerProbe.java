@@ -44,6 +44,21 @@ public final class PlayerProbe {
         set.invoke(store, scope, normal);
         ProbeSupport.check(get.invoke(store, scope) == normal, "an enabled pick replaces the saved speed");
 
+        // Default playback speed: after Rumble's reset and until a pick, when Remember playback speed has nothing.
+        if (ProbeSupport.registered("default_speed")) {
+            Object fastest = Enum.valueOf(speedType, "SPEED_1_5");
+            ProbeSupport.setting("remember_speed", "false");
+            resetAll.invoke(store);
+            ProbeSupport.check(get.invoke(store, scope) == normal, "default speed off (its default): 1x");
+            ProbeSupport.setting("default_speed", "150");
+            ProbeSupport.check(get.invoke(store, scope) == fastest, "default speed 1.5x after a reset");
+            set.invoke(store, scope, fast);
+            ProbeSupport.check(get.invoke(store, scope) == fast, "a pick wins over the default speed");
+            resetAll.invoke(store);
+            ProbeSupport.check(get.invoke(store, scope) == fastest, "the next reset starts at the default again");
+            ProbeSupport.setting("default_speed", "0");
+        }
+
         Method ignore = Class.forName(PLAYBACK).getMethod("ignoreFocusLoss", int.class);
         ProbeSupport.check(!(boolean) ignore.invoke(null, -2), "Rumble's default pauses on a transient loss");
         ProbeSupport.setting("audio_focus", "1");
