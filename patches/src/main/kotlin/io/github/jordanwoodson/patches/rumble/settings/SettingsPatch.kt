@@ -26,6 +26,7 @@ import io.github.jordanwoodson.patches.rumble.shared.staticRangeCalls
 import io.github.jordanwoodson.patches.shared.SHARED_EXTENSION
 import io.github.jordanwoodson.patches.shared.settings.SETTINGS_CLASS
 import io.github.jordanwoodson.patches.shared.settings.SettingsScreen
+import io.github.jordanwoodson.patches.shared.settings.debugLoggingSetting
 import org.w3c.dom.Element
 
 private const val SETTINGS_ACTIVITY = "io.github.jordanwoodson.extension.shared.settings.SettingsActivity"
@@ -69,6 +70,7 @@ val settingsPatch = bytecodePatch(
 
     execute {
         rumbleSettings.clear()
+        rumbleSettings.add(debugLoggingSetting)
 
         // The extension's context, before any of Rumble's own startup.
         ApplicationOnCreateFingerprint.single("RumbleApplication.onCreate").method.addInstruction(

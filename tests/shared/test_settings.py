@@ -39,9 +39,11 @@ SETTINGS = PACKAGE + 'settings/'
 # Platform boundaries the settings classes touch. Context hands out map-backed preferences per name.
 ANDROID = {
     'android/util/Log.java': '''package android.util; public final class Log {
-        public static int d(String t,String m){return 0;} public static int i(String t,String m){return 0;}
-        public static int w(String t,String m){return 0;} public static int w(String t,String m,Throwable e){return 0;}
-        public static int e(String t,String m){return 0;} public static int e(String t,String m,Throwable e){return 0;} }''',
+        public static final java.util.List<String> lines=new java.util.ArrayList<>();
+        static int add(String level,String t,String m){lines.add(level+"/"+t+": "+m);return 0;}
+        public static int d(String t,String m){return add("D",t,m);} public static int i(String t,String m){return add("I",t,m);}
+        public static int w(String t,String m){return add("W",t,m);} public static int w(String t,String m,Throwable e){return add("W",t,m);}
+        public static int e(String t,String m){return add("E",t,m);} public static int e(String t,String m,Throwable e){return add("E",t,m);} }''',
     'android/os/Bundle.java': 'package android.os; public class Bundle {}',
     'android/os/SystemClock.java': '''package android.os; public class SystemClock {public static long now=100_000;
         public static long uptimeMillis(){return now;} public static long elapsedRealtime(){return now;} }''',
@@ -132,6 +134,7 @@ ANDROID = {
               e.choiceValues.length>1?e.choiceValues[e.choiceValues[0].equals(e.defaultValue)?1:0]:""});
             return out.toArray(new String[0][]);}
           public static String getString(String key){return Settings.getString(key);}
+          public static void putBoolean(String key,boolean value){Settings.putBoolean(key,value);}
         }''',
 }
 
@@ -139,6 +142,7 @@ PROBE = r'''
 import android.content.Context;
 import android.content.SharedPreferences;
 import io.github.jordanwoodson.extension.shared.ChatFilter;
+import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Access;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
 import java.nio.charset.StandardCharsets;
@@ -197,6 +201,7 @@ public class SettingsProbe {
       case "nocontext":nocontext(read(a[1]));break;
       case "empty":Access.context(new Context());empty(a.length>1?read(a[1]):null);break;
       case "chatfilter":Access.context(new Context());chatFilter();break;
+      case "logger":logger();break;
       default:throw new AssertionError(args[0]);
     }
     System.out.println("PASS settings "+a[0]+(a.length>1?" "+Paths.get(a[1]).getFileName():"")+": "+checks+" checks");
@@ -353,6 +358,34 @@ public class SettingsProbe {
     check(attempts[0]==1,"vibrate was not attempted");
   }
 
+  /** Logger.d follows the Debug logging switch; i, w and blocked always write; reading the switch can't recurse. */
+  static void logger()throws Exception{
+    List<String> lines=android.util.Log.lines;
+    // No context and no registry: reading the switch logs on the way (no context, no registry) without recursing.
+    Access.context(null);Access.install(null);Logger.refresh();
+    Logger.d("before anything");
+    check(!lines.contains("D/lurk: before anything"),"d wrote before the switch could be read");
+    check(lines.contains("W/lurk: settings: no registry, every patch is off"),"a missing registry isn't reported: "+lines);
+    Access.context(new Context());
+    install("{\"name\":\"Lurk\",\"version\":\"1\",\"app\":\"Test\",\"settings\":["+entry("debug_logging","switch","false",null)+"]}");
+    Logger.refresh();
+    Settings.changes();
+    Logger.d("off");Logger.i("info");Logger.w("warn");Logger.w("warn2",new RuntimeException());Logger.blocked("tracker");
+    check(!lines.contains("D/lurk: off"),"d wrote while Debug logging is off");
+    check(lines.containsAll(Arrays.asList("I/lurk: info","W/lurk: warn","W/lurk: warn2","I/lurk: blocked: tracker")),"always-on lines missing: "+lines);
+    Access.putBoolean("debug_logging",true);
+    Logger.d("on");
+    check(lines.contains("D/lurk: on"),"d didn't write after Debug logging was turned on");
+    prefs().edit().putBoolean("debug_logging",false).apply();
+    Logger.d("off again");
+    check(!lines.contains("D/lurk: off again"),"d kept writing after a change seen by the listener");
+    // A registry that can't be read turns Debug logging off with everything else.
+    prefs().edit().putBoolean("debug_logging",true).apply();
+    install("{\"settings\":[{\"key\":\"debug_logging\"}]}");Logger.refresh();
+    Logger.d("broken");
+    check(!lines.contains("D/lurk: broken"),"d wrote with an unreadable registry");
+  }
+
   static void unknownIsOff(){
     for(String key:new String[]{"lurk_test_unregistered","lurk_test_choice",""}){
       check(!Settings.isRegistered(key),key+" registered");
@@ -466,7 +499,7 @@ def main(argv):
             fixture.write_text(text, encoding='utf-8')
             scenarios += [f'registry|{fixture}|{Path(scratch) / (app + ".dump")}', f'defaults|{fixture}',
                           f'stored|{fixture}', f'nocontext|{fixture}', f'empty|{fixture}']
-        scenarios += ['empty', 'chatfilter']
+        scenarios += ['empty', 'chatfilter', 'logger']
         run('SettingsProbe', ['settings/Settings.java', 'settings/Registry.java', 'settings/ResumedActivityTracker.java',
                               'Logger.java', 'ChatFilter.java'], PROBE, scenarios, extra=JSON_DOUBLE | ANDROID)
         for app, root in roots.items():

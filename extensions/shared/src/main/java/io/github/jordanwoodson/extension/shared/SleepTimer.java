@@ -210,7 +210,7 @@ public final class SleepTimer {
                         player.getClass().getMethod("pause").invoke(player);
                         Logger.d("sleep timer: paused a player " + platform + " missed");
                     } catch (Throwable t) {
-                        Logger.d("sleep timer: " + t);
+                        Logger.w("sleep timer: couldn't pause a player " + platform + " missed: " + t);
                     }
                 }
             } finally {

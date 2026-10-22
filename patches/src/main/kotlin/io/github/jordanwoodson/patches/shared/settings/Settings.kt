@@ -19,6 +19,8 @@ internal enum class Section(val title: String) {
     PLAYBACK("Playback"),
     CHAT("Chat"),
     PREMIUM("Premium"),
+    /** Lurk's own settings: Debug logging, then the screen's tools (export, import, report, reset). */
+    ADVANCED("Advanced"),
 }
 
 /**
@@ -73,6 +75,20 @@ internal class TextSetting(
     parent: String? = null,
     restart: Boolean = false,
 ) : Setting(key, title, summary, section, default, parent, restart)
+
+/**
+ * Lurk's own switch for extensions/shared Logger.d, which each app's settings patch registers first. Off by
+ * default: the lines it turns on can name the channels and videos someone opens.
+ */
+internal val debugLoggingSetting
+    get() = SwitchSetting(
+        "debug_logging",
+        "Debug logging",
+        "Detailed lines in the system log for bug reports (adb logcat -s lurk). They can name the channels " +
+            "and videos you open.",
+        Section.ADVANCED,
+        default = false,
+    )
 
 /**
  * The settings an app's patches register, written into the extension as JSON when the app's settings

@@ -32,8 +32,10 @@ public final class Settings {
 
     private static final AtomicLong CHANGES = new AtomicLong();
     /** SharedPreferences keeps its listeners weakly, so this one lives here. */
-    private static final SharedPreferences.OnSharedPreferenceChangeListener WATCHER =
-            (preferences, key) -> CHANGES.incrementAndGet();
+    private static final SharedPreferences.OnSharedPreferenceChangeListener WATCHER = (preferences, key) -> {
+        CHANGES.incrementAndGet();
+        Logger.refresh();
+    };
     private static volatile SharedPreferences watched;
     private static volatile SharedPreferences unwatchable;
 
@@ -46,6 +48,8 @@ public final class Settings {
         if (appContext instanceof Application) {
             ((Application) appContext).registerActivityLifecycleCallbacks(new ResumedActivityTracker());
         }
+        // Watch for changes from here on, so Debug logging and cached lists follow the screen.
+        changes();
         new Thread(Settings::publishShortcut, "lurk-shortcut").start();
     }
 
@@ -78,6 +82,11 @@ public final class Settings {
     /** The application context, or null before the app has one. */
     public static Context appContext() {
         return context();
+    }
+
+    /** Whether the settings can be read yet (the app has a context), without looking for one. */
+    public static boolean hasContext() {
+        return context != null;
     }
 
     /**
@@ -169,17 +178,20 @@ public final class Settings {
     static void putBoolean(String key, boolean value) {
         SharedPreferences preferences = preferences();
         if (preferences != null) preferences.edit().putBoolean(key, value).apply();
+        Logger.refresh();
     }
 
     static void putString(String key, String value) {
         SharedPreferences preferences = preferences();
         if (preferences != null) preferences.edit().putString(key, value).apply();
+        Logger.refresh();
     }
 
     /** Forgets every change made on the screen, so each setting is back to its patch-time default. */
     static void reset() {
         SharedPreferences preferences = preferences();
         if (preferences != null) preferences.edit().clear().apply();
+        Logger.refresh();
     }
 
     static Registry registry() {
@@ -252,7 +264,7 @@ public final class Settings {
                     .build();
             manager.addDynamicShortcuts(Collections.singletonList(shortcut));
         } catch (RuntimeException e) {
-            Logger.d("settings: no launcher shortcut: " + e);
+            Logger.w("settings: no launcher shortcut: " + e);
         }
     }
 

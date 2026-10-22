@@ -101,10 +101,10 @@ final class Registry {
                 return new Registry(root.optString("name", "Lurk"), root.optString("version"),
                         root.optString("app", "the app"), entries, !entries.isEmpty());
             } catch (JSONException e) {
-                Logger.d("settings: unreadable registry: " + e);
+                Logger.w("settings: unreadable registry, every patch is off: " + e.getClass().getSimpleName());
             }
         } else {
-            Logger.d("settings: no registry");
+            Logger.w("settings: no registry, every patch is off");
         }
         return new Registry("Lurk", "", "the app", new ArrayList<>(), false);
     }

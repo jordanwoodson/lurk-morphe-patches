@@ -19,6 +19,7 @@ import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 import io.github.jordanwoodson.patches.shared.SHARED_EXTENSION
 import io.github.jordanwoodson.patches.shared.settings.SETTINGS_CLASS
 import io.github.jordanwoodson.patches.shared.settings.SettingsScreen
+import io.github.jordanwoodson.patches.shared.settings.debugLoggingSetting
 import org.w3c.dom.Element
 
 internal val twitchSettings = SettingsScreen("Twitch")
@@ -45,6 +46,7 @@ internal val twitchSettingsPatch = bytecodePatch(
     })
     execute {
         twitchSettings.clear()
+        twitchSettings.add(debugLoggingSetting)
         ApplicationOnCreateFingerprint.twitchMatch("TwitchApplication.onCreate").method.addInstructions(
             0,
             """

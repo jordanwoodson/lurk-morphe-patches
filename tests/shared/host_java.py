@@ -139,7 +139,10 @@ STUBS = {
         public KeyEvent(long a,long b,int c,int d,int e){} }''',
     'android/text/format/DateFormat.java': '''package android.text.format; public class DateFormat {
         public static boolean is24HourFormat(android.content.Context c){return true;} }''',
-    PACKAGE + 'Logger.java': 'package io.github.jordanwoodson.extension.shared; public class Logger {public static void d(String s){} }',
+    PACKAGE + 'Logger.java': '''package io.github.jordanwoodson.extension.shared; public class Logger {
+        public static void d(String s){} public static void i(String s){} public static void w(String s){}
+        public static void w(String s,Throwable t){} public static void blocked(String s){} public static void refresh(){}
+        public static boolean debug(){return false;} }''',
     PACKAGE + 'Network.java': '''package io.github.jordanwoodson.extension.shared; public class Network {
         public static boolean isMetered(android.content.Context c){return false;} }''',
     PACKAGE + 'settings/Settings.java': '''package io.github.jordanwoodson.extension.shared.settings;

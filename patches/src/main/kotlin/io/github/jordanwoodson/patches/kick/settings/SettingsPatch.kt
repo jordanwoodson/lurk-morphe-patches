@@ -21,6 +21,7 @@ import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
 import io.github.jordanwoodson.patches.shared.SHARED_EXTENSION
 import io.github.jordanwoodson.patches.shared.settings.SETTINGS_CLASS
 import io.github.jordanwoodson.patches.shared.settings.SettingsScreen
+import io.github.jordanwoodson.patches.shared.settings.debugLoggingSetting
 import org.w3c.dom.Element
 
 internal val kickSettings = SettingsScreen("Kick")
@@ -51,6 +52,7 @@ internal val kickSettingsPatch = bytecodePatch(
     })
     execute {
         kickSettings.clear()
+        kickSettings.add(debugLoggingSetting)
         ApplicationOnCreateFingerprint.kickMatch("MainApplication.onCreate").method.addInstructions(
             0,
             """
