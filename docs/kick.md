@@ -661,9 +661,17 @@ embedded defaults.
 
 The edit helpers, all equal-length and fail-closed:
 
+- Every bytecode edit, whatever made it, must start and end on instruction boundaries, leave
+  the code after it decoding as before, and keep every jump and switch case out of its changed
+  bytes: a branch landing after the first changed byte and on or before the last one is
+  refused at patch time, since it would run the replacement from its middle or from the
+  Unreachable (`0x00`) padding that aborts the process. Switch cases come from the jump tables,
+  which v99 writes right after a function's declared bytecode, at the next 4-byte boundary:
+  `UIntSwitchImm` has one 32-bit offset per value from its min to its max, `StringSwitchImm` a
+  (string ID, offset) pair per case, both counted from the switch.
 - `returnNull` / `returnAtEntry`: return null, undefined or false as a function's first
   instruction. `returnAtEntry` takes any prologue of environment, global, parameter and
-  property loads, decoded with the v99 instruction lengths, and refuses a function that
+  property loads, decoded with the v99 instruction lengths; both refuse a function that
   branches into the replaced bytes.
 - `trueProperty` / `falseProperty`: the function's single `GetById` of a property loads
   a constant instead, in the same general register.
@@ -692,8 +700,11 @@ Verification tools retained in this repository:
   (`--analytics`) Firebase Analytics starting disabled.
 - `tests/kick/HermesProbe.kt`: actual-bundle parsing, negative controls for every
   helper, uniqueness, overlap rejection, preview literals, unique literal windows and
-  exact restoration. It runs on the JVM, compiled with `kick/shared/Hermes.kt` against
-  Morphe Desktop.
+  exact restoration. It decodes every function of the bundle and requires every jump and
+  switch case (19 `UIntSwitchImm` and 117 `StringSwitchImm` in 40.32.3) to land on an
+  instruction boundary, and checks that an edit whose changed bytes span a jump's or a switch
+  case's landing point is refused while the same window changed only after it is accepted. It
+  runs on the JVM, compiled with `kick/shared/Hermes.kt`.
 - `tests/kick/test_hermes.py`: independent instruction/branch decoding of emitted
   edits; all-on, all-off, each switch alone and each choice value (plus 0 and an
   unknown value); SHA checks.

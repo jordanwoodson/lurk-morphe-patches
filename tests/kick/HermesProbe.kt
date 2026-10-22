@@ -33,6 +33,7 @@ fun main(args: Array<String>) {
     val decoded = bundle.instructions(bundle.function("handleBanUserEvent"))
     check(decoded.last().offset == 0x122 && decoded.last().bytes.contentEquals(byteArrayOf(0x76, 1)))
     check(decoded.count { it.target() != null } == 5)
+    branchChecks(original)
 
     // Object literal keys come from the shape table, in the slot order PutOwnBySlotIdx fills.
     val chatConfig = bundle.functionUsing("web chat config", reads = listOf("searchParams", "getRequestBaseHeaders"),
@@ -172,4 +173,68 @@ fun main(args: Array<String>) {
     File(args[2]).writeText(manifest)
     println("PASS: actual v99 headers, fail-closed checks, ${bundle.edits.size} edits (entry returns, property " +
         "reads, guards, literal choices), footer, unique windows and exact disabled restoration")
+}
+
+/**
+ * Switch decoding over the whole bundle, and the edit check that keeps branches out of replaced bytes: a jump or a
+ * switch case landing inside an edit's changed bytes is refused, an edit that changes only bytes after the landing
+ * point is allowed, and returnNull refuses a function that jumps into its replaced prologue.
+ */
+private fun branchChecks(original: ByteArray) {
+    val bundle = HermesBundle(original)
+    fun message(block: () -> Unit) = runCatching(block).exceptionOrNull()?.message.orEmpty()
+    val decoded = bundle.functions.filter { it.body.isNotEmpty() }.distinctBy { it.offset }
+        .associateWith { bundle.instructions(it) }
+    var uintSwitches = 0
+    var stringSwitches = 0
+    for ((_, instructions) in decoded) {
+        val boundaries = instructions.map { it.offset }.toSet()
+        for (instruction in instructions) {
+            if (instruction.opcode == 0xa7) uintSwitches++
+            if (instruction.opcode == 0xa8) stringSwitches++
+            for (target in instruction.targets()) check(target in boundaries) { "branch to a non-boundary $target" }
+        }
+    }
+    check(uintSwitches > 0 && stringSwitches > 0)
+
+    // Flip a register operand on each side of a landing point: the changed bytes then span it.
+    fun flipped(bytes: ByteArray, vararg at: Int) = bytes.copyOf().also { for (i in at) it[i] = (it[i].toInt() xor 1).toByte() }
+    fun spanning(switch: Boolean) = decoded.firstNotNullOf { (function, instructions) ->
+        val plain = instructions.mapNotNull { it.target() }.toSet()
+        val landing = instructions.flatMap { if (switch) it.switchTargets.drop(1) else listOfNotNull(it.target()) }
+            .firstOrNull { target ->
+                val index = instructions.indexOfFirst { it.offset == target }
+                index > 0 && instructions[index - 1].bytes.size >= 2 && instructions[index].bytes.size >= 2 &&
+                    instructions[index - 1].targets().isEmpty() && instructions[index].targets().isEmpty() &&
+                    (!switch || target !in plain)
+            } ?: return@firstNotNullOf null
+        val index = instructions.indexOfFirst { it.offset == landing }
+        Triple(function, instructions[index - 1], instructions[index])
+    }
+    for (switch in listOf(false, true)) {
+        val (function, before, at) = spanning(switch)
+        val window = before.bytes + at.bytes
+        val error = message {
+            HermesBundle(original).replace(function, "probe", window, flipped(window, 1, before.bytes.size + 1))
+        }
+        check("lands inside the edited bytes" in error) { "${if (switch) "switch case" else "jump"} into an edit: $error" }
+        // Control: changing only the instruction at the landing point keeps the landing point an unchanged boundary.
+        HermesBundle(original).replace(function, "probe", window, flipped(window, before.bytes.size + 1))
+    }
+
+    // returnNull pads its prologue with Unreachable: a function that jumps into it is refused.
+    val prologues = decoded.keys.filter { function ->
+        val body = function.body
+        function.name.isNotEmpty() && body.size >= 9 && body[0].toInt() == 0x34 && (body[3].toInt() and 255) in setOf(0x40, 0x89, 0x41) &&
+            function.flags and 0x18 == 0
+    }
+    val jumpsIn = prologues.filter { function ->
+        val length = if ((function.body[3].toInt() and 255) == 0x41) 9 else 6
+        decoded.getValue(function).any { instruction -> instruction.targets().any { it in 1 until length } } &&
+            runCatching { bundle.function(function.name) }.isSuccess
+    }
+    for (function in jumpsIn) check("branches into its prologue" in message { HermesBundle(original).returnNull(function.name, "probe") })
+    println("PASS: ${decoded.size} functions decoded with $uintSwitches UInt and $stringSwitches string switches, every " +
+        "branch on an instruction boundary; jumps and switch cases into edited bytes refused, ${jumpsIn.size} " +
+        "returnNull prologues with a jump into them refused")
 }

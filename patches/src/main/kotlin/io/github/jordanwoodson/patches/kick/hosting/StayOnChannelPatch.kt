@@ -76,7 +76,7 @@ private fun countdownAfterWatchNow() {
         fail("countdown options memo")
     }
     // Nothing writes the state register before the edit. Writes name their register first; jumps start with an offset.
-    if (code.any { it.offset in (copy.offset + 1) until cacheIndex.offset && it.target() == null &&
+    if (code.any { it.offset in (copy.offset + 1) until cacheIndex.offset && it.targets().isEmpty() &&
             it.bytes.size > 1 && it.u8(1) == pressed }) {
         fail("state register")
     }
