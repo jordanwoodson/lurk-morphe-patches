@@ -1,5 +1,6 @@
 version: 2
 updates:
+  # Actions are pinned by commit with the version in a comment; Dependabot updates both.
   - package-ecosystem: github-actions
     labels: []
     directory: /
@@ -13,3 +14,16 @@ updates:
     target-branch: dev
     schedule:
       interval: monthly
+
+  # The host checks' Python dependency (tests/requirements-host.txt).
+  - package-ecosystem: pip
+    labels: []
+    directory: /tests
+    target-branch: dev
+    schedule:
+      interval: monthly
+
+# Not covered: the tools in mise.toml, which Dependabot doesn't read. The two npm hermes-compiler
+# versions are pinned on purpose to the Hermes bytecode versions Twitch and Kick ship, and
+# bin/lib/compile-hermes.py checks each compiler binary's SHA-256; they change only when an app moves
+# to a new Hermes version (see docs/development.md, "Dependencies").

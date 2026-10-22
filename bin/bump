@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Try every patch on a new app version and sort what breaks by cause.
+# Usage: bin/bump <app> <version> [downloaded file] [--pin] [--no-build]
+#   file        the new version from APKMirror, Google Play or Uptodown; bin/apk-add stores it first
+#   --pin       point the Hermes SHA gate at the new bundle first (bin/hermes-pin), so the Hermes
+#               edits are tried instead of all stopping at the gate
+#   --no-build  reuse the last built bundle
+# Patches with every patch enabled, Morphe's -f (ignore the version targets) and --continue-on-error,
+# then prints the failures grouped as SHA gate, Hermes pattern, fingerprint and other, plus the class
+# names the probes in tests/<app>/ use that the new version no longer has. Constants.kt is not changed.
+# Writes $MORPHE_WORK/bump/<app>-<version>/: patch.log, result.json, summary.txt.
+source "$(dirname "$0")/lib/common.sh"
+
+slug="" version="" file="" pin="" build=1
+for arg in "$@"; do
+    case "$arg" in
+        --pin) pin=1 ;;
+        --no-build) build="" ;;
+        -*) die "unknown option $arg" ;;
+        *) if [[ -z "$slug" ]]; then slug="$arg"; elif [[ -z "$version" ]]; then version="$arg"; else file="$arg"; fi ;;
+    esac
+done
+[[ -n "$slug" && -n "$version" ]] || die "usage: bin/bump <app> <version> [downloaded file] [--pin] [--no-build]"
+constants="$(app_constants "$slug")"
+[[ -f "$MORPHE_DESKTOP_JAR" ]] || die "Morphe Desktop missing: run bin/bootstrap"
+
+if [[ -n "$file" ]]; then
+    [[ -f "$file" ]] || die "no such file: $file"
+    "$ROOT/bin/apk-add" "$file"
+fi
+[[ -d "$APKS/$slug/$version" ]] ||
+    die "no apks/$slug/$version${file:+ (that file is another version)}: give the download, bin/bump $slug $version <file>"
+input="$(app_input "$slug" "$version")"
+current="$(sed -n 's/.*AppTarget(version = "\([^"]*\)".*/\1/p' "$constants" | head -1)"
+compare=()  # the version the patches target now, for the probe class names
+if [[ -n "$current" && "$current" != "$version" && -d "$APKS/$slug/$current" ]]; then
+    compare=(--current "$(app_input "$slug" "$current")")
+fi
+
+hermes_kt="$PATCHES_SRC/$slug/shared/Hermes.kt"
+if [[ -n "$pin" && -f "$hermes_kt" ]]; then
+    "$ROOT/bin/hermes-pin" "$slug" "$version"
+    [[ -n "$build" ]] || note "building anyway: the new hash only takes effect in a new bundle"
+    build=1
+fi
+
+if [[ -n "$build" ]]; then
+    mpp="$("$ROOT/bin/build")"
+else
+    mpp="$(latest_mpp)"
+    [[ -n "$mpp" ]] || die "no built bundle: run without --no-build"
+fi
+# Patches that aren't selected by default break on updates too: enable all of the app's.
+enable=()
+while IFS= read -r name; do
+    enable+=(-e "$name")
+done < <(java -jar "$MORPHE_DESKTOP_JAR" list-patches --patches="$mpp" -f "$(app_package "$slug")" -d=false 2>/dev/null |
+    awk '/^(INFO: )?Name: /{sub(/^(INFO: )?Name: /, ""); name=$0} /^Enabled: false/{print name}')
+
+out="$WORK/bump/$slug-$version"
+rm -rf "$out"
+mkdir -p "$out"
+note "patching $slug $version with every patch, ignoring the version targets (log: $out/patch.log)"
+"$ROOT/bin/patch" "$slug" "$version" --no-build -- -f --continue-on-error -r "$out/result.json" "${enable[@]}" \
+    >"$out/patch.log" 2>&1 || note "Morphe exited with an error; the summary says what it got to"
+
+status=0
+python3 -I "$ROOT/bin/lib/bump.py" "$slug" "$version" --result "$out/result.json" --input "$input" \
+    "${compare[@]}" --hermes-kt "$hermes_kt" --tests "$ROOT/tests/$slug" >"$out/summary.txt" || status=$?
+cat "$out/summary.txt"
+patched="$WORK/out/$slug-$version-patched.apk"
+echo
+if grep -q '^SHA gate' "$out/summary.txt" && [[ -z "$pin" ]]; then
+    echo "Next: bin/bump $slug $version --pin, so the Hermes edits run against the new bundle."
+elif (( status )); then
+    echo "Next: fix the patches above (docs/$slug.md says how each one finds its code), then run bin/bump again."
+else
+    echo "Next: check the hooks (bin/verify-hooks $slug $patched), run the probes and try the app, then set"
+    echo "$version in ${constants#"$ROOT"/} and commit as bump($slug): support <App> $version."
+fi
+exit "$status"

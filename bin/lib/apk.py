@@ -5,6 +5,7 @@ Handles plain .apk files and the bundle formats the allowed sources hand out:
 """
 
 import argparse
+import hashlib
 import io
 import json
 import os
@@ -129,6 +130,43 @@ def dex_types(dex, strings):
     return [strings[int.from_bytes(dex[offset + i * 4: offset + i * 4 + 4], "little")] for i in range(count)]
 
 
+def dex_class_names(dex):
+    """Java names of the classes a dex file defines ("t1.o", "tv.twitch.android.models.Tuid")."""
+    u32 = lambda pos: int.from_bytes(dex[pos:pos + 4], "little")
+    string_ids, type_ids = u32(0x3C), u32(0x44)
+    names = set()
+    for i in range(u32(0x60)):
+        descriptor = u32(type_ids + 4 * u32(u32(0x64) + 32 * i))
+        _, start = uleb128(dex, u32(string_ids + 4 * descriptor))
+        raw = dex[start:dex.index(b"\0", start)]
+        names.add(raw[1:-1].decode("utf-8", "replace").replace("/", "."))
+    return names
+
+
+def class_names(path):
+    """Every class the dex files of an apk or bundle define, across the base and its splits."""
+    names = set()
+    for _, apk in all_apks(path):
+        with zipfile.ZipFile(io.BytesIO(apk)) as zf:
+            for entry in zf.namelist():
+                if re.fullmatch(r"classes\d*\.dex", entry):
+                    names |= dex_class_names(zf.read(entry))
+    return names
+
+
+def hermes_bundle(path):
+    """The React Native bundle (assets/index.android.bundle) of an apk or bundle, base APK first; None
+    when the app has none."""
+    with zipfile.ZipFile(io.BytesIO(read_base(path))) as zf:
+        if HERMES_BUNDLE in zf.namelist():
+            return zf.read(HERMES_BUNDLE)
+    for _, apk in all_apks(path):
+        with zipfile.ZipFile(io.BytesIO(apk)) as zf:
+            if HERMES_BUNDLE in zf.namelist():
+                return zf.read(HERMES_BUNDLE)
+    return None
+
+
 # endregion
 
 # region Commands
@@ -201,6 +239,15 @@ def cmd_variant(args):
     if v["langs"]:
         parts.append(f"{v['langs']} language splits")
     print(" · ".join(parts))
+
+
+def cmd_hermes_sha(args):
+    """'<sha256> <bytecode version>' of the app's Hermes bundle; exit 2 when it has none."""
+    data = hermes_bundle(args.file)
+    if data is None:
+        sys.exit(2)
+    version = int.from_bytes(data[8:12], "little") if data[:8] == HERMES_MAGIC else 0
+    print(hashlib.sha256(data).hexdigest(), version)
 
 
 def cmd_pin(args):
@@ -320,6 +367,10 @@ def main():
     p.add_argument("package")
     p.add_argument("out")
     p.set_defaults(func=cmd_pack_splits)
+
+    p = sub.add_parser("hermes-sha")
+    p.add_argument("file")
+    p.set_defaults(func=cmd_hermes_sha)
 
     p = sub.add_parser("pin")
     p.add_argument("constants")

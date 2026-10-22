@@ -1,12 +1,8 @@
 <p align="center">
-  <img src="patches-bundle.png" width="128" alt="">
-</p>
-
-<h1 align="center">Lurk</h1>
-
-<p align="center">
-  <b>Morphe privacy patches for Twitch, Kick and Rumble.</b><br>
-  Watch the stream. Skip the tracking.
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme-hero.png">
+    <img src="assets/readme-hero-light.png" width="800" alt="Lurk: Morphe privacy patches for Twitch, Kick and Rumble. Watch the stream. Skip the tracking.">
+  </picture>
 </p>
 
 <p align="center">
@@ -23,19 +19,33 @@
   <a href="#install">Install</a> &nbsp;•&nbsp;
   <a href="#lurk-settings">Lurk settings</a> &nbsp;•&nbsp;
   <a href="#patches">Patches</a> &nbsp;•&nbsp;
-  <a href="#documentation">Documentation</a> &nbsp;•&nbsp;
+  <a href="#screenshots">Screenshots</a> &nbsp;•&nbsp;
+  <a href="#faq">FAQ</a> &nbsp;•&nbsp;
   <a href="#reporting-problems">Reporting problems</a> &nbsp;•&nbsp;
   <a href="#contributing">Contributing</a>
 </p>
 
-Lurk is a set of privacy-focused patches for streaming apps, applied on your phone with
-[Morphe](https://morphe.software): Twitch, Kick and Rumble to start, more apps later. The patches
-stop analytics and tracker SDKs, drop ad and upsell requests, clean shared links, and add the
-quality-of-life features the apps leave out: third-party emotes, chat timestamps, a sleep timer,
-background audio and more. Everything runs locally; nothing goes through a server of ours.
+Lurk is a set of privacy-focused patches for Twitch, Kick and Rumble, applied on your phone with
+[Morphe](https://morphe.software). The patches stop analytics and tracker SDKs, block ad requests,
+clean shared links, and add what the apps leave out: third-party emotes, chat timestamps, a sleep
+timer, background audio and more. Everything runs on the phone; nothing goes through a server of ours.
 
-Lurk has no connection to Twitch, Kick, Rumble or the Morphe project. The name "Morphe" is used
-only to say what the patches are for (see [NOTICE](NOTICE)).
+What Lurk does that other Morphe patch bundles don't (as of October 2026):
+
+- **Twitch ad breaks avoided without a proxy.** When Twitch's server stitches an ad break into a live
+  stream, *Avoid stitched ads* plays the stream from an ad-free picture-by-picture session, at 360p at
+  most, until the break is over, then goes back to your quality. When no such session is available,
+  *Mute stitched ads* mutes the break and covers it.
+- **Kick, with 26 patches**: its analytics off, 7TV emotes in chat and the emote picker, background
+  audio, a sleep timer, a quieter chat and Home. Other bundles go no further than a Kick theme.
+- **Rumble Premium and ad blocking.** *Unlock Premium* turns on Rumble's local premium state (ad-free
+  playback, no upsells) once you sign in; *Block ads* stops the app requesting ads, signed in or not.
+- **Switches in the app.** Every patch that changes how an app behaves has its own setting on a Lurk
+  settings screen inside the patched app, so you can turn it off and on again without patching again.
+
+Each patch's description says what it does and what it doesn't, and the [app pages](docs/README.md)
+say what each one sends where. Lurk has no connection to Twitch, Kick, Rumble or the Morphe
+project. The name "Morphe" is used only to say what the patches are for (see [NOTICE](NOTICE)).
 
 ## Install
 
@@ -43,13 +53,29 @@ only to say what the patches are for (see [NOTICE](NOTICE)).
 2. Tap **Add to Morphe** above on the phone. On a computer the link shows a QR code to scan with
    the phone. Manager adds Lurk as a patch source.
 3. In Manager, pick Twitch, Kick or Rumble, download the version Lurk supports (Manager links to
-   APKMirror or Uptodown for it; the versions are listed under [Patches](#patches)), choose the
-   patches you want and patch. Manager installs the result.
+   APKMirror or Uptodown for it; on APKMirror, take the variant listed below), choose the patches you
+   want and patch. Manager installs the result.
+
+Lurk is tested on these APKMirror variants. Other variants of the same version may fail to patch or
+to install, so take these:
+
+- **Twitch 31.7.0**: the [arm64-v8a bundle, 480-640dpi, Android 10+](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-31-7-0-release/twitch-live-streaming-31-7-0-4-android-apk-download/).
+- **Kick 40.32.3**: the arm64-v8a bundle, 480-640dpi, Android 10+, on the
+  [40.32.3 release page](https://www.apkmirror.com/apk/kick-live-streaming/kick-live-streaming/kick-live-streaming-40-32-3-release/)
+  (not one of the two universal builds).
+- **Rumble 3.21.0**: the universal bundle (all four architectures, 120-640dpi, Android 8.0+) on the
+  [3.21.0 release page](https://www.apkmirror.com/apk/rumble-inc/rumble/rumble-stream-watch-videos-3-21-0-release/).
+
+> [!IMPORTANT]
+> **Keep your signing key.** Manager signs every app it patches with a key it creates on first use,
+> and Android only installs an update over an app signed with the same key. Export the key in Morphe
+> Manager under **Settings › System › Import & export › Signing key** and keep the file somewhere
+> safe. After reinstalling Manager or moving to a new phone, import it before you patch: without it,
+> updating a patched app means uninstalling it first, which deletes its data.
 
 Releases from the `dev` branch are pre-releases: turn on pre-releases for this source in Manager
-to get new patches early. Android only installs an update over an app signed with the same key,
-so patch updates with the same Manager install you patched with the first time, or uninstall the
-patched app first.
+to get new patches early. Patch updates with the same Manager install (or the same imported key)
+you patched with the first time.
 
 Patches are written for one version of each app and refuse to apply to others. When an app
 updates, wait for a Lurk release that lists the new version.
@@ -63,9 +89,46 @@ Lurk. Kick's and Twitch's JavaScript settings apply after a restart, which the s
 
 ## Patches
 
-<!-- PATCHES_START EXPANDED -->
+A few patches per app to start with; the full list for each app is below them (tap an app to open it).
+Patches marked *off* aren't selected in Manager until you select them. Some selected patches add a
+switch that starts off; the full list says which, and where to turn it on.
+
+**Twitch**
+
+| Patch | What it does |
+|---|---|
+| Avoid stitched ads | During an ad break Twitch's server stitches into a live stream, plays an ad-free picture-by-picture session (360p at most), then returns to the stream's own quality. No proxy, and the player doesn't reload. |
+| Mute stitched ads | Mutes an ad break that still plays and covers it with black until the stream is back. |
+| Block client ads, Block display ads | Decline the ads the app asks for itself: display and audio ads, ad pods, feed ads, the Following headliner and brand surveys. |
+| Third-party emotes, Third-party badges | 7TV, BetterTTV and FrankerFaceZ emotes in chat, chat history and VOD replay, plus FrankerFaceZ and Chatterino badges and pronouns. Each service has its own switch, off until you turn it on. |
+| Watch without signing in | Opens Twitch in its own signed-out mode instead of stopping at the Log In / Sign Up screen. |
+| Disable analytics | Stops Spade event uploads from the native and React Native app, Crashlytics uploads, Nielsen pings, Sprig surveys and Sentry. |
+
+**Kick**
+
+| Patch | What it does |
+|---|---|
+| Disable analytics | Turns off Firebase Analytics, Insider, Datadog, Mux and Datazoom player analytics and PAL nonce requests. |
+| Third-party emotes | 7TV emotes in chat, the emote picker and autocomplete, with live set updates. Off until you turn it on. |
+| Background audio | Keeps live streams and videos playing as audio when you leave Kick, with Kick's own media notification. |
+| Hide chat highlights | Hides pinned messages, polls, predictions, goals, sub and gift messages and banners, each with its own switch. |
+| Stay on channel when it hosts | Kick's host dialog waits for you instead of switching channels when its countdown ends. |
+| AMOLED black | Pure black backgrounds for OLED screens, optionally with near-black cards and sheets. |
+
+**Rumble**
+
+| Patch | What it does |
+|---|---|
+| Unlock Premium | Turns on Rumble's local premium state after you sign in: ad-free playback, no premium upsells. Content and benefits the server checks still need a subscription. |
+| Block ads | Video ads before and during videos and live streams, and the ads in feeds and under videos, are never requested, signed in or not. |
+| Disable analytics | Stops Rumble's own analytics (clicks, searches, watch progress, with your user and advertising IDs), which it sends whatever the consent setting. |
+| Remove tracking permissions | Removes the advertising ID, ad measurement, install referrer and phone state permissions; every SDK gets an all-zero advertising ID. |
+| Remember playback speed | Keeps the speed you last picked for every video, also after a restart, instead of going back to 1x. |
+| Hide Shorts *(off)* | Removes Shorts from the bottom bar, Home, My Feed, channels, categories and search. Shorts links still open. |
+
+<!-- PATCHES_START -->
 > **[v1.12.0](https://github.com/jordanwoodson/lurk-morphe-patches/releases/tag/v1.12.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;103 patches total
-<details open>
+<details>
 <summary><img src="assets/kick-icon-round.webp" width="28" height="28" align="center" alt="">&nbsp;&nbsp;<b>Kick</b>&nbsp;&nbsp;•&nbsp;&nbsp;26 patches</summary>
 <br>
 
@@ -105,7 +168,7 @@ Lurk. Kick's and Twitch's JavaScript settings apply after a restart, which the s
 
 </details>
 
-<details open>
+<details>
 <summary><img src="assets/twitch-icon-round.webp" width="28" height="28" align="center" alt="">&nbsp;&nbsp;<b>Twitch</b>&nbsp;&nbsp;•&nbsp;&nbsp;45 patches</summary>
 <br>
 
@@ -164,7 +227,7 @@ Lurk. Kick's and Twitch's JavaScript settings apply after a restart, which the s
 
 </details>
 
-<details open>
+<details>
 <summary><img src="patches/src/main/resources/rumble/icon/mipmap-xxxhdpi/ic_launcher_round.webp" width="28" height="28" align="center" alt="">&nbsp;&nbsp;<b>Rumble</b>&nbsp;&nbsp;•&nbsp;&nbsp;32 patches</summary>
 <br>
 
@@ -211,6 +274,57 @@ Lurk. Kick's and Twitch's JavaScript settings apply after a restart, which the s
 </details>
 
 <!-- PATCHES_END -->
+
+## Screenshots
+
+The Lurk settings screen in patched Twitch, Kick and Rumble:
+
+<p align="center">
+  <img src="assets/screenshots/twitch-settings.png" width="240" alt="The Lurk settings screen in patched Twitch">
+  <img src="assets/screenshots/kick-settings.png" width="240" alt="The Lurk settings screen in patched Kick">
+  <img src="assets/screenshots/rumble-settings.png" width="240" alt="The Lurk settings screen in patched Rumble">
+</p>
+
+## FAQ
+
+**Why do I still see ads on Twitch?**
+Twitch puts some ad breaks into the live video itself, on its server ("stitched" ads), so there is
+no request on the phone to decline. When Twitch offers an ad-free picture-by-picture session for the
+break, *Avoid stitched ads* plays that instead, at 360p at most; when it doesn't, *Mute stitched ads*
+mutes the break and covers it, but the break still runs its full length. The ads the app requests
+itself (display, audio and feed ads) are declined by *Block client ads* and *Block display ads*.
+*Playlist proxy* can send live playlists through a proxy that removes stitched ads, but the proxy
+receives your playback token, which identifies your account: only use one you trust. On Kick, ads
+stitched into live streams are not removed.
+
+**What does Lurk send to other services?**
+Lurk has no server and sends nothing of its own. A few patches contact a third-party service, and
+only once you turn them on in Lurk settings:
+
+- Twitch *Third-party emotes*: the ID of the channel you watch, to 7tv.io, api.betterttv.net and
+  api.frankerfacez.com, and the emote images from their servers.
+- Twitch *Third-party badges*: downloads the public badge lists of api.frankerfacez.com and
+  api.chatterino.com about once an hour; the pronouns switch sends the username of each chatter whose
+  message you see to pronouns.alejo.io.
+- Kick *Third-party emotes*: the channel owner's Kick user ID to 7tv.io and events.7tv.io, and the
+  emote images from cdn.7tv.app.
+- Twitch *Playlist proxy* (not selected by default): live playlist requests, with your playback
+  token, to the proxy address you set when patching.
+
+Each app's page under [docs/](docs/README.md) lists what every patch sends where.
+
+**Why doesn't Kick update itself any more?**
+Besides app updates, Kick downloads new JavaScript over the air, which would replace the JavaScript
+Lurk patched. Kick patches that change its JavaScript therefore turn those downloads off, even
+while their own switches are off. *Block update prompts* also stops Kick asking you to update. To
+get Kick's fixes, patch the newer Kick version once a Lurk release supports it.
+
+**How do updates work?**
+A patched app can't be updated from Google Play. When Twitch, Kick or Rumble releases a new version,
+wait for a Lurk release that lists it, then download that version in Manager and patch it with the
+same Manager install (or the same imported signing key, see [Install](#install)). Android installs it
+over the patched app and keeps your data and Lurk settings. A new Lurk release for the same app
+version works the same way: patch again and install over the old one.
 
 ## Documentation
 
