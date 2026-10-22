@@ -53,6 +53,9 @@ public final class ChatBoundaryProbe {
         call(chat,"onPage",pageTypes,current,current.url);
         call(chat,"onPageDisposed",new Class<?>[]{WebView.class},current);
         ProbeSupport.check(!pages.containsKey(current) && ((java.lang.ref.WeakReference<?>)ProbeSupport.field(chat,"active").get(null)).get()==null,"native destroy ends authority without next page");
+        setting("emotes_7tv",false);
+        ProbeSupport.check(Boolean.FALSE.equals(call(chat,"onMessage",messageTypes,current,end.toString(),current.url)),"with 7TV off no bridge message is taken");
+        setting("emotes_7tv",true);
         System.out.println("PASS: native WebView lifecycle, scoped disposal and late catalog guards");
     }
     static JSONObject emit(String name,String url)throws Exception {

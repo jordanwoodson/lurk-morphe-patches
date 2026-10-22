@@ -145,8 +145,12 @@ public final class KickChat {
         }
     }
 
-    /** Consume only our catalog message; every ordinary stock bridge message keeps its original path. */
+    /**
+     * Consume only our catalog message; every ordinary stock bridge message keeps its original path. Only the 7TV
+     * page script sends catalog messages, so with its switch off nothing is parsed here.
+     */
     public static synchronized boolean onMessage(WebView view, String message, String sourceUrl) {
+        if (!on(SEVEN_TV)) return false;
         if (message == null || message.length() > 1024 * 1024 || !message.startsWith("{")) return false;
         JSONObject data;
         try { data = new JSONObject(message); }
@@ -155,7 +159,7 @@ public final class KickChat {
         if (!"lurk7tvCatalog".equals(type) && !"lurk7tvDispose".equals(type)) return false;
         try {
             Page page = PAGES.get(view);
-            if (!on(SEVEN_TV) || page == null || active.get() != view || !chatOrigin(sourceUrl) ||
+            if (page == null || active.get() != view || !chatOrigin(sourceUrl) ||
                     !chatOrigin(view.getUrl()) || !page.generation.equals(data.optString("generation")) ||
                     !java.util.Objects.equals(page.channel, data.opt("channelId")) ||
                     !java.util.Objects.equals(page.slug, data.opt("slug"))) return true;
