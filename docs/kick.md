@@ -241,6 +241,7 @@ details and validation follow.
 | Sleep timer | Yes | Off (choice) | Pauses playback a chosen time after it last started. |
 | Default startup tab | Yes | Home (choice) | Opens Kick on Browse or Following instead. |
 | Hide Home sections | Yes | Three switches, all off | Featured, recommended streams and categories rows on Home. |
+| Show exact counts | Yes | Off | Viewer and follower counts in full (306,112 instead of 306.1K). |
 | Seek interval | Yes | Kick's 10 seconds (choice) | 5, 15, 20 or 30-second skips in videos and rewound live streams. |
 | Don't save searches | Yes | On | New searches aren't added to the search history. |
 | AMOLED black | Yes | Off (choice) | Pure black background, optionally near-black cards and sheets. |
@@ -564,6 +565,20 @@ fresh start from the launcher (no saved state, no link), the patch makes the lau
 such a link before `MainActivity.onCreate` reads it. Links, notifications and restored
 activities keep their own intent, and since the activity is `singleTask`, returning to a
 running Kick keeps the current screen.
+
+### Show exact counts
+
+Kick's JavaScript writes every viewer and follower count through its own Expo module,
+`requireNativeModule('KickIntlFormatter').formatNumber(number, locale, compact)` (for example in
+`useFollowersCount`). Kick leaves `compact` unset, and the native
+`KickIntlFormatterModule.formatNumber` treats anything but `false` as compact: a
+`CompactDecimalFormat` with one decimal ("306.1K"). The patch hooks the start of that method: with
+the switch on, `compact` becomes `false`, so the module's own plain formatter writes the number in
+full with the locale's grouping ("306,112"). The module caches a formatter per locale and mode,
+so the switch applies to the next count drawn, with no restart, and no JavaScript is edited.
+Checked: `bin/test-kick` runs Kick's real formatter on ART (306112 gives "306.1K" off and "306,112"
+on, also when Kick asks for compact explicitly); on the emulator, Browse's category viewer counts
+went from "299.6K" to "297,116".
 
 ### Hide Home sections
 

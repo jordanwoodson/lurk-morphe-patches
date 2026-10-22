@@ -50,5 +50,8 @@ KickStartup.rewriteLaunch
 # AMOLED black
 KickTheme.applyWindow
 
+# Show exact counts
+KickInterface.compactNumbers
+
 # Default video quality (not selected by default)
 # KickPlayer.autoQualityCeiling

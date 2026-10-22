@@ -206,6 +206,25 @@ public final class BundleProbe {
             + "copy or another embedded bundle; defaults remove it");
     }
 
+    /** Show exact counts: Kick's real native formatter, rounded with the switch off and in full with it on. */
+    private static void verifyCounts(Class<?> settings) throws Exception {
+        Method registryJson = settings.getDeclaredMethod("registryJson");
+        registryJson.setAccessible(true);
+        if (!((String) registryJson.invoke(null)).contains("\"exact_counts\"")) return;
+        Class<?> formatter = Class.forName("expo.modules.kickintlformatter.KickIntlFormatterModule");
+        Object module = formatter.getConstructor().newInstance();
+        Method format = formatter.getMethod("formatNumber", double.class, String.class, Boolean.class);
+        switches.put("exact_counts", false);
+        String rounded = (String) format.invoke(module, 306112d, "en", null);
+        switches.put("exact_counts", true);
+        String exact = (String) format.invoke(module, 306112d, "en", null);
+        String explicit = (String) format.invoke(module, 306112d, "en", Boolean.TRUE);
+        switches.remove("exact_counts");
+        check("306.1K".equals(rounded), "Kick's own count is rounded: " + rounded);
+        check("306,112".equals(exact) && "306,112".equals(explicit), "Exact counts: " + exact + ", " + explicit);
+        System.out.println("PASS: Show exact counts turns Kick's " + rounded + " into " + exact);
+    }
+
     /** A fresh process's load: the private copy's bytes, or the embedded asset's when it uses that. */
     private static byte[] load(Method prepare, Field prepared, Field defaults, AssetManager assets, byte[] embedded)
             throws Exception {
@@ -322,5 +341,6 @@ public final class BundleProbe {
             " independent switches, " + choiceValues.size() + " choices with " + values + " exact values");
         verifyReuse(prepare, prepared, defaults, assets, embedded, directory, edits);
         verifyAnalyticsJobs(settings);
+        verifyCounts(settings);
     }
 }
