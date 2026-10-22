@@ -16,7 +16,8 @@ private const val KEY = "bypass_vod_ad_sessions"
 val bypassVodAdSessionsPatch = bytecodePatch(
     name = "Bypass VOD ad sessions",
     description = "Experimental: uses the original VOD URL instead of requesting a separate ad-session manifest. " +
-        "Does not remove ads stitched into live streams. Enable in Lurk settings after patching." + OTA_UPDATES_OFF,
+        "Does not remove ads stitched into live streams. Not selected by default; once included, its switch starts " +
+        "off. Turn it on in Lurk settings > Playback." + OTA_UPDATES_OFF,
     default = false,
 ) {
     compatibleWith(COMPATIBILITY_KICK)
@@ -54,7 +55,7 @@ val bypassVodAdSessionsPatch = bytecodePatch(
                 KEY,
                 "Bypass VOD ad sessions (experimental)",
                 "Use the original VOD URL. Turn off if VOD or live rewind fails. Live ads are unaffected.",
-                Section.PRIVACY,
+                Section.PLAYBACK,
                 default = false,
                 restart = true,
             ),

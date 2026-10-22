@@ -230,7 +230,7 @@ details and validation follow.
 | Hide subscription upsells | Yes | Off | Subscribe/gift-subscription prompts, preserving the subscribed badge. |
 | Hide Clips | Yes | Off | Browse/channel/category tabs and channel clip rail. Direct playback routes remain. |
 | Clean share links | Yes | On | Known campaign/click parameters on Kick URLs only; functional parameters, other hosts and attachments remain. |
-| Bypass VOD ad sessions | No | Off | Experimental original-VOD-URL fallback. No live-ad removal claim. |
+| Bypass VOD ad sessions | No | Off (Playback) | Experimental original-VOD-URL fallback. No live-ad removal claim. |
 | Block update prompts | Yes | On | Kick's forced-update screen and update sheet, and the Play Store version lookup behind them. |
 | Hide rating prompt | Yes | On | Kick's automatic "rate the app" prompts. |
 | Show deleted messages | Yes | On; Ignore chat clears, on | Moderator-style struck-through deleted, timed-out and banned messages in chat, set inside the chat page so Kick's server sees no change; a moderator's clear keeps the messages. |
