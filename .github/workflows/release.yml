@@ -1,11 +1,15 @@
 name: Release
 
 # Pushes to main publish stable releases and pushes to dev pre-releases, when their commits call for one
-# (see .github/scripts/release.py). Every push also gets a build check. "Run workflow" publishes a release
-# an earlier run left unfinished.
+# (see .github/scripts/release.py). Every push to them also gets a build check; other branches are checked
+# by build.yml when they come in as a pull request. "Run workflow" publishes a release an earlier run left
+# unfinished. Actions are pinned by commit; Dependabot proposes updates.
 on:
   workflow_dispatch:
   push:
+    branches:
+      - dev
+      - main
 
 # One run per branch at a time. Each releases the branch as it is when it starts.
 concurrency:
@@ -23,18 +27,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: 'temurin'
           java-version: '21'
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.12'
 
@@ -46,7 +50,7 @@ jobs:
 
       # A failed host check stops the job before any release commit, tag or publication.
       - name: Setup pinned Hermes compilers
-        uses: jdx/mise-action@v3
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
         with:
           install_args: npm:hermes-compiler@250829098.0.19 npm:hermes-compiler@260318099.0.4
 
@@ -65,11 +69,11 @@ jobs:
       # Also after a run that published something and then failed.
       - name: Attest
         if: ${{ !cancelled() && steps.release.outputs.published == 'true' }}
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ steps.release.outputs.assets }}
 
-      # The release build covers the branch; anything else (no release, other branches) builds here.
+      # The release build covers the branch; a push without a release builds here.
       - name: Verify project compiles
         if: steps.release.outputs.built != 'true'
         env:

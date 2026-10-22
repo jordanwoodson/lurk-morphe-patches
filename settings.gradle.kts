@@ -12,7 +12,6 @@ pluginManagement {
                 password = providers.gradleProperty("gpr.key").orNull ?: System.getenv("GITHUB_TOKEN")
             }
         }
-        maven { url = uri("https://jitpack.io") }
     }
 }
 

@@ -250,3 +250,27 @@ worth pinning, and say in the pull request what you ran.
   create releases or tags by hand.
 - When patches are tested on a new app version, update that version in the app's `targets` in
   `shared/Constants.kt`; Manager links users to the version listed there.
+
+## Dependencies
+
+What the build and the release pipeline pull in, and how each is kept honest:
+
+| Dependency | Pinned by | Updated by |
+|---|---|---|
+| GitHub Actions in `.github/workflows/` | Commit SHA, with the release in a comment | Dependabot (monthly, into `dev`) |
+| Gradle plugins and libraries (`gradle/libs.versions.toml`, `settings.gradle.kts`) | Version | Dependabot |
+| The host checks' Python package (`tests/requirements-host.txt`) | Exact version | Dependabot |
+| Morphe Desktop and apktool (`bin/lib/common.sh`) | Version and SHA-256, checked by `bin/bootstrap` | By hand |
+| jadx, apkeep, hermes-dec, uv (`mise.toml`) | Version | By hand |
+| The two `hermes-compiler` npm packages (`mise.toml`, the workflows' `install_args`) | Version, and each platform's `hermesc` SHA-256 in `bin/lib/compile-hermes.py` | By hand, when an app moves to a new Hermes bytecode version |
+
+Dependabot doesn't read `mise.toml`. The Hermes compilers are pinned on purpose to the bytecode
+versions the apps ship (98 for Twitch, 99 for Kick); a newer compiler is not an improvement unless the
+app moved too. `compile-hermes.py` refuses a compiler binary whose SHA-256 differs from the pinned one,
+so a changed package stops the build instead of compiling the bundle's runtime code. To move a family to
+a new compiler version, update `mise.toml`, the `install_args` in both workflows and `VERSIONS` in
+`compile-hermes.py`, then record the three new hashes (`hermesc/linux64-bin/hermesc`,
+`hermesc/osx-bin/hermesc`, `hermesc/win64-bin/hermesc.exe` in the package from `mise where`) in
+`COMPILER_SHA256` after checking the package came from the official `facebook/hermes` release.
+
+Plugins resolve from the Gradle Plugin Portal, Google and Morphe's GitHub Packages registry only.
