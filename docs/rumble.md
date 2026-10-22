@@ -6,7 +6,7 @@ APKMirror APKM and signing certificate pinned in `rumble/shared/Constants.kt`.
 Sign in, or sign out and back in after installing, to fetch a fresh profile. The patch
 overrides the profile's local premium flag; a signed-out session never fetches that
 profile. Server-authorized streams, purchases and subscription metadata are unaffected.
-Live signed-in playback has not been verified with an account.
+Signed-in behavior has not been verified with an account (see below).
 
 ## Implementation
 
@@ -31,6 +31,25 @@ UserProfile.l() reads isPremium (JSON is_premium)
 These obfuscated names describe this APK only; they are not patch fingerprints.
 Only the getter's result changes. Nullable `premiumData`, account
 validation, age verification and onboarding retain their original behavior.
+
+### What a premium flag without premium data does
+
+The patch leaves `premiumData` (JSON `premium`: plan, start and expiration dates, renewal, provider) null
+for a free account while `isPremium` reads true. Traced in 3.21.0:
+
+- The mapper turns `premiumData` into an entity (`UserProfilePremiumDataEntity`), and the profile use cases
+  only ever test it for null: `isUserPremiumKey = premiumData != null || isPremium`. Nothing in the app shows
+  the plan or dates, so a null `premiumData` with the flag on has no code path that could fail on it.
+- The session's premium flow (the `isUserPremiumKey` reader) feeds the ad use cases, the feeds' and video
+  page's view models, the Downloads screen and the Premium upsell checks. With it true the app stops asking
+  for ads and shows Downloads instead of its upsell.
+- Premium-only videos, live gates (`liveGate`), downloads and premium comments are decided by the server:
+  each video carries `has_access_to_premium`, and its sources, download and comment requests are authorized
+  with the session. The patch can't change those. What the app shows when the server refuses (an empty
+  player, an error, a paywall) has not been seen.
+
+None of this was run signed in: there was no Rumble account for testing. `PremiumProbe` runs the getter and
+the mapper on the real APK with fixtures.
 
 ## Build and test
 
