@@ -223,8 +223,8 @@ choices.
 | No autoplay of the next video, No feed previews | `autoplay_next_video_off`, `feed_previews_off` | after a restart |
 | Unlock Premium | `unlock_premium` | after signing in again |
 
-Resource patches (Lurk icon, Remove tracking permissions, Clone app, Change app name) change the
-APK itself, so they aren't listed.
+Resource patches (Lurk icon, Remove tracking permissions, Disable tracking SDKs, Clone app, Change app
+name) change the APK itself, so they aren't listed.
 
 How it works:
 
@@ -319,6 +319,42 @@ It also removes the AppsFlyer referrer `<queries>` entries.
   `ad_device_id` (home layout, banners, watch progress); Rumble's reader doesn't filter zeros.
 - `READ_PHONE_STATE` is declared by the app but never requested, and no code needs it.
 - Every other user catches the failure or checks the permission first.
+
+## Disable tracking SDKs
+
+A resource patch with no switch: it sets the SDKs' own manifest `<meta-data>` switches, adding each one that
+Rumble doesn't already declare. Rumble ships the collection defaults off and turns each SDK on from its
+consent trackers once consent is recorded (see Block cookie notice); this patch takes away what consent can
+turn back on.
+
+| Meta-data | Value | Effect |
+|---|---|---|
+| `firebase_analytics_collection_deactivated` | true | Firebase Analytics is off for good; `setAnalyticsCollectionEnabled(true)` is ignored. |
+| `google_analytics_adid_collection_enabled` | false | No advertising ID in Analytics, should it run anyway. |
+| `firebase_performance_collection_deactivated` | true | Firebase Performance is off for good ("permanently disabled"). |
+| `firebase_crashlytics_collection_enabled` | false | Already Rumble's default. Crashlytics' run-time setting overrides it. |
+| `com.facebook.sdk.AutoInitEnabled` | false | The SDK initializes but not fully, and refuses Graph requests. |
+| `com.facebook.sdk.AutoLogAppEventsEnabled`, `AdvertiserIDCollectionEnabled`, `MonitorEnabled` | false | Defaults; Rumble's Facebook tracker can still turn the first two on. |
+
+AppsFlyer has no manifest switch: Rumble starts it in code (`init` and `start`) whenever any consent decision
+exists, so only Block cookie notice keeps it off. Crashlytics also follows consent. The Facebook login SDK
+isn't in the app (no `FacebookActivity`), so nothing needs the fully initialized SDK.
+
+Checked on 2026-10-22 on the Android 16 emulator, fresh install, signed out, through the logging proxy
+(launch, Use Rumble signed out, three scrolls, Home):
+
+- Default selection without this patch: Rumble's hosts, `remote-data.urbanairship.com`,
+  `graph.facebook.com` (the Facebook SDK's settings and gatekeeper fetch), Firebase installations, Remote
+  Config and logging.
+- With it: the same without `graph.facebook.com`. Logcat shows "GraphRequest can't be used when Facebook SDK
+  isn't fully initialized" for each fetch, and no crash.
+- With Block cookie notice off, Ketch recorded essential services only (its banner jurisdiction): Firebase
+  logs "App measurement deactivated via the manifest", Performance never writes `isEnabled`, Crashlytics
+  is switched on (`firebase_crashlytics_collection_enabled` true) and AppsFlyer starts (`AFRequestCache`).
+
+Firebase installations and Remote Config stay: push tokens need installations, and Remote Config carries the
+update prompts Block update prompts handles. Firebase logging (`firebaselogging.googleapis.com`) is Google's
+transport for Firebase SDK telemetry and stays as well.
 
 ## Hide Shorts
 
