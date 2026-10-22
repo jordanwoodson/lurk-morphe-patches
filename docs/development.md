@@ -255,8 +255,8 @@ bin/verify-hooks twitch "$MORPHE_WORK/out/twitch-31.8.0-patched.apk"
   literals when the check was added are listed in its `PENDING` set and reported without failing.
 
 When everything applies: run `bin/verify-hooks`, the probes and the app itself, update the version in
-`shared/Constants.kt` and the app's page under `docs/`, and commit as
-`bump(<app>): support <App> <version>`.
+`shared/Constants.kt`, the app's page under `docs/` and the APKMirror variant the README's Install
+section names, and commit as `bump(<app>): support <App> <version>`.
 
 ## Releasing
 
