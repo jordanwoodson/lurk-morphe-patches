@@ -174,6 +174,25 @@ public final class UiBoundaryProbe {
    } else if(scenario.equals("overlay-off")) {
     message(first);prefs.put("chat_overlay",false);
     handler.post(()->finish(()->check(current.get(null)==null,"queued overlay must recheck opt-out"),scenario));
+   } else if(scenario.equals("overlay-off-idle")) {
+    // Switched off with no overlay on screen: chat messages queue nothing on the main thread.
+    prefs.put("chat_overlay",false);
+    for(int i=0;i<50;i++)message(first);
+    check(Looper.getMainLooper().getQueue().isIdle(),"switched-off overlay posted work for chat messages");
+    // With an overlay still showing, switching off removes it through one queued task.
+    prefs.put("chat_overlay",true);show(first);check(current.get(null)!=null,"overlay shown");
+    prefs.put("chat_overlay",false);for(int i=0;i<50;i++)message(first);
+    handler.post(()->finish(()->check(current.get(null)==null,"switched-off overlay still showing"),scenario));
+   } else if(scenario.equals("refresh-off")) {
+    // Refresh stream off: the gear keeps its own long-press; on: Lurk's replaces it.
+    boolean[] own={false};View gear=new View(first);first.content.addView(gear);
+    View.OnLongClickListener stock=v->{own[0]=true;return true;};
+    Method bind=player.getMethod("bindRefresh",View.class);
+    prefs.put("refresh_stream",false);gear.setOnLongClickListener(stock);bind.invoke(null,gear);gear.performLongClick();
+    check(own[0],"switched-off Refresh stream replaced the gear's long-press");
+    own[0]=false;prefs.put("refresh_stream",true);bind.invoke(null,gear);gear.performLongClick();
+    check(!own[0],"Refresh stream did not bind the gear");
+    finish(()->{},scenario);
    } else if(scenario.equals("overlay-owner")) {
     message(first);first.dead=true;show(second);Object owned=current.get(null);check(owned!=null,"new activity owns real overlay view");
     handler.post(()->finish(()->check(current.get(null)==owned,"stale invalid activity must not detach new overlay"),scenario));

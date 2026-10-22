@@ -106,7 +106,7 @@ val refreshStreamPatch = bytecodePatch(
         twitchSettings.add(
             SwitchSetting("refresh_stream", "Refresh stream",
                 "Long-press the player's settings gear to reload a stuck stream with a new access token, as " +
-                    "Twitch's Retry does.", Section.PLAYBACK),
+                    "Twitch's Retry does. Applies to players opened after it's turned on.", Section.PLAYBACK),
             SwitchSetting("refresh_stream_video", "Also by long-pressing the video",
                 "Long-press the middle of the video to refresh too. Twitch doesn't use this gesture.",
                 Section.PLAYBACK, parent = "refresh_stream"),

@@ -149,9 +149,13 @@ public final class TwitchPlayer {
         }
     }
 
-    /** Injection point: the classic player's settings gear, once it is found. Long-press reloads. */
+    /**
+     * Injection point: the classic player's settings gear, once it is found. Long-press reloads. The gear's
+     * own long-click listener is replaced only while Refresh stream is on, so a player opened with it off
+     * is untouched; turning it on applies to players opened afterwards.
+     */
     public static void bindRefresh(View gear) {
-        if (gear == null) return;
+        if (gear == null || !Settings.isEnabled("refresh_stream")) return;
         gear.setOnLongClickListener(view -> {
             if (!Settings.isEnabled("refresh_stream")) return false;
             int[] location = new int[2];

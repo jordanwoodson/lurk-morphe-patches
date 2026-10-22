@@ -243,7 +243,9 @@ audio can be resumed from its notification.
 *Refresh stream* calls the error screen's Retry, `N1(0, true)`. For live that fetches a new token and
 playlist; a VOD keeps its position. It's triggered by a long press on the settings gear of the live
 (`player_control_overlay`) and VOD/clip (`player_control_overlay_widget`) overlays, or a long press on
-the middle of the video.
+the middle of the video. The gear's long-click listener is replaced only while the switch is on when the
+overlay is built, so a player opened with it off keeps Twitch's gear as is; turning it on applies to
+players opened afterwards (`UiBoundaryProbe refresh-off`).
 
 *Player gestures*:
 - change the three VOD skip constants, and swap Twitch's "10"/"30" icons for arrow-only copies made
@@ -498,7 +500,9 @@ chat. The exact viewer feeder owns posted messages. Its stream-model observer re
 destination without waiting for another message, and onDestroyView retires that feeder without removing
 a newer viewer's overlay. A recreated view can reuse the feeder with fresh state. This takes effect at
 the measured model emission or teardown, not before a navigation intent reaches either boundary.
-React Native chat, VODs and chat replay don't pass through that feeder.
+React Native chat, VODs and chat replay don't pass through that feeder. With the switch off, a message
+costs one settings read: the main thread gets a task only to remove an overlay still on screen, once
+(`UiBoundaryProbe overlay-off-idle`).
 
 Twitch already loads recent chat history on join (native
 `ChatHistory`, RN preload) and replays VOD chat, so a third-party history service isn't used.

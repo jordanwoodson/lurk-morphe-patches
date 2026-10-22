@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
@@ -53,8 +54,10 @@ public final class TwitchChatOverlay {
     private static final Field NO_FIELD;
     private static volatile Field nameField;
     private static volatile Class<?> nameClass;
-    /** The attached overlay. Main thread only. */
-    private static Overlay overlay;
+    /** The attached overlay. Written on the main thread only; chat threads read whether there is one. */
+    private static volatile Overlay overlay;
+    /** A switched-off detach is queued for the main thread. */
+    private static final AtomicBoolean DETACH_QUEUED = new AtomicBoolean();
     private static final Map<Object,Owner> OWNERS = new WeakHashMap<>();
     private static final class Owner {
         String room = "";
@@ -92,7 +95,14 @@ public final class TwitchChatOverlay {
     public static void onMessage(Context context, Object sender, List tokens, Map tags, Object feeder) {
         try {
             if (!Settings.isEnabled(KEY)) {
-                MAIN.post(() -> { if (!Settings.isEnabled(KEY)) detach(); });
+                // Switched off: remove an overlay still on screen, with one queued task, and otherwise do
+                // nothing per message.
+                if (overlay != null && DETACH_QUEUED.compareAndSet(false, true)) {
+                    MAIN.post(() -> {
+                        DETACH_QUEUED.set(false);
+                        if (!Settings.isEnabled(KEY)) detach();
+                    });
+                }
                 return;
             }
             Activity activity = activity(context);
