@@ -21,9 +21,10 @@ from hermes_dec.parsers.hbc_bytecode_parser import parse_hbc_bytecode
 from hermes_dec.parsers.hbc_file_parser import HBCReader
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # Also under python -I.
+from pins import stock_sha256  # noqa: E402
 from verify_literals import verify as verify_literals  # noqa: E402
 
-STOCK_SHA256 = "dd5e4d45bffa1a7befbf943985eb3f0d0d1896d303d28abf0a5748b1d5f124dc"
+STOCK_SHA256 = stock_sha256()
 
 
 def footer(data):

@@ -13,11 +13,13 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
 
 /** Small native boundaries; this class never handles playback responses or manifest URLs. */
 @SuppressWarnings("unused")
 public final class KickPrivacy {
+    private static final String BLOCK_FINGERPRINTING = "block_fingerprinting";
     private static final Pattern WEB_URL = Pattern.compile("https?://[^\\s<>\"']+", Pattern.CASE_INSENSITIVE);
     private static final Set<String> TRACKING_KEYS = new HashSet<>(Arrays.asList(
             "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
@@ -28,6 +30,18 @@ public final class KickPrivacy {
 
     public static boolean allowAnalyticsCollection(boolean requested) {
         return requested && !Settings.isEnabled("disable_analytics");
+    }
+
+    /**
+     * Injection point: the start of FingerprintJS Pro's React Native getVisitorDataWithTimeout and
+     * getVisitorIdWithTimeout. True while Block device fingerprinting is on; the injected code then rejects the
+     * request the way the SDK reports a network error, so nothing reaches FingerprintJS's endpoint. Opt-in, so an
+     * unreadable settings registry never turns it on.
+     */
+    public static boolean blockFingerprint() {
+        if (!Settings.isRegistered(BLOCK_FINGERPRINTING) || !Settings.isEnabled(BLOCK_FINGERPRINTING)) return false;
+        Logger.blocked("FingerprintJS device fingerprint request");
+        return true;
     }
 
     /** The existing Expo/Hermes unavailable-SDK contract, resolved once by the injected bridge. */

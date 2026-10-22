@@ -4,6 +4,7 @@ import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.kick.shared.OTA_UPDATES_OFF
 import io.github.jordanwoodson.patches.kick.shared.hex
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
@@ -16,7 +17,7 @@ private const val KEY = "vod_skip_seconds"
 val seekIntervalPatch = bytecodePatch(
     name = "Seek interval",
     description = "Sets how far the rewind and forward buttons skip in videos and rewound live streams: 5, 15, 20 " +
-        "or 30 seconds instead of 10. Starts at Kick's 10 seconds. Choose another in Lurk settings > Playback.",
+        "or 30 seconds instead of 10. Starts at Kick's 10 seconds. Choose another in Lurk settings > Playback." + OTA_UPDATES_OFF,
 ) {
     compatibleWith(COMPATIBILITY_KICK)
     dependsOn(kickHermesPatch)

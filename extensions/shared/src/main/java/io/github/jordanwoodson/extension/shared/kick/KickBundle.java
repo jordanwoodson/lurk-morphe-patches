@@ -2,18 +2,23 @@ package io.github.jordanwoodson.extension.shared.kick;
 
 import android.content.Context;
 import android.content.res.AssetManager;
+import android.os.SystemClock;
+import android.util.Log;
 import android.util.AtomicFile;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
 
@@ -33,6 +38,7 @@ public final class KickBundle {
     public static synchronized String prepare(AssetManager assets, String assetUrl) {
         if (!"assets://index.android.bundle".equals(assetUrl)) return null;
         if (prepared != null || embedded) return prepared;
+        long started = SystemClock.elapsedRealtime();
         try {
             if (context == null) throw new IllegalStateException("No application context");
             JSONObject manifest = new JSONObject(new String(read(assets, "lurk-hermes.json", 1024 * 1024),
@@ -54,15 +60,28 @@ public final class KickBundle {
                 if (!snapshot.get(key).equals(String.valueOf(edit.get("default")))) defaults = false;
             }
             File output = new File(context.getCodeCacheDir(), "lurk-kick.hbc");
+            File sidecar = new File(context.getCodeCacheDir(), "lurk-kick.json");
             if (defaults) {
                 // The embedded asset already has the patch-time defaults: don't copy 12 MB every start.
                 embedded = true;
+                sidecar.delete();
                 output.delete();
                 Logger.d("Kick Hermes: every setting is at its default, using the embedded bundle");
                 return null;
             }
-            byte[] bundle = read(assets, "index.android.bundle", 32 * 1024 * 1024);
             String embeddedHash = manifest.getString("embeddedSha256");
+            // The private copy written for the same embedded bundle and the same settings is reused, after checking
+            // that it is still the file that was written. Otherwise it is built again.
+            String key = new JSONObject().put("format", 1).put("embeddedSha256", embeddedHash)
+                    .put("snapshot", new JSONObject(new TreeMap<>(snapshot))).toString();
+            String reused = reuse(output, sidecar, key);
+            if (reused != null) {
+                prepared = reused;
+                Logger.d("Kick Hermes: reusing the bundle prepared for these settings ("
+                        + (SystemClock.elapsedRealtime() - started) + " ms)");
+                return prepared;
+            }
+            byte[] bundle = read(assets, "index.android.bundle", 32 * 1024 * 1024);
             if (!hex(MessageDigest.getInstance("SHA-256").digest(bundle)).equals(embeddedHash)) {
                 throw new IllegalArgumentException("Embedded bundle hash mismatch");
             }
@@ -85,23 +104,21 @@ public final class KickBundle {
             MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
             sha1.update(bundle, 0, bundle.length - 20);
             System.arraycopy(sha1.digest(), 0, bundle, bundle.length - 20, 20);
-            // Atomic replacement tolerates interrupted starts.
-            AtomicFile atomic = new AtomicFile(output);
-            FileOutputStream stream = null;
-            try {
-                stream = atomic.startWrite();
-                stream.write(bundle);
-                atomic.finishWrite(stream);
-            } catch (Exception e) {
-                if (stream != null) atomic.failWrite(stream);
-                throw e;
-            }
+            // The sidecar goes first so a stale one never describes a new bundle, then the bundle, then the sidecar
+            // naming its hash. Atomic replacement tolerates interrupted starts.
+            sidecar.delete();
+            write(output, bundle);
+            write(sidecar, new JSONObject().put("key", key).put("length", bundle.length)
+                    .put("sha256", hex(MessageDigest.getInstance("SHA-256").digest(bundle))).toString()
+                    .getBytes(StandardCharsets.UTF_8));
             prepared = output.getAbsolutePath();
-            Logger.d("Kick Hermes: selected " + edits.length() + " edits across " + snapshot.size() + " settings");
+            Logger.d("Kick Hermes: selected " + edits.length() + " edits across " + snapshot.size() + " settings ("
+                    + (SystemClock.elapsedRealtime() - started) + " ms)");
             return prepared;
         } catch (Exception e) {
             // The APK still has the validated patch-time defaults. Do not load a stale private copy.
-            Logger.d("Kick Hermes: using embedded defaults: " + e);
+            Log.w(Logger.TAG, "Kick Hermes: Lurk settings that change Kick's JavaScript can't be applied, so their "
+                    + "patch-time defaults are in effect: " + e);
             return null;
         }
     }
@@ -117,6 +134,41 @@ public final class KickBundle {
         byte[] bytes = selected == null ? original : unhex(selected);
         if (bytes.length != original.length) throw new IllegalArgumentException("Invalid bundle edit length");
         return bytes;
+    }
+
+    /**
+     * The prepared copy's path when its sidecar was written for [key] (the embedded bundle's hash and the settings
+     * snapshot) and the file still has the length and SHA-256 the sidecar records; otherwise null.
+     */
+    private static String reuse(File output, File sidecar, String key) {
+        try {
+            if (!output.isFile() || !sidecar.isFile() || sidecar.length() > 64 * 1024) return null;
+            JSONObject stored = new JSONObject(new String(Files.readAllBytes(sidecar.toPath()), StandardCharsets.UTF_8));
+            if (!key.equals(stored.optString("key")) || output.length() != stored.optLong("length", -1)) return null;
+            MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+            try (InputStream input = new FileInputStream(output)) {
+                byte[] buffer = new byte[65536];
+                for (int count; (count = input.read(buffer)) != -1; ) sha256.update(buffer, 0, count);
+            }
+            return hex(sha256.digest()).equals(stored.optString("sha256")) ? output.getAbsolutePath() : null;
+        } catch (Exception e) {
+            Logger.d("Kick Hermes: not reusing the prepared bundle: " + e);
+            return null;
+        }
+    }
+
+    /** Replaces [file] with [bytes] atomically, so an interrupted start leaves the old file or the new one. */
+    private static void write(File file, byte[] bytes) throws Exception {
+        AtomicFile atomic = new AtomicFile(file);
+        FileOutputStream stream = null;
+        try {
+            stream = atomic.startWrite();
+            stream.write(bytes);
+            atomic.finishWrite(stream);
+        } catch (Exception e) {
+            if (stream != null) atomic.failWrite(stream);
+            throw e;
+        }
     }
 
     private static byte[] read(AssetManager assets, String path, int limit) throws Exception {

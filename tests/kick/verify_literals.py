@@ -17,12 +17,16 @@ from io import BytesIO
 import json
 from pathlib import Path
 import struct
+import sys
 from zipfile import is_zipfile, ZipFile
 
 from hermes_dec.parsers.hbc_file_parser import HBCReader
 from hermes_dec.parsers.hbc_opcodes import hbc99
 
-STOCK_SHA256 = "dd5e4d45bffa1a7befbf943985eb3f0d0d1896d303d28abf0a5748b1d5f124dc"
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # Also under python -I.
+from pins import stock_sha256  # noqa: E402
+
+STOCK_SHA256 = stock_sha256()
 LENGTHS = {instruction.opcode: instruction.binary_size for instruction in hbc99._instructions}
 # Opcode: (kind, operand offsets of shape-or-count and value-buffer index, operand sizes).
 LITERALS = {

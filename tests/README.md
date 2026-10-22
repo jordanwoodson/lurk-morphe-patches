@@ -87,12 +87,24 @@ still pin names are the ones `bin/bump` reports when an app version renames them
 Kick patch integration regressions use the actual emitted APK and its Hermes manifest:
 
 ```sh
-# hermes-dec must be installed in this Python environment.
-python tests/kick/verify_hosting.py stock/index.android.bundle patched/kick.apk
+bin/test-kick-hermes patched/kick.apk [stock/index.android.bundle]
+ANDROID_SERIAL=emulator-5580 bin/test-kick patched/kick.apk
 ANDROID_SERIAL=emulator-5580 bin/test-kick-chat patched/kick.apk
 ANDROID_SERIAL=emulator-5580 bin/test-rumble patched/rumble.apk RefreshProbe
 python tests/rumble/verify_refresh.py patched/rumble-apktool
 ```
+
+`bin/test-kick-hermes` needs no device. It runs, against a patched APK and the stock bundle (by default the
+one `bin/decompile kick` wrote): `verify_sources.py` (every JavaScript-editing patch says it turns off Kick's
+updates; no version literal outside `Constants.kt`), `test_hermes.py`, `verify_literals.py`, `verify_hosting.py`
+and `verify_quality.py` with hermes-dec (the latter two only when the APK has Stay on channel and Default video
+quality), `HermesProbe.kt` on the JVM, `verify_player.py`, `verify_privacy.py`, and on an apktool decode of the
+APK `verify_sleep_queue.py` and `verify_analytics_jobs.py`. It skips, and says so, the checks of patches the APK
+doesn't have. The stock bundle's hash and the Kick version are read from the patch sources (`tests/kick/pins.py`).
+`bin/test-kick` first checks that Kick's code calls every hook in `tests/kick/expected-hooks.txt`, then runs the
+bundle loader, its reuse of the prepared bundle, and the analytics promise stubs on ART.
+`python3 -I tests/kick/refresh_chat_page_contract.py --check` compares Kick's live chat page with
+`tests/kick/chat-page-contract.json`; it needs the network and is not part of any gate.
 
 `verify_hosting.py` first verifies the stock hash, embedded bundle and manifest, then applies the
 actual `stay_on_host` edit. It executes the host content, JSX callbacks, countdown hook and timer

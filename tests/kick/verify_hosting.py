@@ -3,7 +3,8 @@
 
 Usage (hermes-dec Python): verify_hosting.py stock.bundle patched.apk
 Or: verify_hosting.py stock.bundle patched.bundle manifest.json
-Pinned Kick 40.32.3 (functions found by name). React hooks, JSX, scheduler and routing are boundary doubles;
+Pinned to the Kick version in kick/shared/Constants.kt (functions found by name). React hooks, JSX, scheduler
+and routing are boundary doubles;
 compiler memo caches persist across renders. Random duration is seeded at its real
 memo slot (3 seconds). This does not run React Native or a real Pusher/network event.
 """
@@ -13,12 +14,14 @@ from io import BytesIO
 import json
 import math
 from pathlib import Path
+import sys
 from zipfile import is_zipfile, ZipFile
 
 from hermes_dec.parsers.hbc_bytecode_parser import parse_hbc_bytecode
 from hermes_dec.parsers.hbc_file_parser import HBCReader
 from hermes_dec.parsers.serialized_literal_parser import unpack_slp_array
-from test_hermes import verify as structural
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # Also under python -I.
+from test_hermes import verify as structural  # noqa: E402
 
 U = object()
 SENTINEL = object()

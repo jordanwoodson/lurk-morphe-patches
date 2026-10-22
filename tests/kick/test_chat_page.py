@@ -7,7 +7,11 @@ every request is answered by the test through the DevTools protocol, so the scri
 https://chat.mobile.kick.com shaped like Kick's (the #app message list, its message, emote, link and highlight
 elements; none of Kick's code), plus fixed Kick and 7TV responses. Checks the host guard, running once per page,
 hidden highlight lines, ignored clears, 7TV words in existing and new messages (channel over global, exact words
-only, links and Kick emotes untouched), the owner lookup, and that no request carries a referrer or cookies.
+only, links and Kick emotes untouched), global emotes only without a known owner, and that no request carries
+a referrer or cookies.
+It also runs the Show deleted messages script at document start on a page that reads its config the way Kick's
+does, and first checks that every class Lurk selects is one Kick's real page used when
+tests/kick/chat-page-contract.json was captured (refresh_chat_page_contract.py refreshes it from the live page).
 The Chrome profile lives under $MORPHE_WORK (default ~/build/lurk-morphe-patches) and is removed.
 """
 import asyncio
@@ -15,18 +19,21 @@ import argparse
 import base64
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import socket
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 import urllib.request
 
 import websockets
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = (ROOT / "patches/src/main/resources/kick/chat/chat-page.js").read_text()
+MODERATOR = (ROOT / "patches/src/main/resources/kick/chat/moderator-view.js").read_text()
 PAGE = "https://chat.mobile.kick.com/?config=%7B%22channelId%22%3A668%7D"
 HTML = """<!doctype html><html><head></head><body><div id="app">
 <div class="message-container"><span class="message-content">hi OMEGALUL EZ shared LUL, ok<span class="link"
@@ -37,7 +44,6 @@ HTML = """<!doctype html><html><head></head><body><div id="app">
 </div></body></html>"""
 PIXEL = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 JSON_RESPONSES = {
-    "https://kick.com/api/v2/channels/xqc": {"id": 668, "slug": "xqc", "user_id": 676},
     "https://7tv.io/v3/users/kick/676": {"emote_set": {"emotes": [
         {"id": "111111111111111111111111", "name": "OMEGALUL"},
         {"id": "222222222222222222222222", "name": "shared"},
@@ -49,6 +55,32 @@ JSON_RESPONSES = {
     ]},
 }
 HIGHLIGHTS = [".subscription-container", ".subgift-container", ".host-container", ".reward-redeem-container"]
+# How Kick's page reads its config when it loads (tests/kick/chat-page-contract.json pins this on the real page):
+# ReactNativeWebView.injectedObjectJson() when that exists, otherwise the address's `config` parameter.
+CONFIG_PAGE = """<!doctype html><html><head><script>window.onload = () => { try {
+const o = ['object', 'function'].includes(typeof window.ReactNativeWebView.injectedObjectJson)
+    ? window.ReactNativeWebView.injectedObjectJson() : new URL(location.href).searchParams.get('config');
+window.received = o ? JSON.parse(o) : null; } catch (e) { window.received = 'error'; } };</script></head>
+<body><div id="app"></div></body></html>"""
+CONFIG = {"chatroomId": 1, "userCanModerate": False, "channelId": 668, "headers": {"User-Agent": "fixture"}}
+
+
+def contract_check():
+    """Every class Lurk's chat code selects must be one Kick's real page uses (tests/kick/chat-page-contract.json,
+    refreshed from the live page by refresh_chat_page_contract.py), and everything it relies on was present."""
+    contract = json.loads((ROOT / "tests/kick/chat-page-contract.json").read_text())
+    classes = set(contract["classes"])
+    sources = [SCRIPT, MODERATOR,
+               (ROOT / "extensions/shared/src/main/java/io/github/jordanwoodson/extension/shared/kick/KickChat.java").read_text()]
+    # CSS selectors among the string literals; host names such as chat.mobile.kick.com look alike and are skipped.
+    selectors = {literal for source in sources for literal in re.findall(r"""['"]([^'"\n]+)['"]""", source)
+                 if re.fullmatch(r"(?:[a-z]*(?:\.[a-z][a-z0-9-]*)+(?:\[[^\]]*\])?)(?:,\s*[a-z]*(?:\.[a-z][a-z0-9-]*)+)*", literal)
+                 and not literal.endswith((".com", ".app", ".io", ".tv"))}
+    used = {name for selector in selectors for name in re.findall(r"\.([a-z][a-z0-9-]*)", selector)}
+    check(used and used <= classes, "the page's captured classes include every class Lurk selects: " + ", ".join(sorted(used)))
+    missing = [key for key, value in contract["required"].items() if not value["present"]]
+    check(not missing, f"the page captured on {contract['captured']} had everything Lurk relies on" +
+          (": missing " + ", ".join(missing) if missing else ""))
 
 
 def chrome():
@@ -66,6 +98,7 @@ class Page:
         self.requests = []
         self.unexpected = []
         self.loaded = asyncio.Event()
+        self.html = HTML
 
     async def run(self):
         async for raw in self.ws:
@@ -92,8 +125,8 @@ class Page:
         url = request["url"]
         self.requests.append(request)
         headers = [{"name": "Access-Control-Allow-Origin", "value": "https://chat.mobile.kick.com"}]
-        if url.startswith(PAGE.split("?")[0]):
-            body, kind = HTML.encode(), "text/html"
+        if url.startswith(PAGE.split("?")[0]) or (self.html is CONFIG_PAGE and url.startswith("https://other.example/")):
+            body, kind = self.html.encode(), "text/html"
         elif url in JSON_RESPONSES:
             body, kind = json.dumps(JSON_RESPONSES[url]).encode(), "application/json"
         elif url.startswith(("https://cdn.7tv.app/emote/", "https://files.kick.com/emotes/")):
@@ -149,8 +182,8 @@ async def scenario(page):
                           "return app.children.length; })()") == 0, "control: without the switch a clear empties chat")
 
     await page.go(PAGE)
-    options = {"ignoreClears": True, "hide": HIGHLIGHTS, "sevenTv": True, "sevenTvChannel": "xqc", "sevenTvUser": None}
-    check(await page.apply(options) == "hide " + " ".join(HIGHLIGHTS) + ", ignore clears, 7tv xqc", "reports what it applied")
+    options = {"ignoreClears": True, "hide": HIGHLIGHTS, "sevenTv": True, "sevenTvChannel": "xqc", "sevenTvUser": "676"}
+    check(await page.apply(options) == "hide " + " ".join(HIGHLIGHTS) + ", ignore clears, 7tv 676", "reports what it applied")
     check(await page.apply(options) == "already applied", "applies once per page")
 
     hidden = await page.eval("Array.from(document.querySelectorAll('#app > div')).map(e => getComputedStyle(e).display)")
@@ -186,11 +219,10 @@ async def scenario(page):
     check(await page.eval("(() => { const app = document.getElementById('app'); app.innerHTML = '<p>x</p>'; "
                           "return app.innerHTML; })()") == "<p>x</p>", "other assignments still work")
 
-    lookups = [r for r in page.requests if r["url"].startswith("https://kick.com/")]
-    third_party = [r for r in page.requests if "7tv" in r["url"] or "kick.com/api" in r["url"]]
-    check(len(lookups) == 1, "one owner lookup on Kick")
+    third_party = [r for r in page.requests if "7tv" in r["url"]]
+    check(not any(r["url"].startswith("https://kick.com/") for r in page.requests), "nothing is asked of Kick itself")
     check(third_party and all(not {k.lower() for k in r["headers"]} & {"referer", "cookie"} for r in third_party),
-          "no referrer or cookies on lookups and 7TV requests")
+          "no referrer or cookies on 7TV requests")
     # Control: the page's own fetches do send one, so the check above can see it.
     page.requests.clear()
     await page.eval("fetch('https://7tv.io/v3/emote-sets/global').then(r => r.status)")
@@ -200,9 +232,11 @@ async def scenario(page):
 
     page.requests.clear()
     await page.go(PAGE)
-    await page.apply({"sevenTv": True, "sevenTvChannel": "xqc", "sevenTvUser": "676"})
+    await page.apply({"sevenTv": True, "sevenTvChannel": "xqc", "sevenTvUser": None})
     await page.until("window.lurkChat.sevenTvCount")
-    check(not any(r["url"].startswith("https://kick.com/") for r in page.requests), "a known owner needs no lookup")
+    check(await page.eval("window.lurkChat.sevenTvCount") == [0, 3] and
+          not any("/users/" in r["url"] or r["url"].startswith("https://kick.com/") for r in page.requests),
+          "a channel whose owner the app hasn't seen gets global emotes only, without asking Kick")
 
     page.requests.clear()
     await page.go(PAGE)
@@ -214,15 +248,155 @@ async def scenario(page):
     check(not page.unexpected, "no other requests: " + ", ".join(page.unexpected))
 
 
+async def moderator_scenario(page):
+    """Show deleted messages: the document-start script, on a page that reads its config the way Kick's does."""
+    await page.call("Page.enable")
+    await page.call("Fetch.enable", patterns=[{"urlPattern": "*"}])
+    page.html = CONFIG_PAGE
+    added = []
+
+    async def document_start(source):
+        added.append((await page.call("Page.addScriptToEvaluateOnNewDocument", source=source))["identifier"])
+
+    async def clear():
+        while added:
+            await page.call("Page.removeScriptToEvaluateOnNewDocument", identifier=added.pop())
+
+    url = "https://chat.mobile.kick.com/?config=" + urllib.parse.quote(json.dumps(CONFIG))
+    try:
+        # react-native-webview's message listener object exists before any script runs; then Lurk's script.
+        await document_start("window.ReactNativeWebView = {postMessage() {}};")
+        await document_start(MODERATOR)
+        page.requests.clear()
+        await page.go(url)
+        check(await page.eval("window.received") == CONFIG | {"userCanModerate": True},
+              "the page gets its own config with userCanModerate true")
+        check(await page.eval("window.lurkModeratorView") is True, "it reports that it applied")
+        sent = [r["url"] for r in page.requests if r["url"].startswith("https://chat.mobile.kick.com/?")]
+        check(sent and all(json.loads(urllib.parse.parse_qs(urllib.parse.urlsplit(u).query)["config"][0]) == CONFIG
+                           for u in sent), "the address sent to Kick keeps userCanModerate false")
+        check(await page.eval("location.href") == url, "the address inside the page is unchanged")
+
+        await page.go(url + "&preview=true")
+        check(await page.eval("window.received") == CONFIG and await page.eval("window.lurkModeratorView") is None,
+              "a KICKs gift preview is left alone")
+        await page.go("https://chat.mobile.kick.com/?config=not-json")
+        check(await page.eval("window.received") == "error" and await page.eval("window.lurkModeratorView") is None,
+              "a malformed config is left to the page, as in stock")
+        await page.go("https://other.example/?config=" + urllib.parse.quote(json.dumps(CONFIG)))
+        check(await page.eval("window.lurkModeratorView") is None and await page.eval("window.received") == CONFIG,
+              "other origins are left alone")
+
+        await clear()
+        await document_start("window.ReactNativeWebView = {postMessage() {}, injectedObjectJson: () => '{\"app\":1}'};")
+        await document_start(MODERATOR)
+        await page.go(url)
+        check(await page.eval("window.received") == {"app": 1}, "a config the app provides itself wins")
+
+        await clear()
+        await document_start(MODERATOR)
+        await page.go(url)
+        check(await page.eval("window.lurkModeratorView") is None, "without react-native-webview's bridge it does nothing")
+        check(not page.unexpected, "no other requests: " + ", ".join(page.unexpected))
+    finally:
+        await clear()
+        page.html = HTML
+
+
+# Two chat lines as Kick's page draws them (the data attributes the keywords script reads), and a bridge double.
+KEYWORD_LINES = """(() => { window.sent = []; window.ReactNativeWebView = {postMessage: s => sent.push(JSON.parse(s))};
+    const app = document.getElementById('app'); app.innerHTML = '';
+    for (const [id, name, slug, text] of [['m1', 'Troll', 'troll', 'hello'], ['m2', 'Viewer', 'viewer', 'nice clutch']]) {
+        const line = document.createElement('div'); line.className = 'message-container';
+        Object.assign(line.dataset, {messageId: id, senderUsername: name, senderSlug: slug, originalContent: text});
+        line.innerHTML = '<span class="message-content">' + text + ' <img class="emote" alt="x"></span>';
+        app.append(line);
+    } })()"""
+
+
+async def keywords_scenario(page):
+    """Chat keywords: lines go to the app in batches, once each; its verdicts tint or hide them."""
+    await page.call("Page.enable")
+    await page.call("Fetch.enable", patterns=[{"urlPattern": "*"}])
+    await page.go(PAGE)
+    await page.eval(KEYWORD_LINES)
+    check(await page.apply({"keywords": True}) == "nothing", "without a page generation nothing is sent")
+    await page.go(PAGE)
+    await page.eval(KEYWORD_LINES)
+    check(await page.apply({"keywords": True, "generation": "g1"}) == "keywords", "reports Chat keywords")
+    await page.until("sent.length === 1")
+    first = await page.eval("sent[0]")
+    check(first == {"type": "lurkKeywords", "generation": "g1", "items": [
+        {"id": "m1", "name": "Troll", "slug": "troll", "text": "hello"},
+        {"id": "m2", "name": "Viewer", "slug": "viewer", "text": "nice clutch"}]},
+        "lines already shown go to the app in one batch: ID, name, handle and the text as sent")
+    await page.eval("""(() => { const line = document.createElement('div'); line.className = 'message-container';
+        Object.assign(line.dataset, {messageId: 'm3', senderUsername: 'Late', senderSlug: 'late', originalContent: 'late line'});
+        document.getElementById('app').append(line); })()""")
+    await page.until("sent.length === 2")
+    check([item["id"] for item in await page.eval("sent[1].items")] == ["m3"], "a later line goes in its own batch, once")
+    await page.eval("window.lurkChat.verdicts({m1: 2, m2: 1, missing: 2})")
+    styles = await page.eval("""Array.from(document.querySelectorAll('.message-container')).map(e =>
+        [e.dataset.messageId, getComputedStyle(e).display, getComputedStyle(e).backgroundColor])""")
+    check(styles[0][:2] == ["m1", "none"], "a hidden line takes no space")
+    check(styles[1][0] == "m2" and styles[1][2] == "rgba(83, 252, 24, 0.16)", "a highlighted line is tinted")
+    check(styles[2][1] != "none" and styles[2][2] == "rgba(0, 0, 0, 0)", "other lines are unchanged")
+    await page.eval("document.getElementById('app').append(document.querySelector('[data-message-id=m3]'))")
+    await asyncio.sleep(0.1)
+    check(await page.eval("sent.length") == 2, "a line that moves is not sent again")
+
+
+# Kick's page styles chat from custom properties on <body> that its own code sets inline from the app's settings
+# (tests/kick/chat-page-contract.json pins these rules on the real page).
+LOOK_PAGE = """<!doctype html><html><head><style>
+body{--timestamps-display:inline;--message-gap:2px;--chatroom-font-size:16px;font-size:var(--chatroom-font-size);line-height:1.5}
+#app{display:flex;flex-direction:column;row-gap:var(--message-gap)}
+.message-container{padding:4px 8px}
+.timestamp{display:var(--timestamps-display)}
+</style></head><body><div id="app"><div class="message-container"><span class="timestamp">03:10 PM</span>
+<span class="message-content">hi</span></div><div class="message-container"><span class="message-content">yo</span></div></div>
+<script>window.setPage = (timestamps, size) => { document.body.style.setProperty('--timestamps-display', timestamps ? 'inline' : 'none');
+document.body.style.setProperty('--chatroom-font-size', size + 'px'); }; setPage(false, 16);</script></body></html>"""
+
+
+async def look_scenario(page):
+    """Chat timestamps, text size and compact chat override the page's own settings, whenever it sets them."""
+    await page.call("Page.enable")
+    await page.call("Fetch.enable", patterns=[{"urlPattern": "*"}])
+    page.html = LOOK_PAGE
+    measure = """[getComputedStyle(document.querySelector('.timestamp')).display,
+        getComputedStyle(document.querySelector('.message-content')).fontSize,
+        getComputedStyle(document.getElementById('app')).rowGap,
+        getComputedStyle(document.querySelector('.message-container')).paddingTop]"""
+    try:
+        await page.go(PAGE)
+        check(await page.apply({}) == "nothing" and await page.eval(measure) == ["none", "16px", "2px", "4px"],
+              "control: without the switches the page's own settings apply")
+        await page.go(PAGE)
+        check(await page.apply({"timestamps": True}) == "timestamps", "reports timestamps")
+        check((await page.eval(measure))[:2] == ["inline", "16px"], "timestamps show; the text size is the page's")
+        await page.go(PAGE)
+        check(await page.apply({"timestamps": True, "textSize": 20, "compact": True}) == "timestamps, text size 20, compact",
+              "reports timestamps, text size and compact")
+        check(await page.eval(measure) == ["inline", "20px", "0px", "1px"], "all three apply")
+        await page.eval("setPage(false, 12)")
+        check(await page.eval(measure) == ["inline", "20px", "0px", "1px"], "and still apply after the page sets its own")
+        await page.go(PAGE)
+        await page.apply({"textSize": 99})
+        check((await page.eval(measure))[1] == "16px", "a text size outside 10 to 32 px is ignored")
+    finally:
+        page.html = HTML
+
+
 async def resilient_scenario(page):
     await page.call("Page.enable")
     await page.call("Fetch.enable", patterns=[{"urlPattern": "*"}])
     # A hung owner must not hold the independently successful global catalog hostage.
     await page.go(PAGE)
-    await page.eval("""window.fetch = ((original) => (url, opts) => url.includes('/channels/')
+    await page.eval("""window.fetch = ((original) => (url, opts) => url.includes('/users/')
         ? new Promise(() => {}) : original(url, opts))(window.fetch);
         window.WebSocket = class { close() {} };""")
-    await page.apply({"sevenTv": True, "sevenTvChannel": "xqc"})
+    await page.apply({"sevenTv": True, "sevenTvChannel": "xqc", "sevenTvUser": "676"})
     await page.until("document.querySelector('img[alt=EZ]')")
     check(True, "successful globals render while owner request never settles")
 
@@ -278,13 +452,12 @@ async def resilient_scenario(page):
             {id:'333333333333333333333333',name:'EZ',data:{animated:true}},
             {id:'444444444444444444444444',name:'OMEGALUL',data:{animated:false}}
         ]}),{status:200}));window.WebSocket=class {close(){}};""")
-    await page.apply({"sevenTv":True,"nonAnimatedEmotes":True})
+    await page.apply({"sevenTv":True})
     await page.eval("Object.defineProperty(document,'hidden',{value:false});document.dispatchEvent(new Event('visibilitychange'))")
     await page.until("document.querySelector('img[alt=EZ]')")
-    check(await page.eval("document.querySelector('img[alt=EZ]').src.endsWith('/2x_static.webp')"),
-          "visible resume loads missing catalog and animated emotes use a static filename")
-    check(await page.eval("document.querySelector('img[alt=OMEGALUL]').src.endsWith('/2x.webp')"),
-          "naturally static emotes keep their supported original filename")
+    check(await page.eval("document.querySelector('img[alt=EZ]').src.endsWith('/2x.webp') && "
+                          "document.querySelector('img[alt=OMEGALUL]').src.endsWith('/2x.webp')"),
+          "visible resume loads the missing catalog; chat images keep 7TV's animated file")
 
     # Header and body stalls share the same deadline, with exactly three transient attempts.
     await page.go(PAGE)
@@ -309,21 +482,22 @@ async def resilient_scenario(page):
 async def native_scenario(page, captures):
     """Run exactly the strings captured from production WebView.evaluateJavascript on ART."""
     expected = {"full", "info", "unknown", "provider-off", "malformed", "provider-only",
-                "missing-config", "invalid-id", "clears-only", "subs-only", "hosts-only", "rewards-only"}
+                "missing-config", "invalid-id", "clears-only", "subs-only", "hosts-only", "rewards-only",
+                "moderator-only"}
     check(set(captures) == expected, "complete native capture scenarios")
     for name, script in captures.items():
         page.requests.clear()
         await page.go(PAGE)
         await page.eval(script)
-        single = name in ("clears-only", "subs-only", "hosts-only", "rewards-only")
+        single = name in ("clears-only", "subs-only", "hosts-only", "rewards-only", "moderator-only")
         provider = name != "provider-off" and not single
-        clears = name not in ("provider-only", "subs-only", "hosts-only", "rewards-only")
+        clears = name not in ("provider-only", "subs-only", "hosts-only", "rewards-only", "moderator-only")
         display = ["block", "none", "none", "none", "none"]
         if name in ("provider-only", "clears-only"):
             display = ["block"] * 5
         elif single:
             display = ["block"] * 5
-            for index in {"subs-only": [1, 2], "hosts-only": [3], "rewards-only": [4]}[name]:
+            for index in {"subs-only": [1, 2], "hosts-only": [3], "rewards-only": [4]}.get(name, []):
                 display[index] = "none"
         if provider:
             expected_count = [0, 3] if name in ("unknown", "malformed", "missing-config", "invalid-id") else [2, 3]
@@ -347,6 +521,7 @@ async def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--native-captures", type=Path, help="bin/test-kick-chat ART capture log")
     args = parser.parse_args()
+    contract_check()
     work = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches"))
     work.mkdir(parents=True, exist_ok=True)
     profile = Path(tempfile.mkdtemp(prefix="chat-page-", dir=work))
@@ -370,6 +545,9 @@ async def main():
             page = Page(ws)
             reader = asyncio.create_task(page.run())
             try:
+                await moderator_scenario(page)
+                await keywords_scenario(page)
+                await look_scenario(page)
                 await resilient_scenario(page)
                 await scenario(page)
                 if args.native_captures:

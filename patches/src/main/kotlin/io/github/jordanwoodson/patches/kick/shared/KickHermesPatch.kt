@@ -8,6 +8,13 @@ import io.github.jordanwoodson.patches.kick.settings.kickBundleLoaderPatch
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
 import io.github.jordanwoodson.patches.kick.updates.embeddedBundlePatch
 
+/**
+ * Ends the description of every patch that edits Kick's JavaScript, which all go through [kickHermesPatch] and so
+ * through the embedded-bundle patch: Manager users should know what including one costs.
+ */
+internal const val OTA_UPDATES_OFF = " Like every patch that changes Kick's JavaScript, it turns off Kick's " +
+    "over-the-air JavaScript updates, so Kick's code fixes arrive only when you patch a newer version."
+
 /** Reset for each patching run; only selected dependent patches register edits. */
 internal lateinit var kickHermes: HermesBundle
     private set

@@ -1,19 +1,27 @@
 // Lurk's changes to Kick's chat page (chat.mobile.kick.com), which Kick shows in a WebView on the stream screen
 // and the channel's Chat tab. KickChat evaluates `(<this function>)(options)` when the page starts and again when
 // it finishes loading, with the switches that are on:
+//   moderatorView Show deleted messages is on. Its moderator view comes from lurk-chat-moderator.js, which runs
+//                 before the page's own scripts; this only reports whether that worked.
+//   timestamps    show each line's time; textSize the chat text size in px; compact less space between lines
 //   ignoreClears  keep the messages when a moderator clears the chat
 //   hide          CSS selectors of chat lines to hide (subs and gifts, hosts, reward redemptions)
 //   sevenTv       show 7TV emotes. sevenTvChannel is the channel's slug and sevenTvUser its owner's Kick user ID,
 //                 each null when the app hasn't seen them; without either only global emotes show.
+//   keywords      Chat keywords: send each chat line to the app and tint or hide it by the app's verdict.
+//   generation    this page's token, which the app requires on every message the page sends it.
 // The page is served by Kick and can change at any time, so every step only touches what it finds and does
 // nothing otherwise.
 (function (options) {
     'use strict';
     // At page start the WebView can still be showing the previous document.
     if (location.host !== 'chat.mobile.kick.com') return 'not the chat page';
-    if (window.lurkChat) return 'already applied';
+    // While the page still loads, the document-start script may not have run yet: report it once it has.
+    const moderator = () => !options.moderatorView || document.readyState === 'loading' ? []
+        : [window.lurkModeratorView ? 'moderator view' : 'no moderator view'];
+    if (window.lurkChat) return ['already applied'].concat(moderator()).join(', ');
     window.lurkChat = options;
-    const applied = [];
+    const applied = moderator();
 
     function whenReady(run) {
         const go = () => {
@@ -31,6 +39,27 @@
             (document.head || document.documentElement).appendChild(style);
         });
         applied.push('hide ' + options.hide.join(' '));
+    }
+
+    // Chat timestamps, text size and compact lines: the page styles each line from custom properties on <body>,
+    // which it sets inline from the app's chat settings (--timestamps-display, --chatroom-font-size,
+    // --message-gap). A stylesheet rule marked !important wins over those inline values whenever the page sets them.
+    const look = [];
+    if (options.timestamps) look.push('--timestamps-display:inline!important');
+    if (Number.isInteger(options.textSize) && options.textSize >= 10 && options.textSize <= 32) {
+        look.push('--chatroom-font-size:' + options.textSize + 'px!important');
+    }
+    if (options.compact) look.push('--message-gap:0px!important;line-height:1.3!important');
+    if (look.length) {
+        whenReady(() => {
+            const style = document.createElement('style');
+            style.textContent = 'body{' + look.join(';') + '}' +
+                (options.compact ? '.message-container{padding-top:1px!important;padding-bottom:1px!important}' : '');
+            (document.head || document.documentElement).appendChild(style);
+        });
+        if (options.timestamps) applied.push('timestamps');
+        if (look.length > (options.timestamps ? 1 : 0)) applied.push('text size ' + (options.textSize || 'Kick') +
+            (options.compact ? ', compact' : ''));
     }
 
     // The page clears chat by emptying the message list (`app.innerHTML = ""`); nothing else empties it outside
@@ -55,6 +84,58 @@
     if (options.sevenTv) {
         sevenTv(options.sevenTvChannel, options.sevenTvUser);
         applied.push('7tv ' + (options.sevenTvUser || options.sevenTvChannel || 'global only'));
+    }
+
+    if (options.keywords && options.generation && window.ReactNativeWebView) {
+        keywords();
+        applied.push('keywords');
+    }
+
+    // Chat keywords: each chat line, already shown or new, goes to the app (sender's name and kick.com handle, the
+    // text as sent), which matches it against the Lurk lists and answers through window.lurkChat.verdicts:
+    // 1 tints the line, 2 hides it. Lines are sent in batches; a hidden line can show for a moment first.
+    function keywords() {
+        const pending = new Map();
+        let timer = null, observer;
+        const send = () => {
+            clearTimeout(timer); timer = null;
+            if (!pending.size) return;
+            const items = Array.from(pending.values());
+            pending.clear();
+            window.ReactNativeWebView.postMessage(JSON.stringify({type: 'lurkKeywords', generation: options.generation, items}));
+        };
+        const queue = (line) => {
+            const id = line.dataset.messageId;
+            if (!id || line.dataset.lurkKeywords) return;
+            line.dataset.lurkKeywords = '1';
+            const content = line.querySelector('.message-content');
+            const text = line.dataset.originalContent != null ? line.dataset.originalContent : (content ? content.textContent : '');
+            pending.set(id, {id, name: line.dataset.senderUsername || '', slug: line.dataset.senderSlug || '', text: text.slice(0, 2000)});
+            if (pending.size >= 200) send();
+            else if (!timer) timer = setTimeout(send, 50);
+        };
+        window.lurkChat.verdicts = (verdicts) => {
+            for (const id of Object.keys(verdicts || {})) {
+                const line = document.querySelector('.message-container[data-message-id="' + CSS.escape(id) + '"]');
+                if (line) line.classList.add(verdicts[id] === 2 ? 'lurk-hidden' : 'lurk-highlight');
+            }
+        };
+        whenReady((app) => {
+            const style = document.createElement('style');
+            style.textContent = '.message-container.lurk-hidden{display:none!important}' +
+                '.message-container.lurk-highlight{background:rgba(83,252,24,.16)!important;box-shadow:inset 3px 0 #53fc18}';
+            (document.head || document.documentElement).appendChild(style);
+            app.querySelectorAll('.message-container').forEach(queue);
+            observer = new MutationObserver((records) => {
+                for (const record of records) for (const node of record.addedNodes) {
+                    if (node.nodeType !== 1) continue;
+                    if (node.matches('.message-container')) queue(node);
+                    node.querySelectorAll('.message-container').forEach(queue);
+                }
+            });
+            observer.observe(app, {childList: true, subtree: true});
+        });
+        window.addEventListener('pagehide', () => { if (observer) observer.disconnect(); clearTimeout(timer); }, {once: true});
     }
 
     // 7TV: a word of a message that is the name of one of the channel's 7TV emotes, or of a global one, becomes
@@ -126,7 +207,7 @@
             for (const e of (set && Array.isArray(set.emotes) ? set.emotes : []).slice(0, 2000)) {
                 if (!e || !idOK(e.id) || typeof e.name !== 'string' || !/^[^\s:<>&"'\\]{1,100}$/u.test(e.name)) continue;
                 result.push({id: e.id, name: e.name, flags: ((e.flags & 1) || (e.data && (e.data.flags & 256))) ? 1 : 0,
-                    url: 'https://cdn.7tv.app/emote/' + e.id + (options.nonAnimatedEmotes && e.data && e.data.animated === true ? '/2x_static.webp' : '/2x.webp'),
+                    url: 'https://cdn.7tv.app/emote/' + e.id + '/2x.webp',
                     animated: !!(e.data && e.data.animated === true), width: 64, height: 64});
             }
             return result;
@@ -156,7 +237,8 @@
             if (!stopped && set) { sets.global = set; publish(); connect(); }
         }
         async function loadChannel() {
-            const owner = user || (slug && await get('https://kick.com/api/v2/channels/' + encodeURIComponent(slug)) || {}).user_id;
+            // KickChat learns the owner from the same Kick response as the slug; without it, globals only.
+            const owner = user;
             if (!owner || stopped) return;
             const result = await get(API + 'users/kick/' + encodeURIComponent(owner));
             if (stopped || !result || typeof result !== 'object' || Array.isArray(result)) return;

@@ -4,7 +4,8 @@
 Usage: python3 tests/kick/verify_player.py
 Requires the configured JDK. Generated sources/classes live under $MORPHE_WORK (default ~/build/lurk-morphe-patches)
 and are removed on Linux. Checks the decision tables of the mobile-data quality ceiling, normal latency
-and background audio; the hooks themselves are checked on a device.
+background audio and Fill screen; the hooks themselves are checked on a device (Fill screen's also by
+bin/test-kick on ART).
 """
 import os
 from pathlib import Path
@@ -16,7 +17,37 @@ import tempfile
 
 STUBS = {
     "android/content/Context.java": "package android.content; public class Context { }",
-    "android/app/Activity.java": "package android.app; public class Activity extends android.content.Context { }",
+    "android/content/ContextWrapper.java": """
+        package android.content;
+        public class ContextWrapper extends Context {
+            private final Context base;
+            public ContextWrapper(Context base) { this.base = base; }
+            public Context getBaseContext() { return base; }
+        }
+    """,
+    "android/content/res/Configuration.java": """
+        package android.content.res;
+        public class Configuration {
+            public static final int ORIENTATION_PORTRAIT = 1;
+            public static final int ORIENTATION_LANDSCAPE = 2;
+            public int orientation;
+        }
+    """,
+    "android/content/res/Resources.java": """
+        package android.content.res;
+        public class Resources {
+            public final Configuration configuration = new Configuration();
+            public Configuration getConfiguration() { return configuration; }
+        }
+    """,
+    "android/app/Activity.java": """
+        package android.app;
+        public class Activity extends android.content.ContextWrapper {
+            public boolean pip;
+            public Activity() { super(null); }
+            public boolean isInPictureInPictureMode() { return pip; }
+        }
+    """,
     "android/os/Looper.java": """
         package android.os;
         public class Looper { public static Looper getMainLooper() { return new Looper(); } }
@@ -31,7 +62,16 @@ STUBS = {
     """,
     "android/view/View.java": """
         package android.view;
-        public class View { public android.content.Context getContext() { return new android.content.Context(); } }
+        public class View {
+            public int orientation = android.content.res.Configuration.ORIENTATION_PORTRAIT;
+            public android.content.Context context = new android.content.Context();
+            public android.content.Context getContext() { return context; }
+            public android.content.res.Resources getResources() {
+                android.content.res.Resources resources = new android.content.res.Resources();
+                resources.configuration.orientation = orientation;
+                return resources;
+            }
+        }
     """,
     "io/github/jordanwoodson/extension/shared/Logger.java": """
         package io.github.jordanwoodson.extension.shared;
@@ -71,6 +111,9 @@ import io.github.jordanwoodson.extension.shared.kick.KickPlayer;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
 
 public class PlayerProbe {
+    /** Stands in for IVS ResizeMode: the hook only uses the constants' names. */
+    enum Mode { FIT, FILL, ZOOM }
+
     static int checks;
     static void check(boolean value, String message) {
         if (!value) throw new AssertionError(message);
@@ -120,6 +163,31 @@ public class PlayerProbe {
         check(!KickPlayer.onUserLeaveHint(new android.app.Activity()), "unregistered switch skipped picture-in-picture");
         KickPlayer.onResume();
         check(!KickPlayer.keepAudio(), "kept audio after resume");
+
+        // Fill screen: FILL only in landscape, outside picture-in-picture, when FIT would leave side bars around a
+        // video wider than tall. Kick's other modes, vertical videos and a view narrower than the video keep theirs.
+        float video = 16 / 9f, screen = 20 / 9f;
+        android.view.View view = new android.view.View();
+        view.orientation = android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        check(KickPlayer.resizeMode(view, Mode.FIT, video, screen) == Mode.FIT, "filled while unregistered");
+        Settings.values.put("fill_screen", "false");
+        check(KickPlayer.resizeMode(view, Mode.FIT, video, screen) == Mode.FIT, "filled while off");
+        Settings.values.put("fill_screen", "true");
+        check(KickPlayer.resizeMode(view, Mode.FIT, video, screen) == Mode.FILL, "not filled in landscape");
+        check(KickPlayer.resizeMode(view, Mode.ZOOM, video, screen) == Mode.ZOOM, "changed Kick's ZOOM");
+        check(KickPlayer.resizeMode(view, "FIT", video, screen).equals("FIT"), "changed a non-enum mode");
+        check(KickPlayer.resizeMode(null, Mode.FIT, video, screen) == Mode.FIT, "filled without a view");
+        check(KickPlayer.resizeMode(view, Mode.FIT, 9 / 16f, screen) == Mode.FIT, "filled a vertical video");
+        check(KickPlayer.resizeMode(view, Mode.FIT, video, 1066 / 720f) == Mode.FIT, "filled next to the chat");
+        check(KickPlayer.resizeMode(view, Mode.FIT, video, video) == Mode.FIT, "filled a view of the video's shape");
+        android.app.Activity activity = new android.app.Activity();
+        view.context = new android.content.ContextWrapper(activity);
+        check(KickPlayer.resizeMode(view, Mode.FIT, video, screen) == Mode.FILL, "not filled in an activity");
+        activity.pip = true;
+        check(KickPlayer.resizeMode(view, Mode.FIT, video, screen) == Mode.FIT, "filled in picture-in-picture");
+        activity.pip = false;
+        view.orientation = android.content.res.Configuration.ORIENTATION_PORTRAIT;
+        check(KickPlayer.resizeMode(view, Mode.FIT, video, screen) == Mode.FIT, "filled in portrait");
         System.out.println("PASS: " + checks + " player decision-table assertions (Lurk height " + lurk + ")");
     }
 }

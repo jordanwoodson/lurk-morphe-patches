@@ -4,6 +4,7 @@ import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
 import io.github.jordanwoodson.patches.kick.shared.HermesBundle.Constant
+import io.github.jordanwoodson.patches.kick.shared.OTA_UPDATES_OFF
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -14,7 +15,7 @@ private const val KEY = "hide_app_rating"
 @Suppress("unused")
 val hideRatingPromptPatch = bytecodePatch(
     name = "Hide rating prompt",
-    description = "Stops Kick from asking you to rate the app. On by default. Turn it off in Lurk settings > Interface.",
+    description = "Stops Kick from asking you to rate the app. On by default. Turn it off in Lurk settings > Interface." + OTA_UPDATES_OFF,
 ) {
     compatibleWith(COMPATIBILITY_KICK)
     dependsOn(kickHermesPatch)
