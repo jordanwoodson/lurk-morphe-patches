@@ -34,9 +34,17 @@ public final class QualityProbe {
                 boolean.class, boolean.class, boolean.class);
         Method resolution = sourceType.getMethod("f");
 
-        // Nothing picked: the default quality (1080 unless the probe's patch option said otherwise).
-        int quality = Integer.parseInt(setting("video_quality"));
-        Object picked = choose.invoke(chooser, sources, null, null, 480, false, false, false);
+        // The choice starts at Rumble's default (the quality option's default): nothing changes until a
+        // quality is chosen.
+        Object picked;
+        if ("0".equals(setting("video_quality"))) {
+            picked = choose.invoke(chooser, sources, null, null, 480, false, false, false);
+            ProbeSupport.check(((int) resolution.invoke(picked)) == 480, "Rumble's default must use the preferred 480p");
+        }
+        // Nothing picked, 1080p chosen: the default quality.
+        int quality = 1080;
+        ProbeSupport.setting("video_quality", String.valueOf(quality));
+        picked = choose.invoke(chooser, sources, null, null, 480, false, false, false);
         ProbeSupport.check(((int) resolution.invoke(picked)) == quality, "VOD must start at " + quality);
         // Picked in the player: kept.
         picked = choose.invoke(chooser, sources, 720, 720_000, 480, false, false, false);
@@ -98,6 +106,7 @@ public final class QualityProbe {
         return m;
     }
 
+    /** The patch-time default of a setting, before the probe changes it. */
     private static String setting(String key) throws Exception {
         org.json.JSONArray settings = ProbeSupport.registry().getJSONArray("settings");
         for (int i = 0; i < settings.length(); i++) {

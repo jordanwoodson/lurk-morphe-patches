@@ -15,8 +15,8 @@ private const val KEY = "hide_tipping"
 val hideTippingPatch = bytecodePatch(
     name = "Hide tipping and Rants",
     description = "Hides the Tip buttons on channels, videos and Shorts, Rants (paid live chat messages) and " +
-        "paying with Rumble Wallet. Rants other viewers send still show.",
-    default = false,
+        "paying with Rumble Wallet. Rants other viewers send still show. Starts off. Turn it on in Lurk " +
+        "settings > Interface.",
 ) {
     compatibleWith(COMPATIBILITY_RUMBLE)
     dependsOn(settingsPatch, actionButtonsPatch)
@@ -48,7 +48,13 @@ val hideTippingPatch = bytecodePatch(
         )
 
         rumbleSettings.add(
-            SwitchSetting(KEY, "Hide tipping and Rants", "Tip buttons, Rants and paying with Rumble Wallet.", Section.INTERFACE),
+            SwitchSetting(
+                KEY,
+                "Hide tipping and Rants",
+                "Tip buttons, Rants and paying with Rumble Wallet.",
+                Section.INTERFACE,
+                default = false,
+            ),
         )
     }
 }

@@ -209,6 +209,15 @@ only the patches that were included. Each switch starts at the patch's default (
 and keeps the user's choice from then on, including across updates. Reset to defaults forgets those
 choices.
 
+Defaults follow one rule: a patch that changes what the app does is selected in Manager and its switch
+starts off; the description ends "Starts off. Turn it on in Lurk settings > <Section>." The exceptions start
+on: privacy (Block ads, Block cookie notice, Disable analytics, Clean share links, Don't save searches),
+lockout protection (Block update prompts), nags (Hide Premium upsells) and restoring expected behavior
+(Resume videos when signed out, Refresh stream), plus the chat features that match Twitch's defaults. Hide
+Shorts, Hide tipping and Rants, Disable autoplay and Default video quality moved to this rule on 2026-10-22:
+they used to be unselected with the switch (or the 1080p default quality) on, so a user who had selected one
+finds its switch off after updating, unless it was changed on the screen before.
+
 | Switch | Key | Takes effect |
 |---|---|---|
 | Block ads | `block_ads` | at the next ad request |
@@ -455,8 +464,9 @@ preferred height, isLive, data saver, live uses Auto). That signature is unique,
 `sourceList`.
 
 - With no picked quality, Rumble uses `preferred_video_resolution`, which is 480p on phones.
-- The patch fills in the chosen height and the highest bitrate, and Rumble's own nearest-height logic does
-  the rest.
+- The choice starts at "Rumble's default" (0; the `quality` option sets another start). Once a height is
+  chosen, the patch fills it in with the highest bitrate, and Rumble's own nearest-height logic does the
+  rest.
 - A quality picked in the player is stored app-wide and keeps winning.
 - Data saver still takes precedence.
 

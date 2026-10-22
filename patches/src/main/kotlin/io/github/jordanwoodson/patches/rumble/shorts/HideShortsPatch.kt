@@ -37,8 +37,7 @@ private const val KEY = "hide_shorts"
 val hideShortsPatch = bytecodePatch(
     name = "Hide Shorts",
     description = "Removes Shorts from the bottom bar, Home, My Feed, channel pages, categories and search. " +
-        "Shorts links still open.",
-    default = false,
+        "Shorts links still open. Starts off. Turn it on in Lurk settings > Interface.",
 ) {
     compatibleWith(COMPATIBILITY_RUMBLE)
     dependsOn(settingsPatch)
@@ -100,6 +99,7 @@ val hideShortsPatch = bytecodePatch(
                 "Hide Shorts",
                 "The Shorts tab and rows, and Shorts on channels, categories and search.",
                 Section.INTERFACE,
+                default = false,
                 restart = true,
             ),
         )

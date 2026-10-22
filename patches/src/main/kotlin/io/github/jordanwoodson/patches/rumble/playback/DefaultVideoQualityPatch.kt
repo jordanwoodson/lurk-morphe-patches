@@ -30,23 +30,23 @@ private const val MOBILE_KEY = "video_quality_mobile"
 @Suppress("unused")
 val defaultVideoQualityPatch = bytecodePatch(
     name = "Default video quality",
-    description = "Starts videos at the chosen quality, or the closest one available, instead of 480p. Once you " +
-        "pick a quality in the player, Rumble keeps using that one. Starting live streams at it too, and a " +
-        "lower cap on mobile data, are separate settings that start off. On by default. Change it in Lurk " +
-        "settings > Playback.",
-    default = false,
+    description = "Starts videos at a chosen quality, or the closest one available, instead of Rumble's 480p. " +
+        "Once you pick a quality in the player, Rumble keeps using that one. Starting live streams at it too, " +
+        "and a lower cap on mobile data, are separate settings. Starts off (Rumble's default). Choose a quality " +
+        "in Lurk settings > Playback.",
 ) {
     compatibleWith(COMPATIBILITY_RUMBLE)
     dependsOn(settingsPatch)
 
     val quality by stringOption(
         key = "quality",
-        default = "1080",
-        values = QUALITIES.associate { "${it}p" to it.toString() },
+        default = "0",
+        values = mapOf("Rumble's default" to "0") + QUALITIES.associate { "${it}p" to it.toString() },
         title = "Quality",
-        description = "The video height to start with, such as 1080. Can be changed later in Lurk settings.",
+        description = "The video height to start with, such as 1080, or 0 for Rumble's default. Can be changed " +
+            "later in Lurk settings.",
         required = true,
-    ) { it?.toIntOrNull() in 144..4320 }
+    ) { it?.toIntOrNull()?.let { height -> height == 0 || height in 144..4320 } == true }
     val live by booleanOption(
         key = "live",
         default = false,
@@ -130,7 +130,8 @@ val defaultVideoQualityPatch = bytecodePatch(
                 Section.PLAYBACK,
                 default = height.toString(),
                 choices = listOf("Rumble's default" to "0") +
-                    (QUALITIES + height).distinct().sortedDescending().map { "${it}p" to it.toString() },
+                    (QUALITIES + height).filter { it > 0 }.distinct().sortedDescending()
+                        .map { "${it}p" to it.toString() },
             ),
             SwitchSetting(
                 LIVE_KEY,
