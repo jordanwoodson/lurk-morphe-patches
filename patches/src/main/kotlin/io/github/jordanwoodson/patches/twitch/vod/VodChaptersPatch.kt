@@ -44,7 +44,8 @@ val vodChaptersPatch = bytecodePatch(
     name = "VOD chapters",
     description = "Adds a Chapters button to the native video (VOD) player that lists the stream's game and " +
         "category changes and jumps to one through Twitch's own seek. The list comes from Twitch's public " +
-        "data, fetched with the app's client ID. On by default.",
+        "data: one request to gql.twitch.tv per video the native player loads, feed previews included, with " +
+        "the app's client ID and without your account. On by default; the switch is in Lurk settings > Playback.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
     dependsOn(twitchSettingsPatch, chaptersIconPatch)
@@ -123,7 +124,8 @@ val vodChaptersPatch = bytecodePatch(
 
         twitchSettings.add(SwitchSetting("vod_chapters", "VOD chapters",
             "Adds a Chapters button to the video (VOD) player that lists the stream's game and category " +
-                "changes and jumps to one. The list is fetched from Twitch with the app's client ID.",
+                "changes and jumps to one. One request to Twitch per video loaded, previews included, without " +
+                "your account.",
             Section.PLAYBACK, default = true))
     }
 }

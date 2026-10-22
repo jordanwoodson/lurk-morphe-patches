@@ -7,6 +7,9 @@ import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.util.smali.ExternalLabel
 import io.github.jordanwoodson.patches.shared.settings.requireLocals
+import io.github.jordanwoodson.patches.shared.settings.Section
+import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
+import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.shared.parameterRegister
@@ -31,7 +34,7 @@ val fixStuckStartScreenPatch = bytecodePatch(
     name = "Fix stuck start screen",
     description = "Opens Twitch when its start screen is still waiting after 5 seconds. Twitch waits for Branch's " +
         "link lookup before it routes, and when that never answers, it stays on a blank start screen until it's " +
-        "closed, unpatched Twitch included.",
+        "closed, unpatched Twitch included. On by default; the switch is in Lurk settings > Interface.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
     dependsOn(twitchSettingsPatch)
@@ -53,5 +56,8 @@ val fixStuckStartScreenPatch = bytecodePatch(
             const-string v1, "${route.name}"
             ${invokeStatic("$STARTUP->watchStart(Landroid/app/Activity;Ljava/lang/String;)V", 0, 1)}
         """)
+        twitchSettings.add(SwitchSetting("fix_stuck_start", "Fix stuck start screen",
+            "Open Twitch when its start screen is still waiting for Branch's link lookup after 5 seconds.",
+            Section.INTERFACE))
     }
 }

@@ -16,10 +16,12 @@ TwitchBundle.init
 # Hermes patches: the prepared React Native bundle.
 TwitchBundle.prepare
 
-# always
-# Fix stuck start screen
+# if fix_stuck_start
 TwitchStartup.firstRoute
 TwitchStartup.watchStart
+
+# if fix_notifications
+TwitchNotifications.firebaseHeader
 
 # if chat_timestamps chat_keywords chat_appearance chat_show_deleted emotes_7tv badges_ffz
 # React Native chat (a dependency of the chat, emote and badge patches)

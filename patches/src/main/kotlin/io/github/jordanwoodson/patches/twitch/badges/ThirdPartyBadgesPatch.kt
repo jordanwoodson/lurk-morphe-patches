@@ -25,7 +25,9 @@ val thirdPartyBadgesPatch = bytecodePatch(
     description = "Adds switches that show FrankerFaceZ and Chatterino badges and pronouns.alejo.io pronouns next " +
         "to chatters' names in native and React Native chat. Each switch is off until turned on in Lurk settings. The badge " +
         "switches download that service's public list of all badge holders (api.frankerfacez.com, " +
-        "api.chatterino.com) about once an hour and check it on the phone. The pronouns switch sends the " +
+        "api.chatterino.com) about once an hour and check it on the phone, then load each badge's image from " +
+        "the https address the list names (FrankerFaceZ: cdn.frankerfacez.com; Chatterino: currently " +
+        "fourtf.com, but any host its list gives). The pronouns switch sends the " +
         "username of each chatter whose message you see to pronouns.alejo.io. 7TV badges are not included.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
@@ -59,7 +61,8 @@ val thirdPartyBadgesPatch = bytecodePatch(
                 Section.CHAT, default = false),
             SwitchSetting("badges_chatterino", "Chatterino badges",
                 "Shows Chatterino supporter and contributor badges in chat. Downloads Chatterino's list of badge " +
-                    "holders from api.chatterino.com and the badge images from fourtf.com.",
+                    "holders from api.chatterino.com and the badge images from the https hosts that list names " +
+                    "(fourtf.com today).",
                 Section.CHAT, default = false),
             SwitchSetting("badges_pronouns", "Pronouns",
                 "Shows chatters' pronouns from pronouns.alejo.io as a badge. Sends the username of each chatter " +

@@ -141,7 +141,10 @@ completes. Checked against the live endpoint:
 
 The patch sets both header values right before the two `addRequestProperty` calls in the
 Installations client. The client is found by its three header strings. It sends the original package
-name and the original certificate's SHA-1 (`8C68C138…9463`, from the pinned certificate).
+name and the original certificate's SHA-1 (`8C68C138…9463`, from the pinned certificate), the values
+unpatched Twitch sends. The `fix_notifications` switch (Interface, on by default, after a restart) picks
+the original or the app's own value through `TwitchNotifications.firebaseHeader`, using a register
+proven dead at each call for the original.
 
 Verified on the emulator: the clone's `PersistedInstallation` moved from `FisError: BAD CONFIG` to
 status 3 (registered) with auth and refresh tokens, and an FCM token was stored. Delivering a
@@ -213,7 +216,8 @@ is closed.
 The patch makes the routing method (the one logging `parse_launcher_intent`) run once per activity.
 `onCreate` schedules a 5-second fallback that calls it if the activity is still up and hasn't routed,
 and a late Branch answer is then ignored. With the patch, 16 cold starts gave 0 stalls; the fallback
-fired twice.
+fired twice. The `fix_stuck_start` switch (Interface, on by default) turns both off: every route runs,
+as unpatched, and no fallback is scheduled.
 
 Implementing this exposed a patcher pitfall. A non-range `invoke-static { p0, v0 }` in a method whose
 `p0` maps above v15 (here v30) is dropped from the output without an error or warning. The same
@@ -300,6 +304,12 @@ for the body), which every Twitch player uses. When a media playlist's next segm
 - a break past 4 minutes, an unreadable playlist or a backup that stops answering ends the switch;
 - without a backup, Mute stitched ads applies.
 
+When a break ends that way rather than by the stream's own playlist coming back, the stream returns on
+a new session: a new `play_session_id` with the account's token while that token has more than a
+minute left, otherwise a token requested with the Client-ID only, as for the backup. In the second case
+the rest of the playback runs on an anonymous session, not the account's. Its effect on subscriber ad
+exemption, minutes watched and Drops is untested; the description says so.
+
 Playlist reads and backup discovery share a six-second monotonic budget, including queued work,
 headers and continually progressing bodies. Compressed and expanded bodies are limited to 1 MiB.
 Three I/O workers and eight pending operations bound stalled providers; cancellation releases the
@@ -327,7 +337,11 @@ never changed pass unchanged from the moment the switch is off. `TwitchAsyncProb
 both cases.
 
 *Playlist proxy* is opt-in and does nothing without its `proxyUrl` option. It sends live usher requests
-to the configured proxy, and the proxy receives the signed playback token. *Avoid stitched ads* reads
+to the configured proxy. Its switch starts on once a URL is set, since setting one is the opt-in. The
+proxy sees which channel is watched and when, and receives the signed playback token in the request
+URL: in the query when it takes usher's place, inside the encoded Twitch URL with `{url}`, so its access
+logs can keep it. Whatever it returns is what the player plays, including segments of its own; the
+description says so and to use only a proxy you trust. *Avoid stitched ads* reads
 only `usher.ttvnw.net` master playlists, so a stream loaded through the proxy is never tracked: with
 both patches on, the proxy alone decides what the playlists hold, and Mute stitched ads still acts on
 any ad cues they keep. `TwitchAsyncProbe proxy` checks that a proxied master, in place of usher or with
@@ -483,7 +497,9 @@ failed/missing data leaves codes as text. Queues, per-room caches and snapshots 
 work rechecks switches and surviving owners before each new request, preserving shared native demand.
 
 Badges download FrankerFaceZ's and Chatterino's public lists of badge holders and match them on the
-device, so no chatter is looked up. The exception is *pronouns* (`badges_pronouns`, off by default):
+device, so no chatter is looked up. Badge images come from the https addresses in those lists:
+FrankerFaceZ's are on cdn.frankerfacez.com; Chatterino's are on fourtf.com today, but the host is
+whatever Chatterino's list names, which the descriptions say. Holder and chatter IDs are 64-bit. The exception is *pronouns* (`badges_pronouns`, off by default):
 pronouns.alejo.io has no bulk list, so the username of each chatter whose message you see is looked
 up there.
 - Answers, including "none", are cached for an hour, for up to 2000 users.
@@ -511,8 +527,10 @@ Twitch already loads recent chat history on join (native
 
 *VOD chapters* (on by default) adds a Chapters button next to the rotate button in the native VOD
 player's overlay. It reads the video's `moments(momentRequestType: VIDEO_CHAPTER_MARKERS)` (position,
-duration, game) from gql.twitch.tv with the app's Client-ID only, since chapters are public. This
-shares one background request per video between prefetches and open overlays. Two chapter jobs run
+duration, game) from gql.twitch.tv with the app's Client-ID only, since chapters are public. That
+is one anonymous request per video the native VOD player loads, feed previews included, which the
+description and switch summary say. This shares one background request per video between prefetches
+and open overlays. Two chapter jobs run
 at once with eight queued; successful results and failure backoff each retain at most 32 videos.
 Failures retry after 15 seconds. Each load keeps at most eight weak owners, and at most 32 pending
 buttons can wait for a dialog. Requests use the same six-second monotonic budget and 1 MiB body

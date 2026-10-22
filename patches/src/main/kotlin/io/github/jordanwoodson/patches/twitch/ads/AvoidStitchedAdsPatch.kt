@@ -26,8 +26,12 @@ val avoidStitchedAdsPatch = bytecodePatch(
     description = "While Twitch's server stitches an ad break into a live stream, plays the stream instead from " +
         "a picture-by-picture session, the kind Twitch itself shows during breaks, which gets no ads: at 360p " +
         "at most, with sound, then back to the stream's own session and quality when the break is over. The " +
-        "player doesn't reload. The playback token for that session is requested without your account. When " +
-        "none can be had, the break plays, and Mute stitched ads still mutes and covers it. Native and React " +
+        "player doesn't reload. The playback token for that session is requested without your account. If a " +
+        "break runs past 4 minutes or the stream's own playlist stops answering, the stream comes back on a " +
+        "new session instead; when your own token has under a minute left, that session's token is also " +
+        "requested without your account, and the rest of the stream plays as a signed-out viewer's (how " +
+        "that affects subscriber ad exemption, minutes watched and Drops is untested). When no " +
+        "picture-by-picture session can be had, the break plays, and Mute stitched ads still mutes and covers it. Native and React " +
         "Native players; streams started while it's off are left alone, and turning it off during a break " +
         "lets that break finish on picture-by-picture first. Does nothing for streams loaded through Playlist proxy.",
 ) {
