@@ -270,6 +270,17 @@ players opened afterwards (`UiBoundaryProbe refresh-off`).
 - add brightness and volume swipes through `DraggableConstraintLayout`/`ConstraintTheatreContainerView`,
   landscape only, leaving the middle fifth for drag-to-minimize.
 
+*Force landscape* (`force_landscape`, off by default) also takes the shared player-view hook. While the switch
+is on, each player view gets one attach-state watcher: once the view is attached under
+`video_presenter_container` (the theatre's content, live and video alike; Home's feed and its Clips tab are
+elsewhere) in a portrait activity, it asks the activity for `SCREEN_ORIENTATION_SENSOR_LANDSCAPE`, the request
+Twitch's rotate button makes, and keeps the earlier request. When the view leaves the window it puts that back
+if landscape is still the activity's request. In practice Twitch resets the orientation itself when the
+theatre closes, so the restore only matters when it doesn't. Twitch's rotate button still turns the theatre
+to portrait. Verified on the emulator: a live channel and a VOD opened in landscape (display rotation 90, log
+`orientation: landscape for a player (was 2)`), back returned to portrait Home, and a clip link opened in
+Home's Clips feed without rotating. Re-expanding a minimized theatre doesn't rotate again.
+
 *Normal latency* sets `setLiveLowLatencyEnabled(false)` before native loads and overrides the React
 Native and portal calls. On the emulator, latency rose from about 2 s to 6–7 s.
 
