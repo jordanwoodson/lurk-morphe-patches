@@ -3,10 +3,12 @@
 
 Regresses repository/input pollution, failure cleanup and overlapping staging runs.
 The fixture input/bundle/JAR are inert bytes; no APK tooling or device is invoked.
+Also covers bin/bump's sorting of patch failures and the version-literal scanner.
 """
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -159,6 +161,115 @@ class PatchInputTests(unittest.TestCase):
         records = self.check_result(result)
         self.assertEqual(len(records), 2)
         self.assertNotEqual(records[0]["args"][-1], records[1]["args"][-1])
+
+
+def load(name, path):
+    spec = importlib.util.spec_from_file_location(name, REPO / path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class BumpSummaryTests(unittest.TestCase):
+    """bin/bump's sorting of Morphe's failedPatches, with reasons shaped like Morphe Desktop 1.18's."""
+
+    @classmethod
+    def setUpClass(cls):
+        sys.dont_write_bytecode = True
+        cls.bump = load("lurk_bump", "bin/lib/bump.py")
+
+    @staticmethod
+    def failed(name, *lines):
+        frames = "\n\tat app.morphe.patcher.Patcher$invoke$1.invokeSuspend(Patcher.kt:120)"
+        return {"patch": {"name": name}, "reason": "\n".join(lines) + frames}
+
+    def test_failures_are_sorted_by_cause_and_dependents_inherit_the_root_cause(self):
+        exception = "app.morphe.patcher.patch.PatchException: "
+        result = {"appliedPatches": [{"name": "Sleep timer"}], "patchingSteps": [{"step": "PATCHING", "success": True}],
+                  "failedPatches": [
+                      self.failed("Anonymous chat",
+                                  exception + 'The patch "Anonymous chat" depends on "RawResourcePatch@1", which raised an exception:',
+                                  exception + "Twitch Hermes: unrecognized Twitch bundle",
+                                  "\tat io.github.jordanwoodson.patches.twitch.shared.HermesKt.fail(Hermes.kt:368)"),
+                      self.failed("Chat timestamps",
+                                  exception + 'The patch "Chat timestamps" depends on "BytecodePatch@2", which raised an exception:',
+                                  exception + 'The patch "BytecodePatch@2" depends on "RawResourcePatch@1", which raised an exception:',
+                                  exception + "The patch 'RawResourcePatch@1' failed previously"),
+                      self.failed("Hide Clips", exception + "Twitch Hermes: expected one pattern in DiscoveryFeedContent"),
+                      self.failed("Mute stitched ads", exception + "Could not find class: Lcom/twitchrn/player/PlaybackSession;"),
+                      self.failed("Block client ads", exception + "Failed to match the fingerprint: AdFingerprint"),
+                      self.failed("Normal latency", exception + "Twitch: no free register after the chat clear"),
+                      self.failed("Clone app", "java.lang.IllegalStateException: disk full"),
+                  ]}
+        lines, broken = self.bump.summary("twitch", "31.8.0", result)
+        text = "\n".join(lines)
+        self.assertTrue(broken)
+        self.assertIn("twitch 31.8.0: 1 of 8 patches applied, 7 failed", text)
+        sections = {line.split(" (")[0]: line for line in lines if line and not line.startswith(" ")}
+        self.assertIn("SHA gate: the Hermes bundle is not the pinned one (2)", text)
+        self.assertIn("  - Twitch Hermes: unrecognized Twitch bundle (in a shared patch)\n    Anonymous chat, Chat timestamps", text)
+        self.assertIn("Hermes pattern (1)", text)
+        self.assertIn("Fingerprint, class or bytecode match (3)", text)
+        self.assertIn("  - Could not find class: Lcom/twitchrn/player/PlaybackSession;\n    Mute stitched ads", text)
+        self.assertIn("Other (1)", text)
+        self.assertIn("  - disk full\n    Clone app", text)
+        self.assertEqual(list(sections)[1:], ["SHA gate: the Hermes bundle is not the pinned one", "Hermes pattern",
+                                             "Fingerprint, class or bytecode match", "Other"])
+
+    def test_probe_class_names_gone_from_the_new_version_are_reported(self):
+        probes = {"t1.o": {"AdsProbe.java"}, "tv.twitch.android.models.Tuid": {"AdsProbe.java"},
+                  "index.android.bundle": {"BundleProbe.java"}}
+        current = {"t1.o", "tv.twitch.android.models.Tuid"}
+        lines, broken = self.bump.summary("twitch", "31.8.0", {"appliedPatches": [{"name": "A"}]},
+                                          {"tv.twitch.android.models.Tuid"}, current, probes)
+        self.assertTrue(broken)
+        self.assertIn("  - AdsProbe.java: t1.o", lines)
+        self.assertNotIn("index.android.bundle", "\n".join(lines))
+
+    def test_a_clean_run_says_so(self):
+        lines, broken = self.bump.summary("rumble", "3.22.0", {"appliedPatches": [{"name": "A"}], "failedPatches": []},
+                                          {"a.b"}, {"a.b"}, {"a.b": {"P.java"}})
+        self.assertFalse(broken)
+        self.assertEqual(lines[-1], "Everything applied and no probe names are gone.")
+
+    def test_a_missing_result_file_is_a_failure(self):
+        lines, broken = self.bump.summary("kick", "41.0.0", None)
+        self.assertTrue(broken)
+        self.assertIn("no result file", lines[0])
+
+
+class VersionLiteralTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.check = load("lurk_version_literals", "tests/verify_version_literals.py")
+
+    def literals(self, source):
+        return self.check.Literals(source).found
+
+    def test_strings_are_found_and_comments_and_templates_are_not_strings(self):
+        source = ('// "1.2.3" in a comment\n'
+                  '/* nested /* "4.5.6" */ still a comment */\n'
+                  'val a = "Twitch 31.7.0: ${f("inner")} done"\n'
+                  "val c = '\"'\n"
+                  'val raw = """raw "x" 7.8.9"""\n'
+                  'val url = "https://example.com" // "9.9.9"\n')
+        self.assertEqual(self.literals(source), [(3, "inner"), (3, "Twitch 31.7.0:  done"), (5, 'raw "x" 7.8.9'),
+                                                 (6, "https://example.com")])
+
+    def test_only_string_literals_with_versions_outside_constants_fail(self):
+        scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "patch-tests"
+        scratch.mkdir(parents=True, exist_ok=True)
+        root = Path(tempfile.mkdtemp(prefix="literals-", dir=scratch))
+        self.addCleanup(shutil.rmtree, root)
+        app = root / "patches/src/main/kotlin/app"
+        (app / "shared").mkdir(parents=True)
+        (app / "shared/Constants.kt").write_text('val v = "31.7.0"\n')
+        (app / "Patch.kt").write_text('// for 31.7.0\nthrow PatchException("Twitch 31.7.0: no match")\n'
+                                      'val ip = "10.0.0.1"\nval tool = "hermes-dec 0.1.7 is ${version}"\n')
+        self.assertEqual(self.check.offenders(root), [
+            ("patches/src/main/kotlin/app/Patch.kt", 2, "Twitch 31.7.0: no match"),
+            ("patches/src/main/kotlin/app/Patch.kt", 4, "hermes-dec 0.1.7 is "),
+        ])
 
 
 if __name__ == "__main__":

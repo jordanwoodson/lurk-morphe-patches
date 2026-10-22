@@ -114,6 +114,8 @@ work; `bin/emu --port 5582 serial` prints its serial for `--install=` and `ANDRO
 - `bin/refs` clones Morphe's own repos (patcher docs, patches library, official patches, the
   template) into `$MORPHE_WORK/refs/` for API reference.
 - `bin/apk-info <file|app>` shows a file's package, version and signing cert, or an app's stored versions.
+- `bin/bump`, `bin/hermes-pin` and `bin/verify-hooks` move an app to a new version; see
+  [Version bumps](#version-bumps).
 
 ## Writing a patch
 
@@ -205,15 +207,56 @@ bash bin/test-twitch-privacy "$MORPHE_WORK/out/twitch-31.7.0-patched.apk"
   patched apktool output, decode Hermes bundles, or compile an extension helper against small
   stubs and run it on the JVM. Each docstring gives the usage. They honor `MORPHE_WORK` and
   `JAVA_HOME`.
-- `tests/verify_extension_calls.py <patched.apk> Class.method ...` checks that app code calls each
-  named extension method. Run it after adding a hook: an injected call can vanish without an error
-  (see below).
+- `bin/verify-hooks <app> <patched.apk>` checks that app code calls every extension method listed in
+  `tests/<app>/expected-hooks.txt` (one `Class.method` per line, `#` starts a comment), through
+  `tests/verify_extension_calls.py <patched.apk> Class.method ...`, which also takes names directly.
+  Run it after adding a hook or patching a new app version: an injected call can vanish without an
+  error (see [Writing a patch](#writing-a-patch)). Add the hook to the app's list in the same change.
+  Both need `ANDROID_HOME` for `dexdump`.
 - `bin/decompile <app>` decodes the stock APK; decode a patched one the same way for the Python
   checks: `java -jar tools/apktool_*.jar d -f -p "$MORPHE_WORK/apktool-framework" -o <dir> <patched.apk>`.
 
 The per-app pages record which checks exist for each patch and what could not be verified
 (signed-in flows, for example). When adding a patch, add a check where there is something
 worth pinning, and say in the pull request what you ran.
+
+## Version bumps
+
+Each patch is written for one version of its app (the `targets` in `shared/Constants.kt`). Moving an
+app to a new version is mostly finding what no longer matches:
+
+```sh
+bin/bump twitch 31.8.0 ~/Downloads/<file>.apkm   # store it (bin/apk-add), patch, sort the failures
+bin/bump twitch 31.8.0 --pin                     # React Native apps: point the SHA gate at the new bundle
+bin/verify-hooks twitch "$MORPHE_WORK/out/twitch-31.8.0-patched.apk"
+```
+
+- `bin/bump <app> <version> [file] [--pin] [--no-build]` stores the file if one is given, builds, and
+  patches the new version with every patch enabled (the default-off ones too), Morphe's `-f` (ignore
+  the targets) and `--continue-on-error`. It prints the failures grouped by cause: **SHA gate** (the
+  React Native bundle isn't the one `Hermes.kt` pins, so every Hermes edit stops there), **Hermes
+  pattern** (an edit found its byte pattern no times or more than once), **fingerprint, class or
+  bytecode match**, and anything **other**. A patch that failed because a patch it depends on did is
+  listed under that patch's cause. It also lists the class names the on-device probes in
+  `tests/<app>/` use that the current version defines and the new one doesn't: those probes were pinned
+  to R8's names and need the new ones (a name that still exists may now be a different class). The log,
+  Morphe's `result.json` and the summary land in `$MORPHE_WORK/bump/<app>-<version>/`. It doesn't
+  change `Constants.kt`.
+- `bin/hermes-pin <app> [version] [--check]` prints the SHA-256 and Hermes bytecode version of a stored
+  version's `assets/index.android.bundle` and rewrites `SOURCE_SHA256` in the app's `shared/Hermes.kt`
+  (`--check` only compares). `bin/bump --pin` runs it first. A new hash only lets the Hermes edits run
+  against the new bundle; whether they still match is what `bin/bump` then shows. When the bytecode
+  version changes too, it says so: that needs a new parser and compiler family, not just a hash.
+  `bin/apk-add` prints the bundle's hash when it stores a React Native app and says whether it is the
+  pinned one.
+- Version strings live only in `shared/Constants.kt`. Code and messages that need the version read it
+  from `COMPATIBILITY_<APP>.targets`; `tests/verify_version_literals.py` (part of `bin/test-host`) fails
+  on a string literal like `"31.7.0"` anywhere else under `patches/src`. Files that still had such
+  literals when the check was added are listed in its `PENDING` set and reported without failing.
+
+When everything applies: run `bin/verify-hooks`, the probes and the app itself, update the version in
+`shared/Constants.kt` and the app's page under `docs/`, and commit as
+`bump(<app>): support <App> <version>`.
 
 ## Releasing
 

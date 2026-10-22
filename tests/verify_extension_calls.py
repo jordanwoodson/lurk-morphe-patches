@@ -8,7 +8,8 @@ counts, for each method, the calls from classes outside the extension package.
 Usage: python3 -I tests/verify_extension_calls.py <patched.apk> Class.method [Class.method ...]
        python3 -I tests/verify_extension_calls.py <patched.apk> --list <ClassName> [...]
 Class is the simple name of a class under io.github.jordanwoodson.extension (RumbleChat, Settings, ...).
-Needs dexdump from the Android build-tools (ANDROID_HOME).
+bin/verify-hooks <app> <patched.apk> runs it with the app's tests/<app>/expected-hooks.txt.
+Needs dexdump from the Android build-tools: set ANDROID_HOME.
 """
 import os
 import re
@@ -23,10 +24,12 @@ EXTENSION = "Lio/github/jordanwoodson/extension/"
 
 
 def dexdump():
-    home = Path(os.environ.get("ANDROID_HOME", Path.home() / ".local/opt/android-sdk"))
+    if not os.environ.get("ANDROID_HOME"):
+        sys.exit("Set ANDROID_HOME to the Android SDK (dexdump comes from its build-tools)")
+    home = Path(os.environ["ANDROID_HOME"])
     tools = sorted((home / "build-tools").glob("*/dexdump"), key=lambda p: [int(x) for x in re.findall(r"\d+", p.parent.name)])
     if not tools:
-        sys.exit("dexdump not found under $ANDROID_HOME/build-tools")
+        sys.exit(f"dexdump not found under {home}/build-tools")
     return str(tools[-1])
 
 

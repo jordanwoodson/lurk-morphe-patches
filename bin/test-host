@@ -22,6 +22,9 @@ checks=(
     tests/test_patch.py
 )
 
+# Source rules for the whole bundle.
+checks+=(tests/verify_version_literals.py)
+
 failed=0
 for check in "${checks[@]}"; do
     note "Host check: $check"

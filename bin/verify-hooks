@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Check that a patched APK's app code still calls every extension method the app's patches inject.
+# Usage: bin/verify-hooks <app> <patched.apk>
+# Reads tests/<app>/expected-hooks.txt (one Class.method per line, # starts a comment) and runs
+# tests/verify_extension_calls.py on it. An injected call can vanish without an error (a non-range
+# invoke above v15), so run this after patching a new app version or adding a hook. Needs ANDROID_HOME.
+source "$(dirname "$0")/lib/common.sh"
+
+slug="${1:-}" apk="${2:-}"
+[[ -n "$slug" && -n "$apk" ]] || die "usage: bin/verify-hooks <app> <patched.apk>"
+app_constants "$slug" >/dev/null
+[[ -f "$apk" ]] || die "no such file: $apk"
+list="$ROOT/tests/$slug/expected-hooks.txt"
+if [[ ! -f "$list" ]]; then
+    note "no tests/$slug/expected-hooks.txt: $slug has no list of expected hooks yet, nothing checked"
+    exit 0
+fi
+hooks=()
+while IFS= read -r line; do
+    line="${line%%#*}"
+    line="${line//[[:space:]]/}"
+    [[ -n "$line" ]] && hooks+=("$line")
+done <"$list"
+(( ${#hooks[@]} )) || die "tests/$slug/expected-hooks.txt lists no Class.method lines"
+note "checking ${#hooks[@]} hooks from tests/$slug/expected-hooks.txt"
+exec python3 -I "$ROOT/tests/verify_extension_calls.py" "$apk" "${hooks[@]}"
