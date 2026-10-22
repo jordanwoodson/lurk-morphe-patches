@@ -153,8 +153,8 @@ otherwise, so a new app version fails to patch instead of patching the wrong met
 
 Patches with runtime behavior depend on the app's settings patch and register their switches
 and choices on the app's `SettingsScreen` (`patches/.../shared/settings/Settings.kt`) at the end of
-`execute`. A key can be registered once, and a setting's `parent` must be a top-level switch of the
-same section. The settings patch writes the registrations as JSON into the extension, and the Lurk
+`execute`. A key can be registered once, and a setting's `parent` must be a top-level setting of the
+same section (under a switch, it applies only while the switch is on). The settings patch writes the registrations as JSON into the extension, and the Lurk
 settings activity (`extensions/shared/.../settings/`) builds its screen from that: only the
 included patches' settings, grouped by section, with search, Pause Lurk, export and import, a bug
 report link and a restart bar for `restart = true` settings. It is plain framework Java: views and

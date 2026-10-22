@@ -461,9 +461,12 @@ public final class SettingsActivity extends Activity {
         row.title = entry.title;
         row.indent = entry.parent != null;
         if (entry.parent != null) {
+            // Under a switch a setting only applies while the switch is on; under a choice it is just grouped.
             Registry.Entry parent = registry.get(entry.parent);
-            row.enabled = parent == null || Settings.storedBoolean(parent);
-            if (parent != null) row.needs = parent.title;
+            if (parent != null && parent.isSwitch()) {
+                row.enabled = Settings.storedBoolean(parent);
+                row.needs = parent.title;
+            }
         }
         StringBuilder summary = new StringBuilder(entry.summary);
         if (entry.restart) summary.append(summary.length() > 0 ? " " : "").append("Needs a restart.");

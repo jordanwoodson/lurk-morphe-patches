@@ -6,8 +6,9 @@
     python3 tests/shared/test_settings.py --update <patched.apk> ...   # refresh tests/shared/registry/
 
 Each app's settings patch writes SettingsScreen.json() into Settings.registryJson() as a dex string.
-tests/shared/registry/<app>.json holds that string as extracted from a patched APK; --update rewrites
-them. The checks compile the real Settings, Registry and Logger against org.json and SharedPreferences
+tests/shared/registry/<app>.json holds that string as extracted from an APK patched with every patch
+that registers settings (bin/patch <app> -- -e "<each patch not selected by default>", leaving out
+Clone app and Change app name); --update rewrites them. The checks compile the real Settings, Registry and Logger against org.json and SharedPreferences
 doubles (no Android SDK, APK or device) and cover:
 
 - the JSON as SettingsScreen.json() writes it: unique keys, section order, titles sorted, each child
@@ -704,7 +705,7 @@ def check_layout(app, root):
             continue
         assert parent in by_key, f'{app} {key}: parent {parent} is not registered'
         assert by_key[parent]['parent'] is None, f'{app} {key}: parent {parent} has a parent itself'
-        assert by_key[parent]['type'] == 'switch', f'{app} {key}: parent {parent} is not a switch'
+        assert by_key[parent]['type'] != 'text', f'{app} {key}: parent {parent} is a text'
         assert by_key[parent]['section'] == entry['section'], f'{app} {key}: not in its parent\'s section'
         # Only the parent and its other children come before it, back to the parent.
         between = entries[keys.index(parent) + 1:index]

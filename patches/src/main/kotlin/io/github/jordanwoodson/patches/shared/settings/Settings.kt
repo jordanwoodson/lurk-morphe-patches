@@ -123,15 +123,17 @@ internal class SettingsScreen(private val app: String) {
     }
 
     /**
-     * By section, then title, each switch followed by the settings under it. A setting's parent must be a
-     * registered top-level switch in the same section, or the screen couldn't show the setting under it.
+     * By section, then title, each setting followed by the settings under it. A setting's parent must be a
+     * registered top-level setting in the same section, or the screen couldn't show the setting under it.
+     * Under a switch, a setting only applies (and can only be changed) while the switch is on; under a
+     * choice it is grouped with it.
      */
     fun json(): String {
         for (setting in settings) {
             val parent = setting.parent ?: continue
-            val switch = settings.singleOrNull { it.key == parent }
-            require(switch is SwitchSetting && switch.parent == null && switch.section == setting.section) {
-                "Lurk setting ${setting.key}: its parent $parent is not a registered top-level switch in ${setting.section.title}"
+            val above = settings.singleOrNull { it.key == parent }
+            require(above != null && above.parent == null && above.section == setting.section) {
+                "Lurk setting ${setting.key}: its parent $parent is not a registered top-level setting in ${setting.section.title}"
             }
         }
         val ordered = settings.filter { it.parent == null }
