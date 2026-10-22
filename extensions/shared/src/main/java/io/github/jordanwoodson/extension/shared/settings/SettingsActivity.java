@@ -143,8 +143,8 @@ public final class SettingsActivity extends Activity {
 
             Preference about = new Preference(context);
             about.setTitle(registry.version.isEmpty() ? registry.name : registry.name + " " + registry.version);
-            about.setSummary(registry.entries.isEmpty()
-                    ? "None of the included patches can be switched off here."
+            about.setSummary(!registry.readable
+                    ? registry.name + "'s settings could not be read; every patch is off."
                     : "Turn patches off or on without patching again. Changes apply the next time "
                     + registry.app + " loads the screen they affect.");
             about.setSelectable(false);

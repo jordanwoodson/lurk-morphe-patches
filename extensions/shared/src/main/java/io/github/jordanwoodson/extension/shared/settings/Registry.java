@@ -28,6 +28,11 @@ final class Registry {
     /** The patched app's name, such as "Rumble". */
     final String app;
     final List<Entry> entries;
+    /**
+     * False when the patches' JSON was missing, couldn't be parsed or listed nothing. The registry is then
+     * empty, so every switch reads as off.
+     */
+    final boolean readable;
     private final Map<String, Entry> byKey = new HashMap<>();
 
     static final class Entry {
@@ -73,14 +78,19 @@ final class Registry {
         }
     }
 
-    private Registry(String name, String version, String app, List<Entry> entries) {
+    private Registry(String name, String version, String app, List<Entry> entries, boolean readable) {
         this.name = name;
         this.version = version;
         this.app = app;
         this.entries = Collections.unmodifiableList(entries);
+        this.readable = readable;
         for (Entry entry : entries) byKey.put(entry.key, entry);
     }
 
+    /**
+     * The registry in {@code json}. All or nothing: when any part of it can't be read the result is empty and
+     * not {@link #readable}, so no switch is on.
+     */
     static Registry parse(String json) {
         if (json != null) {
             try {
@@ -89,12 +99,14 @@ final class Registry {
                 List<Entry> entries = new ArrayList<>(settings.length());
                 for (int i = 0; i < settings.length(); i++) entries.add(new Entry(settings.getJSONObject(i)));
                 return new Registry(root.optString("name", "Lurk"), root.optString("version"),
-                        root.optString("app", "the app"), entries);
+                        root.optString("app", "the app"), entries, !entries.isEmpty());
             } catch (JSONException e) {
                 Logger.d("settings: unreadable registry: " + e);
             }
+        } else {
+            Logger.d("settings: no registry");
         }
-        return new Registry("Lurk", "", "the app", new ArrayList<>());
+        return new Registry("Lurk", "", "the app", new ArrayList<>(), false);
     }
 
     Entry get(String key) {

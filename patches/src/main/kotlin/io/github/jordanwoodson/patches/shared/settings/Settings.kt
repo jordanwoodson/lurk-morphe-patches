@@ -85,8 +85,12 @@ internal class SettingsScreen(private val app: String) {
     /** Starts a patching run. Patch objects outlive one run in Morphe Manager. */
     fun clear() = settings.clear()
 
+    /** Registers [added]. A key can be registered once: two patches sharing a key would share one switch. */
     fun add(vararg added: Setting) {
-        settings += added
+        for (setting in added) {
+            require(settings.none { it.key == setting.key }) { "Lurk setting ${setting.key} is registered twice" }
+            settings += setting
+        }
     }
 
     /** By section, then title, each switch followed by the settings under it. */

@@ -42,12 +42,14 @@ public final class Settings {
     }
 
     /**
-     * Injection point. Whether the switch {@code key} is on. Unknown keys count as on, so a patch keeps
-     * working if the registry can't be read.
+     * Injection point. Whether the switch {@code key} is on. A key no included patch registered counts as
+     * off, and so does every key when the registry can't be read: Lurk fails closed, so a broken registry
+     * turns every patch off instead of turning default-off ones on.
      */
     public static boolean isEnabled(String key) {
         Registry.Entry entry = registry().get(key);
-        boolean fallback = entry == null || Boolean.parseBoolean(entry.defaultValue);
+        if (entry == null) return false;
+        boolean fallback = Boolean.parseBoolean(entry.defaultValue);
         SharedPreferences preferences = preferences();
         if (preferences == null) return fallback;
         try {
@@ -58,8 +60,8 @@ public final class Settings {
     }
 
     /**
-     * Whether a patch registered {@code key}, so it was included. Code shared by several patches checks this
-     * before {@link #isEnabled(String)}, which counts an unknown key as on.
+     * Whether a patch registered {@code key}, so it was included. {@link #isEnabled(String)} already counts an
+     * unregistered key as off; a choice or text reads as its stub value ("", or 0 as a number) without one.
      */
     public static boolean isRegistered(String key) {
         return registry().get(key) != null;
@@ -116,9 +118,11 @@ public final class Settings {
         return openAction;
     }
 
+    /** The value of the choice or text {@code key}: as changed on the screen, its patch-time default, or "". */
     static String getString(String key) {
         Registry.Entry entry = registry().get(key);
-        String fallback = entry == null ? "" : entry.defaultValue;
+        if (entry == null) return "";
+        String fallback = entry.defaultValue;
         SharedPreferences preferences = preferences();
         if (preferences == null) return fallback;
         try {
