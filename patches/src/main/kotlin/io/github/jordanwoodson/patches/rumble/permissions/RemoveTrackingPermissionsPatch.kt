@@ -6,8 +6,9 @@ import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUM
 import org.w3c.dom.Element
 
 // Permissions only trackers use. Without AD_ID, Google Play services hands every SDK, and Rumble's own
-// requests (ad_device_id, watch progress), the all-zero advertising ID. The rest feed install
-// attribution and ad measurement. READ_PHONE_STATE is declared but never requested or used.
+// requests (ad_device_id, watch progress), the all-zero advertising ID on Android 13 and newer (API 33, where
+// the permission was introduced); older Android versions don't check it. The rest feed install attribution
+// and ad measurement. READ_PHONE_STATE is declared but never requested or used.
 private val TRACKING_PERMISSIONS = setOf(
     "com.google.android.gms.permission.AD_ID",
     "android.permission.ACCESS_ADSERVICES_AD_ID",
@@ -27,7 +28,9 @@ private const val SAMSUNG_REFERRER_PACKAGE = "com.samsung.android.mapsagent"
 val removeTrackingPermissionsPatch = resourcePatch(
     name = "Remove tracking permissions",
     description = "Removes the advertising ID, ad measurement, install referrer and phone state permissions. " +
-        "Every SDK and Rumble's own requests then get an all-zero advertising ID.",
+        "On Android 13 and newer, every SDK and Rumble's own requests then get an all-zero advertising ID; on " +
+        "Android 12 and older, Google Play services hands out the real one regardless, unless you delete it in " +
+        "Android's settings.",
 ) {
     compatibleWith(COMPATIBILITY_RUMBLE)
 

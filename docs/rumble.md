@@ -355,8 +355,10 @@ Removes `AD_ID`, `ACCESS_ADSERVICES_AD_ID`, `ACCESS_ADSERVICES_ATTRIBUTION`, `AD
 install referrer permission, the Samsung and Huawei store referrer permissions and `READ_PHONE_STATE`.
 It also removes the AppsFlyer referrer `<queries>` entries.
 
-- Without `AD_ID`, Google Play services returns the all-zero ID. That covers every SDK and Rumble's own
-  `ad_device_id` (home layout, banners, watch progress); Rumble's reader doesn't filter zeros.
+- Without `AD_ID`, Google Play services returns the all-zero ID on Android 13 (API 33) and newer, where the
+  permission exists. That covers every SDK and Rumble's own `ad_device_id` (home layout, banners, watch
+  progress); Rumble's reader doesn't filter zeros. On Android 12 and older Play services doesn't check the
+  permission and returns the real ID, unless the user deleted or reset it in Android's settings.
 - `READ_PHONE_STATE` is declared by the app but never requested, and no code needs it.
 - Every other user catches the failure or checks the permission first.
 
