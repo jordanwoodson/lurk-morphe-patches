@@ -652,12 +652,18 @@ update. A generated manifest (`assets/lurk-hermes.json`, format 2) records each 
 original bytes and, for a switch, its replacement and default, or, for a choice, the
 bytes each choice value writes and the value the APK ships with. The native
 bundle loader takes a settings snapshot. When every setting is at its patch-time
-default it loads the embedded asset as is and deletes any earlier private copy;
-otherwise it verifies the embedded hash, chooses ranges from the snapshot, refreshes
-SHA-1 and atomically writes an app-private bundle. Turning every switch off and every
-choice to 0 reconstructs the original bundle byte for byte; reloading in the same
-process keeps the original snapshot. On a manifest/file error it logs and uses
-embedded defaults.
+default it loads the embedded asset as is and deletes any earlier private copy and its
+sidecar; otherwise it verifies the embedded hash, chooses ranges from the snapshot, refreshes
+SHA-1 and atomically writes an app-private bundle (`code_cache/lurk-kick.hbc`), then a
+sidecar (`lurk-kick.json`) with the embedded bundle's SHA-256, the snapshot, and the private
+copy's length and SHA-256. A later start with the same embedded bundle and the same snapshot
+reuses the private copy once its length and SHA-256 still match, instead of reading, editing
+and writing 12 MB again (on the emulator: about 110 ms to build, 30 to 60 ms to reuse); any
+difference builds it again. Turning every switch off and every choice to 0 reconstructs the
+original bundle byte for byte; reloading in the same process keeps the original snapshot. On
+a manifest/file error it logs and uses embedded defaults. `bin/test-kick` checks the reuse,
+the rebuild for a changed setting, a changed copy and another embedded bundle, and the
+cleanup at defaults on ART.
 
 The edit helpers, all equal-length and fail-closed:
 

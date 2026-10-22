@@ -73,6 +73,62 @@ public final class BundleProbe {
         System.out.println("PASS: two actual Insider job guards complete synchronously without SDK dispatch");
     }
 
+    /**
+     * Process starts with settings off their defaults reuse the private copy: the same settings load it without
+     * rewriting it, while a changed setting, a changed copy or a sidecar written for another embedded bundle build it
+     * again, and the patch-time defaults delete both files.
+     */
+    private static void verifyReuse(Method prepare, Field prepared, Field defaults, AssetManager assets, byte[] embedded,
+                                    File directory, JSONArray edits) throws Exception {
+        File output = new File(directory, "lurk-kick.hbc");
+        File sidecar = new File(directory, "lurk-kick.json");
+        List<String> keys = new ArrayList<>(switches.keySet());
+        check(keys.size() >= 2, "Reuse needs two switches");
+        switches.put(keys.get(0), true);
+        byte[] first = load(prepare, prepared, defaults, assets, embedded);
+        check(output.isFile() && sidecar.isFile(), "No private copy and sidecar for non-default settings");
+        check(output.setLastModified(1_000_000_000_000L), "Cannot date the private copy");
+        byte[] again = load(prepare, prepared, defaults, assets, embedded);
+        check(Arrays.equals(again, first) && output.lastModified() == 1_000_000_000_000L,
+            "The same settings rebuilt the private copy");
+
+        try (java.io.RandomAccessFile file = new java.io.RandomAccessFile(output, "rw")) {
+            file.seek(1000);
+            int value = file.read();
+            file.seek(1000);
+            file.write(value ^ 1);
+        }
+        output.setLastModified(1_000_000_000_000L);
+        byte[] repaired = load(prepare, prepared, defaults, assets, embedded);
+        check(Arrays.equals(repaired, first) && output.lastModified() != 1_000_000_000_000L,
+            "A changed private copy was reused");
+
+        JSONObject stored = new JSONObject(new String(Files.readAllBytes(sidecar.toPath()), "UTF-8"));
+        JSONObject key = new JSONObject(stored.getString("key"));
+        key.put("embeddedSha256", "0000000000000000000000000000000000000000000000000000000000000000");
+        Files.write(sidecar.toPath(), stored.put("key", key.toString()).toString().getBytes("UTF-8"));
+        output.setLastModified(1_000_000_000_000L);
+        load(prepare, prepared, defaults, assets, embedded);
+        check(output.lastModified() != 1_000_000_000_000L, "A sidecar for another embedded bundle was trusted");
+
+        switches.put(keys.get(1), true);
+        output.setLastModified(1_000_000_000_000L);
+        byte[] changed = load(prepare, prepared, defaults, assets, embedded);
+        check(!Arrays.equals(changed, first) && output.lastModified() != 1_000_000_000_000L,
+            "A changed setting reused the old private copy");
+
+        // The patch-time defaults use the embedded asset and remove both files.
+        for (int i = 0; i < edits.length(); i++) {
+            JSONObject edit = edits.getJSONObject(i);
+            if (edit.has("values")) choices.put(edit.getString("key"), edit.getString("default"));
+            else switches.put(edit.getString("key"), edit.getBoolean("default"));
+        }
+        check(load(prepare, prepared, defaults, assets, embedded) == embedded, "Defaults did not use the embedded asset");
+        check(!output.exists() && !sidecar.exists(), "Defaults left the private copy or its sidecar");
+        System.out.println("PASS: private copy reused for the same settings and rebuilt for changed settings, a changed "
+            + "copy or another embedded bundle; defaults remove it");
+    }
+
     /** A fresh process's load: the private copy's bytes, or the embedded asset's when it uses that. */
     private static byte[] load(Method prepare, Field prepared, Field defaults, AssetManager assets, byte[] embedded)
             throws Exception {
@@ -180,6 +236,7 @@ public final class BundleProbe {
         }
         System.out.println("PASS: loader defaults, process snapshot, all-off stock restoration, " + switches.size() +
             " independent switches, " + choiceValues.size() + " choices with " + values + " exact values");
+        verifyReuse(prepare, prepared, defaults, assets, embedded, directory, edits);
         verifyAnalyticsJobs(settings);
     }
 }
