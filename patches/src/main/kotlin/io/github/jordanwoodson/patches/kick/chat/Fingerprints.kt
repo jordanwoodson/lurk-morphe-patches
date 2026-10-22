@@ -7,6 +7,16 @@ import app.morphe.patcher.Fingerprint
 /** Smali descriptor of the extension's chat page class. */
 internal const val KICK_CHAT = "Lio/github/jordanwoodson/extension/shared/kick/KickChat;"
 
+internal object WebViewDestroyFingerprint : Fingerprint(
+    definingClass = "Lcom/reactnativecommunity/webview/RNCWebView;", name = "destroy", returnType = "V",
+    parameters = emptyList(),
+)
+
+internal object WebViewMessageFingerprint : Fingerprint(
+    definingClass = "Lcom/reactnativecommunity/webview/RNCWebView;", name = "onMessage", returnType = "V",
+    parameters = listOf("Ljava/lang/String;", "Ljava/lang/String;"),
+)
+
 internal object WebViewConstructorFingerprint : Fingerprint(
     definingClass = "Lcom/reactnativecommunity/webview/RNCWebView;",
     name = "<init>", returnType = "V", parameters = listOf("Lcom/facebook/react/uimanager/ThemedReactContext;"),

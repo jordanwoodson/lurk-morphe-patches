@@ -2,16 +2,14 @@ package io.github.jordanwoodson.patches.kick.emotes
 
 import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
-import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.rawResourcePatch
-import app.morphe.patcher.util.smali.ExternalLabel
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
+import io.github.jordanwoodson.patches.kick.chat.kickChatBridgePatch
 import io.github.jordanwoodson.patches.kick.settings.BundleLoaderFingerprint
 import io.github.jordanwoodson.patches.kick.settings.kickMatch
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
@@ -51,7 +49,7 @@ private val composerResources = rawResourcePatch {
 /** Both native main-bundle branches enqueue the same compiled bootstrap, without re-entering the delegate. */
 internal val kickComposerPatch = bytecodePatch {
     compatibleWith(COMPATIBILITY_KICK)
-    dependsOn(composerResources)
+    dependsOn(composerResources, kickChatBridgePatch)
     execute {
         val match = BundleLoaderFingerprint.kickMatch("composer asset delegate")
         val method = match.method
@@ -84,22 +82,5 @@ internal val kickComposerPatch = bytecodePatch {
         Fingerprint(definingClass = "Lcom/facebook/react/runtime/ReactInstance;", name = "destroy", returnType = "V", parameters = emptyList())
             .kickMatch("ReactInstance.destroy").method.addInstructions(0,
                 "invoke-static/range { p0 .. p0 }, Lio/github/jordanwoodson/extension/shared/CompiledBundle;->release(Ljava/lang/Object;)V")
-        Fingerprint(definingClass = "Lcom/reactnativecommunity/webview/RNCWebView;", name = "destroy", returnType = "V", parameters = emptyList())
-            .kickMatch("WebView catalog disposal").method.addInstructions(0,
-                "invoke-static/range { p0 .. p0 }, Lio/github/jordanwoodson/extension/shared/kick/KickChat;->onPageDisposed(Landroid/webkit/WebView;)V")
-        Fingerprint(definingClass = "Lcom/reactnativecommunity/webview/RNCWebView;", name = "onMessage", returnType = "V",
-            parameters = listOf("Ljava/lang/String;", "Ljava/lang/String;"))
-            .kickMatch("WebView catalog message boundary").method.apply {
-                if (implementation!!.registerCount < 4) throw PatchException("Kick composer: no message scratch register")
-                val onMessage = invokeStatic(
-                    "Lio/github/jordanwoodson/extension/shared/kick/KickChat;->onMessage(Landroid/webkit/WebView;Ljava/lang/String;Ljava/lang/String;)Z",
-                    *parameterRegisters().toIntArray())
-                addInstructionsWithLabels(0, """
-                    $onMessage
-                    move-result v0
-                    if-eqz v0, :stock
-                    return-void
-                """, ExternalLabel("stock", getInstruction(0)))
-            }
     }
 }
