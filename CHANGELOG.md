@@ -1,3 +1,31 @@
+## [1.12.0](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.11.1...v1.12.0) (2026-10-22)
+
+### 🐛 Bug Fixes
+
+* gate releases with host checks and recover stable finalization ([74fc2ea](https://github.com/jordanwoodson/lurk-morphe-patches/commit/74fc2ea126c28d7508593d20084a67e9be6c17f9))
+* isolate release staging and qualify Rumble notifications ([4e1aa6e](https://github.com/jordanwoodson/lurk-morphe-patches/commit/4e1aa6e540b79eadf8c3f516e8a1623d83bd8a75))
+* **kick:** retire removed catalogs and expired composer authority ([14cd09b](https://github.com/jordanwoodson/lurk-morphe-patches/commit/14cd09b321050acdd907239a0e2d5c32550434f5))
+* **kick:** support Kick 40.32.3 ([0e935b1](https://github.com/jordanwoodson/lurk-morphe-patches/commit/0e935b10a462ed511d0d28b7fd01a0248fc08027))
+* preserve chat controls and reload quality callbacks ([ecce83b](https://github.com/jordanwoodson/lurk-morphe-patches/commit/ecce83b97a3a242dd058fb4f7c0cf4299d36b521))
+* scope sleep fallbacks to playback generations and learn Rumble identity ([89750f4](https://github.com/jordanwoodson/lurk-morphe-patches/commit/89750f44046047ba95d7d852f69731f29342e858))
+* serialize sleep dispatch and guard queued Kick pauses ([babe41c](https://github.com/jordanwoodson/lurk-morphe-patches/commit/babe41cc95176446e1c7c1aeb3d9cba56d078c7d))
+* **tooling:** isolate patch inputs and extraction per run ([783e045](https://github.com/jordanwoodson/lurk-morphe-patches/commit/783e0454a54365ec60eda14c98b63ddc25a1963c))
+* **twitch:** bind live keyword notifications to original store login ([e949b96](https://github.com/jordanwoodson/lurk-morphe-patches/commit/e949b9631a7e20616605b92a3a65de58ca0cda11))
+* **twitch:** bind provider leases and finish cold pronoun badges ([3b5330c](https://github.com/jordanwoodson/lurk-morphe-patches/commit/3b5330c17af18bb317b4988eb1607af53ba9df3e))
+* **twitch:** bound playback requests and share chapter loads ([c622f89](https://github.com/jordanwoodson/lurk-morphe-patches/commit/c622f89efa177ec7f28617ac7377a976b42339e7))
+* **twitch:** bound provider work and respect active chat owners ([fbb15a2](https://github.com/jordanwoodson/lurk-morphe-patches/commit/fbb15a25ef14c943ff342487a6ba8749091b50ba))
+* **twitch:** preserve RN chat context and appearance in landscape ([3ba886c](https://github.com/jordanwoodson/lurk-morphe-patches/commit/3ba886cd3f0214a4763ab83b1854a65324566beb))
+* **twitch:** retain stock moderation fallback in compiled Hermes predicate ([85fe9f2](https://github.com/jordanwoodson/lurk-morphe-patches/commit/85fe9f2f229e8160a696ae1e74fbfa353ab0890e))
+* **twitch:** retire overlays by viewer ownership and cancel stale gestures ([31e9c97](https://github.com/jordanwoodson/lurk-morphe-patches/commit/31e9c97026dd184f08e61685f0e49b0e57eb24e5))
+* **twitch:** retire stale stream and chapter work safely ([732f252](https://github.com/jordanwoodson/lurk-morphe-patches/commit/732f252c380b2dfe46a75f266ba4d94c7c3a32a2))
+* **twitch:** support Twitch 31.7.0 ([ffc22a1](https://github.com/jordanwoodson/lurk-morphe-patches/commit/ffc22a1b81c90031464989e0069fafa3c47be7bf))
+* verify release source and preserve dev generated files ([f0c5d70](https://github.com/jordanwoodson/lurk-morphe-patches/commit/f0c5d70366103c045291718b3212ac5df7b2e00a))
+
+### ✨ New Features
+
+* **kick:** integrate native 7TV emotes and resilient catalogs ([1232bdc](https://github.com/jordanwoodson/lurk-morphe-patches/commit/1232bdcfda8a4301d72c53e5802ee20b267a6fca))
+* **twitch:** extend chat settings to owned React Native consumers ([d54c360](https://github.com/jordanwoodson/lurk-morphe-patches/commit/d54c36064611f903badd5cb12debec1f92a978aa))
+
 ## [1.12.0-dev.2](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.12.0-dev.1...v1.12.0-dev.2) (2026-10-22)
 
 ### 🐛 Bug Fixes
