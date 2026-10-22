@@ -11,7 +11,7 @@
 *  Settings.openAction
 *  Settings.isEnabled
 
-block_ads  RumblePrivacy.withoutBoosted
+block_ads|hide_premium_only|hide_related_videos  RumbleInterface.videos
 block_cookie_notice  RumblePrivacy.startingAirship
 block_cookie_notice  RumblePrivacy.airshipFeatures
 disable_analytics  RumblePrivacy.watchProgressOnly
@@ -20,7 +20,6 @@ clean_share_links  RumblePrivacy.cleanShareLink
 exact_counts  RumbleInterface.exactCount
 hide_tipping|hide_join_button|hide_shop_button  RumbleInterface.actionButtons
 home_hide_categories  RumbleInterface.homeSectionKind
-hide_related_videos  RumbleInterface.relatedVideos
 startup_tab  Settings.getInt
 
 chat_hide_raid_notices|chat_keywords  RumbleChat.messages

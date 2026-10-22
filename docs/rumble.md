@@ -259,6 +259,7 @@ finds its switch off after updating, unless it was changed on the screen before.
 | Hide tipping and Rants | `hide_tipping` | when the data is loaded again |
 | Hide Join buttons, Hide Shop buttons | `hide_join_button`, `hide_shop_button` | when the buttons are drawn again |
 | Hide comments, Hide related videos | `hide_comments`, `hide_related_videos` | when a video is opened again |
+| Hide premium-only videos | `hide_premium_only` | when a list is loaded again |
 | Block update prompts | `block_update_prompts` | after a restart |
 | Default video quality (a choice; "Rumble's default" is 0) | `video_quality` | at the next video |
 | Live streams too | `video_quality_live` | after a restart |
@@ -399,11 +400,12 @@ answers each request with a result Rumble already handles:
   impressions and clicks.
 - **Boosted videos** are paid placements: the server sets a video's `boosted` (the advertiser's thumbnail and
   title, the bid, and click and impression URLs), and the card shows that creative with a "Boosted" label.
-  The getters of the video lists that carry them (`HomeSectionDto.videos`, `RelatedVideoData.videos`,
-  `Video.related`, `VideoItems.items` for search, `CategoryVideoListData.items`; Gson DTOs, found by field
-  name) pass their list through `RumblePrivacy.withoutBoosted`, which leaves out every element whose
-  `boosted` field is set. `Video.boosted` returns null as well, so a Boosted video reaching the app through
-  another list shows as the plain video, without the creative, label or reports.
+  A hidden patch passes the server's video lists (the getters of `HomeSectionDto.videos`,
+  `RelatedVideoData.videos`, `Video.related`, `VideoItems.items` for search and `CategoryVideoListData.items`;
+  Gson DTOs, found by field name) through `RumbleInterface.videos(list, kind)`, which leaves out every element
+  whose `boosted` field is set while `block_ads` is on. Hide premium-only videos and Hide related videos share
+  that one hook. `Video.boosted` returns null as well, so a Boosted video reaching the app through another list
+  shows as the plain video, without the creative, label or reports.
 - **Home's `ad_block` sections** (a display ad between Home's rows) parse as `HIDE`, like Hide Shorts does
   for `shorts`, so they are neither loaded nor drawn.
 
@@ -500,6 +502,16 @@ Premium status itself isn't touched; that's Unlock Premium's job.
 
 Rants other viewers send still show.
 
+## Hide premium-only videos
+
+Rumble's mapper marks a video premium-only when the Gson DTO's `availability` is `premium` (ignoring case);
+`has_access_to_premium` (`hasAccessToPremium`) says whether the account may watch it. While
+`hide_premium_only` is on, the shared video list hook (see Block ads) leaves out the premium-only videos without
+access, in Home sections, related videos, search and categories. Channel pages and My Feed load their videos
+through other DTOs the hook doesn't reach, so they may still show them. `HideProbe` runs a Home section's real
+getter with a free, a locked and an unlocked premium-only video. No premium-only video came up on the emulator,
+so the hiding wasn't seen in the app.
+
 ## Hide comments and related videos
 
 - **Comments:** the video page adds its Comments button (which opens `CommentsView` with its
@@ -507,10 +519,10 @@ Rants other viewers send still show.
   `Video.areCommentsDisabled`. While `hide_comments` is on its getter returns `TRUE`, so Rumble leaves the button
   out as for a video whose creator turned comments off. Emptying the two composables instead would leave a
   button that opens an empty panel.
-- **Related videos:** the getters of `RelatedVideoData.videos` (the related endpoint) and `Video.related` pass
-  their list through `RumbleInterface.relatedVideos`, which returns an empty list while `hide_related_videos` is
-  on. The page then shows Rumble's own empty state ("There is nothing to see here"), and Autoplay next video has
-  nothing to play.
+- **Related videos:** the shared video list hook (see Block ads) passes `RelatedVideoData.videos` (the related
+  endpoint) and `Video.related` as related lists; `RumbleInterface.videos` returns an empty list for those while
+  `hide_related_videos` is on. The page then shows Rumble's own empty state ("There is nothing to see here"),
+  and Autoplay next video has nothing to play.
 
 Checked on 2026-10-22: a VOD's page shows Like, Share, Comments and Repost and a list of related videos with
 both switches off; with both on, Share, Repost and Save follow Like and the related list is Rumble's empty

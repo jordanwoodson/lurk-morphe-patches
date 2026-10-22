@@ -1,17 +1,12 @@
 package io.github.jordanwoodson.patches.rumble.ads
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
-import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.ClassDef
-import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE
-import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PRIVACY
 import io.github.jordanwoodson.patches.rumble.shared.enumConstant
 import io.github.jordanwoodson.patches.rumble.shared.kotlinObject
 import io.github.jordanwoodson.patches.shared.compose.parameters
@@ -20,9 +15,9 @@ import io.github.jordanwoodson.patches.rumble.shared.singleMethod
 import io.github.jordanwoodson.patches.shared.compose.staticFieldReads
 import io.github.jordanwoodson.patches.rumble.shared.unitReference
 import io.github.jordanwoodson.patches.rumble.shorts.HomeSectionKindFingerprint
+import io.github.jordanwoodson.patches.rumble.videolists.videoListsPatch
 import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.shared.invoke
-import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
@@ -39,7 +34,7 @@ val blockAdsPatch = bytecodePatch(
         "categories, and no ad or Boosted video impressions or clicks are reported.",
 ) {
     compatibleWith(COMPATIBILITY_RUMBLE)
-    dependsOn(settingsPatch)
+    dependsOn(settingsPatch, videoListsPatch)
 
     execute {
         val useCase = VideoAdUseCaseFingerprint.matchAllOrNull()?.singleOrNull()
@@ -102,24 +97,9 @@ val blockAdsPatch = bytecodePatch(
         )
 
         // Boosted videos are paid placements: the server marks a video with the advertiser's creative and
-        // click and impression URLs. They are dropped from the lists that carry them, and any left elsewhere
-        // shows as the plain video, without the creative, the Boosted label and its reports.
-        VideoListFingerprints.forEach { (what, fingerprint) ->
-            fingerprint.single("$what getter").method.apply {
-                val code = implementation!!.instructions
-                if (code.size != 2 || code[0].opcode != Opcode.IGET_OBJECT || code[1].opcode != Opcode.RETURN_OBJECT) {
-                    throw PatchException("Rumble: unexpected $what getter")
-                }
-                val list = getInstruction<OneRegisterInstruction>(0).registerA
-                addInstructions(
-                    1,
-                    """
-                        ${invokeStatic("$RUMBLE_PRIVACY->withoutBoosted(Ljava/util/List;)Ljava/util/List;", list)}
-                        move-result-object v$list
-                    """,
-                )
-            }
-        }
+        // click and impression URLs. The shared video list hook (RumbleInterface.videos) drops them from the lists
+        // that carry them while this switch is on, and any left elsewhere shows as the plain video, without the
+        // creative, the Boosted label and its reports.
         VideoBoostedFingerprint.single("Video.boosted getter").method.addInstructionsIfEnabled(
             KEY,
             """

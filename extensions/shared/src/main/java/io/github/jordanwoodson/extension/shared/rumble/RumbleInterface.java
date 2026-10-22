@@ -85,12 +85,47 @@ public final class RumbleInterface {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Hide comments and related videos
+    // Video lists (Block ads, Hide premium-only videos, Hide related videos)
 
-    /** Injection point: a video's related videos from the server. Empty while Hide related videos is on. */
-    public static List<?> relatedVideos(List<?> videos) {
-        if (videos == null || videos.isEmpty() || !on("hide_related_videos")) return videos;
-        return Collections.emptyList();
+    /** RumbleInterface.videos list kinds, as the patch passes them. */
+    static final int LIST = 0;
+    static final int RELATED = 1;
+
+    /**
+     * Injection point: a list of videos from Rumble's server (Home sections, related videos, search, categories),
+     * with its kind. Leaves out Boosted videos (Block ads), premium-only videos you have no access to (Hide
+     * premium-only videos), and every related video (Hide related videos). Rumble's own list while none applies.
+     */
+    public static List<?> videos(List<?> videos, int kind) {
+        if (videos == null || videos.isEmpty()) return videos;
+        if (kind == RELATED && on("hide_related_videos")) return Collections.emptyList();
+        boolean boosted = on("block_ads");
+        boolean premiumOnly = on("hide_premium_only");
+        if (!boosted && !premiumOnly) return videos;
+        try {
+            List<Object> kept = null;
+            for (int i = 0; i < videos.size(); i++) {
+                Object video = videos.get(i);
+                boolean drop = video != null && ((boosted && RumbleChat.read(video, "boosted") != null)
+                        || (premiumOnly && premiumOnly(video)));
+                if (drop && kept == null) {
+                    kept = new ArrayList<>(videos.size());
+                    for (int j = 0; j < i; j++) kept.add(videos.get(j));
+                } else if (!drop && kept != null) {
+                    kept.add(video);
+                }
+            }
+            return kept == null ? videos : kept;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return videos;
+        }
+    }
+
+    /** Whether a Video DTO is premium-only (availability "premium", as Rumble's mapper reads it) and locked. */
+    static boolean premiumOnly(Object video) throws ReflectiveOperationException {
+        Object availability = RumbleChat.read(video, "availability");
+        if (!(availability instanceof String) || !((String) availability).equalsIgnoreCase("premium")) return false;
+        return !Boolean.TRUE.equals(RumbleChat.read(video, "hasAccessToPremium"));
     }
 
     // ---------------------------------------------------------------------------------------------

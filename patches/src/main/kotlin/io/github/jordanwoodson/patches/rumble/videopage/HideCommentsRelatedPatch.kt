@@ -1,35 +1,24 @@
 package io.github.jordanwoodson.patches.rumble.videopage
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.bytecodePatch
-import com.android.tools.smali.dexlib2.Opcode
-import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
-import io.github.jordanwoodson.patches.rumble.shared.RUMBLE
-import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_INTERFACE
 import io.github.jordanwoodson.patches.rumble.shared.single
+import io.github.jordanwoodson.patches.rumble.videolists.videoListsPatch
 import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.shared.compose.dtoGetterFingerprint
-import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.shared.settings.addInstructionsIfEnabled
 
 private const val COMMENTS = "hide_comments"
 private const val RELATED = "hide_related_videos"
-private const val DTO = "Lcom/rumble/network/dto/video"
 
 // Video.areCommentsDisabled: true makes the video page leave out its Comments button, as for a video whose
 // creator turned comments off.
 private val CommentsDisabledFingerprint =
-    dtoGetterFingerprint("$DTO/Video;", "areCommentsDisabled", "Ljava/lang/Boolean;")
-
-// The related videos the server sends for a video: the related endpoint's list and the video's own.
-private val RelatedVideosFingerprint = dtoGetterFingerprint("$DTO/RelatedVideoData;", "videos", "Ljava/util/List;")
-private val VideoRelatedFingerprint = dtoGetterFingerprint("$DTO/Video;", "related", "Ljava/util/List;")
+    dtoGetterFingerprint("Lcom/rumble/network/dto/video/Video;", "areCommentsDisabled", "Ljava/lang/Boolean;")
 
 @Suppress("unused")
 val hideCommentsRelatedPatch = bytecodePatch(
@@ -39,7 +28,7 @@ val hideCommentsRelatedPatch = bytecodePatch(
         "Lurk settings > Interface.",
 ) {
     compatibleWith(COMPATIBILITY_RUMBLE)
-    dependsOn(settingsPatch)
+    dependsOn(settingsPatch, videoListsPatch)
 
     execute {
         CommentsDisabledFingerprint.single("Video.areCommentsDisabled getter").method.apply {
@@ -53,27 +42,12 @@ val hideCommentsRelatedPatch = bytecodePatch(
             )
         }
 
-        listOf(
-            RelatedVideosFingerprint to "RelatedVideoData.videos getter",
-            VideoRelatedFingerprint to "Video.related getter",
-        ).forEach { (fingerprint, what) ->
-            fingerprint.single(what).method.apply {
-                val code = implementation!!.instructions
-                if (code.size < 2 || code[0].opcode != Opcode.IGET_OBJECT) throw RUMBLE.error("unexpected $what")
-                val list = getInstruction<OneRegisterInstruction>(0).registerA
-                addInstructions(
-                    1,
-                    """
-                        ${invokeStatic("$RUMBLE_INTERFACE->relatedVideos(Ljava/util/List;)Ljava/util/List;", list)}
-                        move-result-object v$list
-                    """,
-                )
-            }
-        }
+        // The related video lists (RelatedVideoData.videos, Video.related) go through the shared video list hook,
+        // RumbleInterface.videos, which empties them while the switch is on.
 
         rumbleSettings.add(
-            SwitchSetting(COMMENTS, "Hide comments", "The Comments button under videos, as when a creator turns comments off.",
-                Section.INTERFACE, default = false),
+            SwitchSetting(COMMENTS, "Hide comments", "The Comments button under videos, as when a creator turns " +
+                "comments off.", Section.INTERFACE, default = false),
             SwitchSetting(RELATED, "Hide related videos",
                 "The related videos on the video page. Autoplay next video then has nothing to play.",
                 Section.INTERFACE, default = false),

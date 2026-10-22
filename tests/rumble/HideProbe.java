@@ -21,6 +21,30 @@ public final class HideProbe {
         upsells();
         tipping();
         if (ProbeSupport.registered("hide_comments")) commentsAndRelated();
+        if (ProbeSupport.registered("hide_premium_only")) premiumOnly();
+    }
+
+    private static void premiumOnly() throws Exception {
+        Class<?> videoType = Class.forName(DTO + "video.Video");
+        Object free = ProbeSupport.allocate(videoType);
+        ProbeSupport.set(free, "availability", "public");
+        Object locked = ProbeSupport.allocate(videoType);
+        ProbeSupport.set(locked, "availability", "premium");
+        Object unlocked = ProbeSupport.allocate(videoType);
+        ProbeSupport.set(unlocked, "availability", "premium");
+        ProbeSupport.set(unlocked, "hasAccessToPremium", true);
+        List<Object> videos = Arrays.asList(free, locked, unlocked);
+        Object section = ProbeSupport.allocate(Class.forName(DTO + "home.HomeSectionDto"));
+        ProbeSupport.set(section, "videos", videos);
+        Method sectionVideos = getterOf(section, "videos");
+
+        ProbeSupport.setting("block_ads", "false");
+        ProbeSupport.check(sectionVideos.invoke(section) == videos, "off: premium-only videos stay");
+        ProbeSupport.setting("hide_premium_only", "true");
+        ProbeSupport.check(sectionVideos.invoke(section).equals(Arrays.asList(free, unlocked)),
+                "on: locked premium-only videos are left out, ones you can watch stay");
+        ProbeSupport.setting("hide_premium_only", "false");
+        ProbeSupport.setting("block_ads", "true");
     }
 
     private static void commentsAndRelated() throws Exception {
