@@ -29,9 +29,12 @@ import org.w3c.dom.Element
 internal val kickSettings = SettingsScreen("Kick")
 internal const val KICK_BUNDLE = "Lio/github/jordanwoodson/extension/shared/kick/KickBundle;"
 
+/** The Kick version the patches target, from COMPATIBILITY_KICK, for messages. */
+private val KICK_VERSION = COMPATIBILITY_KICK.targets.joinToString(" or ") { "${it.version}" }
+
 context(context: BytecodePatchContext)
 internal fun Fingerprint.kickMatch(what: String): Match = matchAllOrNull()?.singleOrNull()
-    ?: throw PatchException("Kick 40.32.3: expected exactly one $what")
+    ?: throw PatchException("Kick $KICK_VERSION: expected exactly one $what")
 
 internal val kickSettingsPatch = bytecodePatch(
     description = "Adds Lurk settings to Kick's launcher shortcut.",
