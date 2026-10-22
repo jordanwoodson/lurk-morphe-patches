@@ -268,6 +268,11 @@ How it works:
   composable, drawn by a static method the patch adds next to it with the same arguments as Rumble's
   rows. Its onClick is a `kotlin.jvm.functions.Function0` the extension makes with a `Proxy`, since
   the extension doesn't compile against Kotlin.
+- That lookup requires exactly three calls to one row composable `(modifier, text, value, showArrow,
+  composer, $changed, $default)` in `AppInfoSection` (Data Consent, Credits, Send Feedback). A version with
+  a fourth row or a different row composable fails the settings patch, and with it every Rumble patch that
+  has a switch. `tests/rumble/verify_compose.py <apk>` counts those rows (and checks the Compose trace
+  labels below); run it on a new version's APK before anything else.
 - Each patch registers its switches at the end of `execute`, so a patch that is left out or fails
   shows none. The settings patch writes them as JSON into `Settings.registryJson()` in `finalize`.
 - Injected code calls `Settings.isEnabled(key)` (or `getInt(key)`) and runs Rumble's original code
@@ -305,6 +310,19 @@ R8 renames Rumble's classes and methods, so the patches below find code through 
 
 `shared/Bytecode.kt` has the helpers for these. Each patch fails with a message rather than guess when a
 lookup doesn't find exactly one match.
+
+Two of these could break many patches at once:
+
+- **Compose trace labels.** Twelve hooks (the `composableFingerprint`s and the bottom bar's lambda) depend on
+  the labels the Compose compiler writes when the app is built with source information. A build without
+  them fails all twelve; the error of each names its label and the check. `tests/rumble/verify_compose.py
+  <apk>` lists each label with its match count and the file using it, or says in one message that the
+  build has no labels at all. `bin/test-rumble` runs it.
+- **`checkNotNullParameter` names.** Constructor parameter names reach the dex only through Kotlin's null
+  checks. A build with `-assumenosideeffects` for `Intrinsics.checkNotNullParameter` would drop them, and
+  with them the lookups of Block ads, Disable analytics, Block cookie notice's Airship start, Disable
+  autoplay, Default video quality, Resume signed out, Don't save searches, Remember playback speed and the
+  chat mapper. Those fail with "expected exactly one …" naming the class.
 
 ## Disable analytics
 

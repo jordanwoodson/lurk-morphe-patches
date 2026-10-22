@@ -67,16 +67,23 @@ private fun ClassDef.toStringReturns(name: String): Boolean {
 context(context: BytecodePatchContext)
 internal fun Fingerprint.single(what: String): Match = matchAllOrNull()?.singleOrNull()
     ?: throw PatchException("Rumble: expected exactly one $what. " +
-        "These patches target 3.21.0; recheck the code before updating compatibility.")
+        "These patches target 3.21.0; recheck the code before updating compatibility." +
+        ((this as? ComposableFingerprint)?.let {
+            " It is found by its Compose trace label \"${it.label} (\". A build compiled without Compose " +
+                "source information has no such labels, and then every Compose hook fails this way; " +
+                "tests/rumble/verify_compose.py <apk> lists which labels are missing."
+        } ?: ""))
 
 /**
  * A Compose function, found by the trace label the Compose compiler gives it
  * ("com.rumble.battles.….Name (File.kt:line)"). The line number is left out, since it moves.
  */
-internal fun composableFingerprint(qualifiedName: String) = Fingerprint(
+internal class ComposableFingerprint(val label: String) : Fingerprint(
     returnType = "V",
-    filters = listOf(string("$qualifiedName (", StringComparisonType.STARTS_WITH)),
+    filters = listOf(string("$label (", StringComparisonType.STARTS_WITH)),
 )
+
+internal fun composableFingerprint(qualifiedName: String) = ComposableFingerprint(qualifiedName)
 
 /**
  * The getter of a field in one of Rumble's Gson DTOs (com.rumble.network.dto). R8 keeps those classes'

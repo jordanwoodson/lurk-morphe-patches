@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run the Rumble integration probes against an APK on the scratch emulator.
 # Usage: bash bin/test-rumble <base-or-patched.apk> [Probe ...]
-# With no probe names, every tests/rumble/*Probe.java runs, and the extension hooks of the included patches
+# With no probe names, every tests/rumble/*Probe.java runs, then tests/rumble/verify_compose.py (the Compose
+# trace labels and App Info rows the patches rely on) and the extension hooks of the included patches
 # (tests/rumble/expected-hooks.txt) are checked in the APK's dex.
 source "$(dirname "$0")/lib/common.sh"
 
@@ -43,6 +44,8 @@ done
 # With every probe run, also check that app code calls each hook of the included patches: Morphe drops an
 # injected non-range invoke above v15 without an error. The stock APK has no hooks to check.
 if [[ $# -eq 0 ]]; then
+    note "Compose trace labels and App Info rows"
+    python3 -I "$ROOT/tests/rumble/verify_compose.py" "$apk" || failed=1
     hooks="$(python3 -I "$ROOT/tests/rumble/expected_hooks.py" "$apk")"
     if [[ -n "$hooks" ]]; then
         note "extension hooks"
