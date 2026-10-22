@@ -233,7 +233,7 @@ details and validation follow.
 | Bypass VOD ad sessions | No | Off | Experimental original-VOD-URL fallback. No live-ad removal claim. |
 | Block update prompts | Yes | On | Kick's forced-update screen and update sheet, and the Play Store version lookup behind them. |
 | Hide rating prompt | Yes | On | Kick's automatic "rate the app" prompts. |
-| Show deleted messages | Yes | On; Ignore chat clears, on | Moderator-style struck-through deleted, timed-out and banned messages in chat; a moderator's clear keeps the messages. |
+| Show deleted messages | Yes | On; Ignore chat clears, on | Moderator-style struck-through deleted, timed-out and banned messages in chat, set inside the chat page so Kick's server sees no change; a moderator's clear keeps the messages. |
 | Hide chat highlights | Yes | Nine switches, all off | Pinned messages, polls and predictions, goals, sub and gift messages, host messages, reward redemptions, event and drops banners, pinned KICKs, celebration prompts. |
 | Stay on channel when it hosts | Yes | Off | The host dialog waits for Watch now instead of switching when its countdown ends. |
 | Background audio | Yes | On; a second switch for picture-in-picture, off | Audio keeps playing through Kick's own audio service when you leave the app. |
@@ -324,15 +324,33 @@ message's text becomes "Deleted by a moderator" and a ban or timeout removes the
 messages. When it's true, the text is struck through with "(Deleted)", "(Timed out)" or
 "(Banned)", with Kick's "AI Mod" label and the rules it flagged when its AI moderation
 acted, and lines such as "X timed out Y for 10 minutes", "X banned Y" and "X unbanned Y"
-appear. The patch makes the config builder, the function that loads the chat page's URL,
-store `true` in the slot its object literal names `userCanModerate`. The app's own
-`userCanModerate`, which its moderation menus read, doesn't change. The page uses the value
-for one control too: large (mid and high tier) KICKs gifts in chat get the moderators' menu
-with Delete. The page only hands that tap to the app (a `delete-kicks` click message), and
-the app's handler calls `deletePinnedItem` only when its chatroom store's own
-`userCanModerate` is true, so for anyone else the tap does nothing and no request reaches
-Kick. The config is part of the page's URL, so Kick's server also sees the value in the
-request for the page.
+appear.
+
+The config is part of the page's address, which Kick's server receives with every chat open,
+so the patch doesn't change it. The page reads its config when it loads from
+react-native-webview's `window.ReactNativeWebView.injectedObjectJson()` when that function
+exists, and from the address only otherwise; Kick's chat WebView sets no injected object, so
+stock Kick uses the address. The patch hooks the end of `RNCWebView`'s constructor: with the
+switch on, `KickChat` registers `assets/lurk-chat-moderator.js`
+(`patches/src/main/resources/kick/chat/moderator-view.js`) on the new view as an androidx.webkit
+document-start script (`WebViewCompat.addDocumentStartJavaScript`) limited to
+`https://chat.mobile.kick.com`, so it runs in the chat page before any of the page's own
+scripts. It reads the address's `config`, sets `userCanModerate` to true and defines
+`injectedObjectJson` to return that copy. The address, and so the request Kick's server sees,
+keeps the app's value. Gift previews (`preview=true`), a malformed config, a missing bridge
+object and an injected object the app provides itself are left alone. The androidx.webkit calls
+are bridged at patch time, and the patch fails if Kick's copy of androidx.webkit no longer has
+them; an Android System WebView without `DOCUMENT_START_SCRIPT` support (none current) logs a
+warning and shows chat as stock. The switch is read when a chat WebView is created, so it applies
+to chats opened afterwards, with no restart. No JavaScript in Kick's bundle is edited, so this
+patch doesn't turn off Expo's over-the-air updates. (Up to Lurk 1.12, the patch made the config
+builder store `true` in the address instead, which Kick's server could see.)
+
+The app's own `userCanModerate`, which its moderation menus read, doesn't change. The page uses
+the value for one control too: large (mid and high tier) KICKs gifts in chat get the moderators'
+menu with Delete. The page only hands that tap to the app (a `delete-kicks` click message), and
+the app's handler calls `deletePinnedItem` only when its chatroom store's own `userCanModerate`
+is true, so for anyone else the tap does nothing and no request reaches Kick.
 
 Messages removed before you opened the chat don't come back: history arrives without them.
 The page only marks messages it has already drawn. Kick's AI moderation often removes a
@@ -357,6 +375,17 @@ plus "X banned Y", the clear left all messages, and the KICKs gift showed the mo
 With them off: "Deleted by a moderator", the banned user's messages removed with no line, the
 chat emptied (40 lines to none) and no menu, as in stock. The menu's Delete wasn't tapped on
 the device; the app's handler (above) ignores it from a non-moderator.
+
+The document-start version was checked the same way on the emulator (Android 16, signed out) on
+a live channel with about 30,000 viewers, through the WebView debugger that Kick's release build
+leaves on: the loaded address had `"userCanModerate":false`, `injectedObjectJson()` returned the
+same config with `true`, and a timeout frame in the page's own Centrifugo format, handed to its
+open socket, left the user's two messages struck through with "(Timed out)" and added
+"moderator timed out target for 10 minutes". With the switch off and the chat reopened, the page
+had no `injectedObjectJson` and the same frame removed the user's message with no line, as in
+stock. `tests/kick/test_chat_page.py` runs the script at document start in headless Chrome on a
+page that reads its config the way Kick's does, and checks that the request for the page keeps
+the app's value.
 
 ### Hide chat highlights
 
@@ -530,7 +559,9 @@ into the APK as `assets/lurk-chat.js`) with the switches that are on, and logs w
 With none on, nothing is evaluated. At page start the WebView can still be showing the
 previous document, so the script runs at both, checks the page's host and applies itself once
 per page. It only adds a style rule, replaces the list's `innerHTML` setter and observes the
-list for new messages; everything else on the page is Kick's. The page is served by Kick and
+list for new messages; everything else on the page is Kick's. With Show deleted messages on, it
+also reports, once the page has loaded, whether the moderator view script ran ("moderator view"
+or "no moderator view" in the `lurk` log). The page is served by Kick and
 can change at any time: the script then does nothing for what it no longer finds, and Lurk
 can't check it at patch time. `tests/kick/test_chat_page.py` runs it in headless Chrome on a
 copy of the page's structure.

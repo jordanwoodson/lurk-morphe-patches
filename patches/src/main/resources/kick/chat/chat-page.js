@@ -1,6 +1,8 @@
 // Lurk's changes to Kick's chat page (chat.mobile.kick.com), which Kick shows in a WebView on the stream screen
 // and the channel's Chat tab. KickChat evaluates `(<this function>)(options)` when the page starts and again when
 // it finishes loading, with the switches that are on:
+//   moderatorView Show deleted messages is on. Its moderator view comes from lurk-chat-moderator.js, which runs
+//                 before the page's own scripts; this only reports whether that worked.
 //   ignoreClears  keep the messages when a moderator clears the chat
 //   hide          CSS selectors of chat lines to hide (subs and gifts, hosts, reward redemptions)
 //   sevenTv       show 7TV emotes. sevenTvChannel is the channel's slug and sevenTvUser its owner's Kick user ID,
@@ -11,9 +13,12 @@
     'use strict';
     // At page start the WebView can still be showing the previous document.
     if (location.host !== 'chat.mobile.kick.com') return 'not the chat page';
-    if (window.lurkChat) return 'already applied';
+    // While the page still loads, the document-start script may not have run yet: report it once it has.
+    const moderator = () => !options.moderatorView || document.readyState === 'loading' ? []
+        : [window.lurkModeratorView ? 'moderator view' : 'no moderator view'];
+    if (window.lurkChat) return ['already applied'].concat(moderator()).join(', ');
     window.lurkChat = options;
-    const applied = [];
+    const applied = moderator();
 
     function whenReady(run) {
         const go = () => {

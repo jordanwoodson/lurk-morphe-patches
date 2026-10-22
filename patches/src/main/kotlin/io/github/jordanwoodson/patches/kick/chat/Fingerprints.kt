@@ -4,6 +4,14 @@ import app.morphe.patcher.Fingerprint
 
 // react-native-webview keeps its library names. Kick's chat is a page in one of its WebViews.
 
+/** Smali descriptor of the extension's chat page class. */
+internal const val KICK_CHAT = "Lio/github/jordanwoodson/extension/shared/kick/KickChat;"
+
+internal object WebViewConstructorFingerprint : Fingerprint(
+    definingClass = "Lcom/reactnativecommunity/webview/RNCWebView;",
+    name = "<init>", returnType = "V", parameters = listOf("Lcom/facebook/react/uimanager/ThemedReactContext;"),
+)
+
 internal object PageStartedFingerprint : Fingerprint(
     definingClass = "Lcom/reactnativecommunity/webview/RNCWebViewClient;",
     name = "onPageStarted", returnType = "V",

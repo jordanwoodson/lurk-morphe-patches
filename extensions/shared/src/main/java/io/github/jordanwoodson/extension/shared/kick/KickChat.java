@@ -2,6 +2,7 @@ package io.github.jordanwoodson.extension.shared.kick;
 
 import android.content.Context;
 import android.net.Uri;
+import android.util.Log;
 import android.webkit.WebView;
 
 import org.json.JSONArray;
@@ -12,8 +13,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.WeakHashMap;
 import java.lang.ref.WeakReference;
 import java.util.UUID;
@@ -29,7 +32,10 @@ import io.github.jordanwoodson.extension.shared.settings.Settings;
 @SuppressWarnings("unused")
 public final class KickChat {
     private static final String HOST = "chat.mobile.kick.com";
+    private static final String ORIGIN = "https://" + HOST;
     private static final String SCRIPT = "lurk-chat.js";
+    private static final String MODERATOR_SCRIPT = "lurk-chat-moderator.js";
+    private static final String SHOW_DELETED = "chat_show_deleted";
     private static final String IGNORE_CLEARS = "chat_ignore_clears";
     static final String SEVEN_TV = "emotes_7tv";
     /** A switch, then the page's elements for the chat lines it hides. */
@@ -58,8 +64,40 @@ public final class KickChat {
         }
     }
     private static String script;
+    private static String moderatorScript;
 
     private KickChat() {
+    }
+
+    /**
+     * Injection point: the end of react-native-webview's RNCWebView constructor, before the view loads anything.
+     * With Show deleted messages on, registers lurk-chat-moderator.js as a document-start script for the chat
+     * page's origin: the page then gets its moderator view from inside the WebView, and the address the app
+     * loads, which Kick's server sees, stays as Kick builds it.
+     */
+    public static void onWebViewCreated(WebView view) {
+        try {
+            if (view == null || !on(SHOW_DELETED)) return;
+            if (!documentStartSupported()) {
+                Log.w(Logger.TAG, "Show deleted messages: this Android System WebView can't run a script before "
+                        + "the chat page's own, so deleted messages show as in stock Kick");
+                return;
+            }
+            String source = asset(view.getContext(), MODERATOR_SCRIPT);
+            if (source == null) return;
+            addDocumentStartScript(view, source, Collections.singleton(ORIGIN));
+        } catch (RuntimeException e) {
+            Log.w(Logger.TAG, "Show deleted messages: " + e);
+        }
+    }
+
+    /** Bridged at patch time: androidx.webkit's WebViewFeature.isFeatureSupported("DOCUMENT_START_SCRIPT"). */
+    private static boolean documentStartSupported() {
+        return false;
+    }
+
+    /** Bridged at patch time: androidx.webkit's WebViewCompat.addDocumentStartJavaScript(view, script, origins). */
+    private static void addDocumentStartScript(WebView view, String script, Set<String> origins) {
     }
 
     /**
@@ -99,7 +137,7 @@ public final class KickChat {
                 }
                 options.put("generation", page.generation);
             }
-            String source = script(view.getContext());
+            String source = asset(view.getContext(), SCRIPT);
             if (source == null) return;
             view.evaluateJavascript(source + "(" + options + ");", result -> Logger.d("chat page: " + result));
         } catch (RuntimeException | JSONException e) {
@@ -161,6 +199,8 @@ public final class KickChat {
 
     private static JSONObject options(Uri uri) throws JSONException {
         JSONObject options = new JSONObject();
+        // Only reported: the moderator view itself comes from the document-start script.
+        if (on(SHOW_DELETED)) options.put("moderatorView", true);
         if (on(IGNORE_CLEARS)) options.put("ignoreClears", true);
         JSONArray hide = new JSONArray();
         for (String[] lines : HIDE) {
@@ -195,16 +235,21 @@ public final class KickChat {
         return null;
     }
 
-    private static synchronized String script(Context context) {
-        if (script != null) return script;
-        try (InputStream in = context.getAssets().open(SCRIPT)) {
+    /** The chat page script or the moderator view script from the APK's assets, read once. */
+    private static synchronized String asset(Context context, String name) {
+        String cached = SCRIPT.equals(name) ? script : moderatorScript;
+        if (cached != null) return cached;
+        try (InputStream in = context.getAssets().open(name)) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             byte[] buffer = new byte[8192];
             for (int n; (n = in.read(buffer)) > 0; ) out.write(buffer, 0, n);
-            script = new String(out.toByteArray(), StandardCharsets.UTF_8);
+            cached = new String(out.toByteArray(), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            Logger.d("chat page: no script: " + e);
+            Log.w(Logger.TAG, "chat page: no " + name + ": " + e);
+            return null;
         }
-        return script;
+        if (SCRIPT.equals(name)) script = cached;
+        else moderatorScript = cached;
+        return cached;
     }
 }

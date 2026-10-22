@@ -96,6 +96,8 @@ public final class ChatBoundaryProbe {
             // Cache actual APK asset; no Android WebView renderer is needed to capture the bridge call.
             ProbeSupport.field(c(CHAT),"script").set(null,script+"\n");
         }
+        // Show deleted messages has its own scenario below; its option only asks the page for a report.
+        setting("chat_show_deleted",false);
         for(String key:new String[]{"emotes_7tv","chat_ignore_clears","hide_sub_messages","hide_host_messages","hide_reward_redemptions"})setting(key,true);
         response("https://kick.com/api/v2/channels/xqc","{\"id\":668,\"slug\":\"xqc\",\"user_id\":676}",200,true);
         JSONObject options=emit("full",page("{\"channelId\":668}"));
@@ -135,6 +137,9 @@ public final class ChatBoundaryProbe {
             ProbeSupport.check((options.has("hide")?options.getJSONArray("hide").length():0)==selectors[i],"independent hide selectors " + names[i]);
             setting(keys[i],false);
         }
+        setting("chat_show_deleted",true);options=emit("moderator-only",page("{}"));
+        ProbeSupport.check(options.getBoolean("moderatorView") && options.length()==1,"Show deleted messages alone only asks for its report");
+        setting("chat_show_deleted",false);
         lifecycle();
     });}
 }
