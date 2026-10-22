@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# APK-free, offline verification. Add standalone checks to this list as they become available.
+source "$(dirname "$0")/lib/common.sh"
+export MORPHE_WORK="$WORK"
+export PYTHONDONTWRITEBYTECODE=1
+
+checks=(
+    tests/twitch/verify_interface.py
+    tests/twitch/verify_playback_links.py
+    tests/twitch/test_async.py
+    tests/twitch/test_vod_requests.py
+    tests/twitch/test_privacy_consent.py
+    tests/twitch/test_providers.py
+    tests/twitch/test_rn_chat.py
+    tests/shared/test_sleep_timer.py
+    tests/rumble/test_state_transitions.py
+    tests/kick/verify_player.py
+    tests/kick/verify_privacy.py
+    tests/kick/test_chat_page.py
+    tests/kick/test_compiled_bundle.py
+    tests/test_release.py
+    tests/test_patch.py
+)
+
+failed=0
+for check in "${checks[@]}"; do
+    note "Host check: $check"
+    if ! python3 "$ROOT/$check"; then
+        note "FAILED: $check"
+        failed=$((failed + 1))
+    fi
+done
+if (( failed )); then
+    die "$failed of ${#checks[@]} host checks failed"
+fi
+note "All ${#checks[@]} host checks passed"

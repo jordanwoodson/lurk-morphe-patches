@@ -9,12 +9,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 import io.github.jordanwoodson.extension.shared.Logger;
 
@@ -29,11 +30,17 @@ final class TwitchThirdParty {
     private static final String USER_AGENT = "Lurk (+https://github.com/jordanwoodson/lurk-morphe-patches)";
 
     private static final ThreadPoolExecutor POOL = new ThreadPoolExecutor(3, 3, 30, TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(), runnable -> {
+            new LinkedBlockingQueue<>(50), runnable -> {
                 Thread thread = new Thread(runnable, "lurk-third-party");
                 thread.setDaemon(true);
                 return thread;
             });
+
+    private static final ThreadLocal<BooleanSupplier> ACTIVE_REQUEST = new ThreadLocal<>();
+    private static final java.util.concurrent.atomic.AtomicLong CATALOG_REVISION = new java.util.concurrent.atomic.AtomicLong();
+    static void catalogChanged() { CATALOG_REVISION.incrementAndGet(); }
+    static long catalogRevision() { return CATALOG_REVISION.get(); }
+
 
     static {
         POOL.allowCoreThreadTimeOut(true);
@@ -46,17 +53,45 @@ final class TwitchThirdParty {
         T parse(JsonReader reader) throws IOException;
     }
 
+    /** One pending provider request can be shared by native callers and up to 64 RN owners. */
+    static final class Demand implements BooleanSupplier {
+        private boolean nativeOwner;
+        private final java.util.List<BooleanSupplier> owners = new java.util.ArrayList<>();
+        synchronized void add(BooleanSupplier owner) {
+            if (owner == null) nativeOwner = true;
+            else {
+                owners.removeIf(previous -> !previous.getAsBoolean());
+                if (!owners.contains(owner) && owners.size() < 64) owners.add(owner);
+            }
+        }
+        @Override public synchronized boolean getAsBoolean() {
+            if (nativeOwner) return true;
+            owners.removeIf(owner -> !owner.getAsBoolean());
+            return !owners.isEmpty();
+        }
+    }
+
     /** Runs {@code task} in the background. A failing task only logs. */
     static void run(String what, Runnable task) {
+        run(what, () -> true, task, () -> { });
+    }
+
+    /** Recheck demand on the worker; completion also runs on cancellation and queue rejection. */
+    static void run(String what, BooleanSupplier wanted, Runnable task, Runnable completion) {
         try {
             POOL.execute(() -> {
                 try {
-                    task.run();
+                    ACTIVE_REQUEST.set(wanted);
+                    if (wanted.getAsBoolean()) task.run();
                 } catch (RuntimeException e) {
                     Logger.d("third-party: " + what + " failed: " + e);
+                } finally {
+                    ACTIVE_REQUEST.remove();
+                    completion.run();
                 }
             });
         } catch (RejectedExecutionException e) {
+            completion.run();
             Logger.d("third-party: " + what + " rejected");
         }
     }
@@ -109,7 +144,9 @@ final class TwitchThirdParty {
     }
 
     private static HttpURLConnection open(String url, String accept) throws IOException {
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        BooleanSupplier wanted = ACTIVE_REQUEST.get();
+        if (wanted != null && !wanted.getAsBoolean()) throw new IOException("Provider request no longer owned");
+        HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
         connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
         connection.setReadTimeout(READ_TIMEOUT_MS);
         connection.setUseCaches(false);

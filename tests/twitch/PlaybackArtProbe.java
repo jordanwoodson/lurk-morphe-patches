@@ -52,7 +52,8 @@ public final class PlaybackArtProbe {
     public static void main(String[] args) throws Exception {
         boolean stock = args.length > 0 && args[0].equals("stock");
         if (!stock) disablePatch();
-        Class<?> viewType = Class.forName("sa2");
+        // R8 names are Twitch 31.7.0's: the countdown view ya2, its state hww and the state type jww.
+        Class<?> viewType = Class.forName("ya2");
         Object view = allocate(viewType);
         TextSink title = (TextSink) allocate(TextSink.class);
         TextSink creator = (TextSink) allocate(TextSink.class);
@@ -67,9 +68,9 @@ public final class PlaybackArtProbe {
         set(vod, "title", "regression-title");
         set(vod, "channel", channel);
         Class<?> playable = Class.forName("tv.twitch.android.models.Playable");
-        Object state = Class.forName("ztw").getConstructor(playable).newInstance(vod);
+        Object state = Class.forName("hww").getConstructor(playable).newInstance(vod);
         try {
-            viewType.getMethod("w", Class.forName("buw")).invoke(view, state);
+            viewType.getMethod("w", Class.forName("jww")).invoke(view, state);
             throw new AssertionError("Recommendation OFF path did not reach the original ProgressBar");
         } catch (InvocationTargetException expected) {
             if (expected.getCause() != REACHED_PROGRESS) throw new AssertionError(

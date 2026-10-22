@@ -39,7 +39,7 @@ With GitHub Packages access configured as described in the workspace README:
 ```sh
 bin/patch rumble
 bin/emu start
-bash bin/test-rumble ~/scratch/morphe/out/rumble-3.21.0-patched.apk
+bash bin/test-rumble ~/build/lurk-morphe-patches/out/rumble-3.21.0-patched.apk
 ```
 
 `bin/test-rumble` runs every probe in `tests/rumble/`, or only the ones named after the APK
@@ -55,7 +55,7 @@ To confirm the negative control, the same probe against the original base APK mu
 fail with `Profile must report premium when server is_premium=false`:
 
 ```sh
-bash bin/test-rumble ~/scratch/morphe/rumble/3.21.0/base.apk PremiumProbe
+bash bin/test-rumble ~/build/lurk-morphe-patches/rumble/3.21.0/base.apk PremiumProbe
 ```
 
 ## Validation on 2026-10-14
@@ -66,17 +66,15 @@ bash bin/test-rumble ~/scratch/morphe/rumble/3.21.0/base.apk PremiumProbe
 - All six output DEX files pass `dexdump` and D8; APK manifest, signature and alignment
   verification pass. The optional cross-DEX verifier reports the same 42 missing
   optional SDK/reference issues on both stock and patched APKs, with no added issues.
-- The workspace Gradle build was blocked by HTTP 401 from GitHub Packages with both
-  configured credentials. The tested `.mpp` was compiled against the patcher API in
-  the existing Morphe Desktop JAR, using the installed Kotlin compiler and Android D8.
-  It contains both JVM classes and Android DEX. The local reproduction script is
-  `~/scratch/morphe/build-rumble/build.py`; normal Gradle build validation remains pending
-  working `read:packages` credentials.
+- The workspace Gradle build was blocked by HTTP 401 from GitHub Packages, so the tested
+  `.mpp` was compiled against the patcher API in the existing Morphe Desktop JAR, using
+  the Kotlin compiler and Android D8. It contains both JVM classes and Android DEX.
+  Releases build the patch with Gradle in CI.
 
-Artifacts are in `~/scratch/morphe/out/`: `rumble-3.21.0.mpp`,
+Artifacts are in `~/build/lurk-morphe-patches/out/`: `rumble-3.21.0.mpp`,
 `rumble-3.21.0-patched.apk` and the Morphe result JSON. Build and verification logs
-are in `~/scratch/morphe/build-rumble/`; the launch screenshot is in
-`~/scratch/morphe/shots/rumble-premium-launch.png`.
+are in `~/build/lurk-morphe-patches/build-rumble/`; the launch screenshot is in
+`~/build/lurk-morphe-patches/shots/rumble-premium-launch.png`.
 
 ## Lurk icon
 
@@ -122,6 +120,13 @@ Crashlytics, Performance and Facebook switch their persisted collection off agai
 Airship are never started. The cached consent strings still go into ad requests, which Block ads stops.
 Turning the switch off uses the cached consent again.
 
+The switch offers a restart after either toggle. It blocks future Ketch calls immediately, but cannot
+undo SDK initialization or replace consent already applied to the running process. Restart to apply the
+startup consent path consistently; turning it off also needs a restart to restore that path. The
+actual-process consent/restart SDK-state matrix is recorded in
+[the 2026-10-17 verification record](verification-2026-10-17.md); notification delivery and
+live queued-event drain remain untested.
+
 Validated on 2026-10-14 on the Android 16 emulator, fresh data each time, location resolved by Ketch as
 US-MO:
 
@@ -137,9 +142,13 @@ US-MO:
 The visible banner itself wasn't reproduced, since no notice is shown at that location; the patch doesn't
 depend on jurisdiction, because both entry points that can display one are disabled.
 
-Block cookie notice also stops push notifications. Rumble only starts Airship, its push service, from
-the consent callback, and enables Airship's push feature only with the `essential_services` purpose. With
-no consent recorded, Airship never takes off and incoming pushes are dropped.
+Block cookie notice prevents Airship, Rumble's push service, from starting after a restart.
+Airship-handled messages cannot be processed without it; Airship's push feature requires the
+`essential_services` purpose. The actual consent matrix confirms startup and feature state,
+but no notification was delivered. The inherited FirebaseMessagingService can independently
+auto-display recognized notification payloads while the app is backgrounded or locked, before
+calling Airship's `onMessageReceived`. Data-message handling has a separate Airship-availability
+guard. This is therefore not a guarantee that every incoming FCM notification is suppressed.
 
 ## Lurk settings
 
@@ -152,7 +161,7 @@ choices.
 | Switch | Key | Takes effect |
 |---|---|---|
 | Block ads | `block_ads` | at the next ad request |
-| Block cookie notice | `block_cookie_notice` | at the next resume |
+| Block cookie notice | `block_cookie_notice` | after a restart |
 | Clean share links | `clean_share_links` | at the next share |
 | Disable analytics, Keep watch progress | `disable_analytics`, `keep_watch_progress` | at the next upload |
 | Hide Premium upsells | `hide_premium_upsells` | when the screen is drawn again |
@@ -172,7 +181,7 @@ choices.
 | Highlight words, Blocked words, Blocked users (text) | `chat_highlight_words`, `chat_blocked_words`, `chat_blocked_users` | at the next chat messages |
 | Don't save searches | `no_search_history` | at the next search |
 | Resume videos when signed out | `resume_signed_out` | at the next video |
-| Remember playback speed | `remember_speed` | at the next pick |
+| Remember playback speed | `remember_speed` | at the next speed read or pick |
 | Fill screen | `fill_screen` | when the player is laid out again |
 | Keep playing during other sounds (a choice; "Pause" is 0) | `audio_focus` | at the next interruption |
 | Keep screen on while paused | `keep_screen_on_paused` | at the next pause |
@@ -550,8 +559,10 @@ A Kotlin object keeps the picked speed per scope (video page, other) in memory; 
 found through their `videoScope`/`speed` null checks, and the player service resets every scope to 1x. The
 player takes the stored speed unless the video is live without DVR. While `remember_speed` is on, a pick is
 also kept by name in the SharedPreferences file `lurk_rumble` (Lurk's own state, not the settings), and the
-getter returns it for every scope, also after a restart. While off nothing is kept or returned, and turning it
-on starts from the next pick.
+getter returns it for every scope, also after a restart. While off, picks don't replace Lurk's saved speed
+and the getter uses Rumble's own value. The saved value is retained: turning the switch on again restores
+the last speed picked while it was enabled, until another enabled pick replaces it. With no saved value,
+Rumble's own speed applies until that first enabled pick.
 
 ### Fill screen
 
@@ -767,3 +778,16 @@ that app code calls every new extension method.
 - **Twitch, after the shared ChatFilter and SleepTimer:** `bin/test-twitch`, `test-twitch-chat`,
   `test-twitch-chat-style` and `test-twitch-playback` pass, and Twitch's app code patches byte-identically
   to before.
+
+Retained refresh integration regression: `bin/test-rumble <patched.apk> RefreshProbe` executes the
+actual emitted video-load hook, error-panel prefix, click/reload bridge and stock `x4` on ART.
+Player/state/Compose boundaries verify source URL, full-width seek position, per-video mapping,
+repeated taps, disabled/null cases and preserved quality callbacks. The generated reload now restores
+its callback in a catch-all handler too: stock `x4` catches ordinary Exceptions, but an escaping Error
+or failure inside its logger previously left the no-op callback installed. These exceptions are
+synthetic regression inputs; no live occurrence is claimed. `tests/rumble/verify_refresh.py` checks
+emitted catch metadata and the fatal-state branch to the mobile panel. The
+[dated verification record](verification-2026-10-17.md) adds real emulator network failure,
+fatal-panel tap and continuing nonzero playback under an explicit three-method error-policy
+fixture. Unchanged production recovered automatically from the observed outage; natural fatal
+entry, physical-phone and authenticated/Premium behavior are not established by that fixture.

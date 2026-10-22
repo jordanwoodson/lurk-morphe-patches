@@ -159,6 +159,50 @@ def cmd_pack_splits(args):
             zf.write(os.path.join(args.dir, n), arc)
 
 
+ABI_SPLIT = re.compile(r"^split_config\.(arm64_v8a|armeabi_v7a|x86_64|x86)\.apk$")
+DPI_SPLIT = re.compile(r"^split_config\.((?:l|m|tv|h|xh|xxh|xxxh)dpi)\.apk$")
+LANG_SPLIT = re.compile(r"^split_config\.[a-z]{2,3}(?:_[A-Za-z]{2,})?\.apk$")
+
+
+def variant(path):
+    """What a stored file is built for: ABIs with native code, density and language splits.
+    A bundle names them in its splits; a plain APK shows them in lib/. No ABI = no native code."""
+    abis, dpis, langs = set(), set(), 0
+    if is_bundle(path):
+        with zipfile.ZipFile(path) as zf:
+            for n in zf.namelist():
+                if (m := ABI_SPLIT.match(n)):
+                    abis.add(m.group(1).replace("_v", "-v"))
+                elif (m := DPI_SPLIT.match(n)):
+                    dpis.add(m.group(1))
+                elif LANG_SPLIT.match(n):
+                    langs += 1
+    if not abis:
+        for _, apk in all_apks(path):
+            with zipfile.ZipFile(io.BytesIO(apk)) as zf:
+                abis.update(n.split("/")[1] for n in zf.namelist() if n.startswith("lib/") and n.count("/") >= 2)
+    order = ["arm64-v8a", "armeabi-v7a", "x86_64", "x86"]
+    return {"abis": sorted(abis, key=lambda a: (order.index(a) if a in order else 9, a)),
+            "dpis": sorted(dpis, key=["ldpi", "mdpi", "tvdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"].index),
+            "langs": langs}
+
+
+def cmd_abis(args):
+    """ABIs a stored file has native libraries for, space separated; 'none' when it has no native code."""
+    print(" ".join(variant(args.file)["abis"]) or "none")
+
+
+def cmd_variant(args):
+    """One line describing a stored file, for bin/apk-info and bin/apk-add."""
+    v = variant(args.file)
+    parts = ["abi: " + (" ".join(v["abis"]) or "none (no native code)")]
+    if v["dpis"]:
+        parts.append("dpi: " + " ".join(v["dpis"]))
+    if v["langs"]:
+        parts.append(f"{v['langs']} language splits")
+    print(" · ".join(parts))
+
+
 def cmd_pin(args):
     """Put a signing cert digest into an app's Constants.kt if none is pinned yet."""
     with open(args.constants) as f:
@@ -257,6 +301,14 @@ def main():
     p.add_argument("--aapt2", required=True)
     p.add_argument("--tmp", required=True, help="scratch path for an extracted base.apk")
     p.set_defaults(func=cmd_info)
+
+    p = sub.add_parser("abis")
+    p.add_argument("file")
+    p.set_defaults(func=cmd_abis)
+
+    p = sub.add_parser("variant")
+    p.add_argument("file")
+    p.set_defaults(func=cmd_variant)
 
     p = sub.add_parser("extract-base")
     p.add_argument("file")

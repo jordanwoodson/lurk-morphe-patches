@@ -1,4 +1,4 @@
-# Kick 40.32.1
+# Kick
 
 Static analysis of the supplied APKMirror bundle on 2026-10-14, compared with the 14
 Rumble patches in this repository. **None of the existing patches applies to Kick
@@ -10,7 +10,9 @@ The assessment below, up to "Workspace result", was the starting point and is ke
 it was written. Twelve Kick patches were implemented from it, and a second batch,
 inspired by Xtra and by Lurk's own Twitch patches, added more. The notes from
 "Implemented patch set" on describe them and separate tested behavior from the
-remaining limitations. Everything is checked against Kick 40.32.1.
+remaining limitations. The analysis below was done on Kick 40.32.1. The patches are now
+checked against Kick 40.32.3, where the patched code is unchanged apart from renumbered
+string, shape and literal IDs.
 
 ## Input and analysis
 
@@ -26,7 +28,7 @@ remaining limitations. Everything is checked against Kick 40.32.1.
   Its SHA-1 footer matches its contents.
 
 `bin/decompile kick 40.32.1` produced Java, smali, resources, Hermes disassembly and
-decompiled JavaScript under `~/scratch/morphe/kick/40.32.1/`. `bin/scan kick 40.32.1`
+decompiled JavaScript under `~/build/lurk-morphe-patches/kick/40.32.1/`. `bin/scan kick 40.32.1`
 provided an initial SDK inventory. Code inspection expanded that inventory; SDK
 presence alone does not establish that it transmits data in a particular session.
 
@@ -59,7 +61,7 @@ still need validation against smali/Hermes instructions and runtime behavior.
 
 ## Concrete targets
 
-Paths in this section are relative to `~/scratch/morphe/kick/40.32.1/`. Function IDs
+Paths in this section are relative to `~/build/lurk-morphe-patches/kick/40.32.1/`. Function IDs
 identify this exact bundle for investigation; they are not version-stable fingerprints.
 
 ### Resources and cloning
@@ -205,7 +207,7 @@ available here. Recheck all targets when changing the supported version.
 
 The original upload was left in place; the verified copy is in `apks/kick/40.32.1/`.
 About 1.7 GiB of extracted/decompiled analysis material remains in
-`~/scratch/morphe/kick/40.32.1/` for implementation follow-up. Temporary resource-split
+`~/build/lurk-morphe-patches/kick/40.32.1/` for implementation follow-up. Temporary resource-split
 audit extracts were removed. The resource-split audit found no `app_name` or launcher
 icon overrides in the supplied language/density splits.
 
@@ -326,9 +328,11 @@ appear. The patch makes the config builder, the function that loads the chat pag
 store `true` in the slot its object literal names `userCanModerate`. The app's own
 `userCanModerate`, which its moderation menus read, doesn't change. The page uses the value
 for one control too: large (mid and high tier) KICKs gifts in chat get the moderators' menu
-with Delete, which sends the app the same delete request a moderator's tap would. Kick's
-server is expected to refuse it from anyone else; that wasn't tested. The config is part of
-the page's URL, so Kick's server also sees the value in the request for the page.
+with Delete. The page only hands that tap to the app (a `delete-kicks` click message), and
+the app's handler calls `deletePinnedItem` only when its chatroom store's own
+`userCanModerate` is true, so for anyone else the tap does nothing and no request reaches
+Kick. The config is part of the page's URL, so Kick's server also sees the value in the
+request for the page.
 
 Messages removed before you opened the chat don't come back: history arrives without them.
 The page only marks messages it has already drawn. Kick's AI moderation often removes a
@@ -351,8 +355,8 @@ gift) to the page's socket, which runs them through Kick's own handlers. With th
 deleted and the banned user's messages stayed struck through with "(Deleted)" and "(Banned)"
 plus "X banned Y", the clear left all messages, and the KICKs gift showed the moderators' menu.
 With them off: "Deleted by a moderator", the banned user's messages removed with no line, the
-chat emptied (40 lines to none) and no menu, as in stock. Whether Kick's server refuses the
-menu's Delete from a non-moderator wasn't tested; it needs an account.
+chat emptied (40 lines to none) and no menu, as in stock. The menu's Delete wasn't tapped on
+the device; the app's handler (above) ignores it from a non-moderator.
 
 ### Hide chat highlights
 
@@ -444,8 +448,19 @@ streams opened afterwards.
 The shared sleep timer arms on IVS `play()` and stops tracking a player on `pause()` and
 `release()`, as on Twitch. When it fires, it pauses through Kick's player view (the one
 React Native last played through), whose `pause()` also updates the audio service and lets
-the player controls show Play. Any IVS player still playing three seconds later is paused
-directly. A notice says the timer paused playback.
+the player controls show Play. That view queues its IVS command on a player executor. The
+injected executor hook wraps only operations enqueued during a sleep dispatch and checks the
+expiry again when the command executes; a new start or resume invalidates queued broad pauses.
+Ordinary player operations keep their original Runnable. The dispatch context is cleared even if
+the action throws. Three seconds later, the fallback pauses only players eligible at expiry whose
+play generation still matches; a genuinely missed old player remains eligible even when a different
+player started afterwards. A notice says the timer paused playback.
+
+The APK-free sleep tests cover both dispatch boundaries and the fallback with bounded two-thread
+fixtures, including reentrant IVS stop callbacks. After decoding a Kick APK patched with Sleep timer,
+run `python3 -I tests/kick/verify_sleep_queue.py <apktool-dir>` to check that the actual executor
+Runnable argument receives the emitted expiry guard. Helper tests establish ordering and exclusion;
+live playback, control state and background transitions still need device UI verification.
 
 ### Quality on mobile data
 
@@ -522,33 +537,77 @@ copy of the page's structure.
 
 ### Third-party emotes
 
-"7TV emotes" (`emotes_7tv`, the same key as on Twitch) starts off. When on, the chat page
-script loads the channel's 7TV set and 7TV's global set from 7tv.io, then turns every word of
-a message that is exactly an emote's name into that emote's image from cdn.7tv.app, in
-messages already on the page once the sets load and in new ones as they arrive. A channel
-emote wins over a global one with the same name, and text inside links and Kick's own emotes
-stays. The images use the page's emote style, so they're sized like Kick's; zero-width
-emotes show as ordinary ones. Neither request carries cookies or a referrer, so 7TV sees the
-channel, not the page's URL with Kick's config.
+"7TV emotes" (`emotes_7tv`) starts off and requires restart. Enabling it adds channel
+and global emotes to messages, the existing native picker and native `:query`
+autocomplete. A channel alias wins over a global alias; native Kick names win in the
+picker so name-only native callbacks remain unambiguous. Selecting 7TV inserts the raw
+word in the existing draft at its UTF-16 selection, preserving replies and stock send
+handling. It requires the authenticated session and the current native composer's
+committed `editable` permission/rules prop. It never sends a message itself.
 
-7TV knows a Kick channel by its owner's Kick user ID, which the chat page doesn't have: its
-config only has the channel ID. Every HTTP client Kick makes starts from React Native's
-`OkHttpClientProvider.createClientBuilder()`, and while the switch is on (restart required)
-`KickHttp` adds an interceptor there that reads, without changing, Kick's own channel
-responses (`/api/v1|v2/channels/<slug>` and the channel screen's `/api/v2/channels/<slug>/info`)
-and remembers each channel ID's slug. The `/info` response has no owner, so the script asks
-Kick's channel API for the slug once per page (`kick.com/api/v2/channels/<slug>`, which the
-page may call) and gives 7TV the `user_id` it returns. A channel the app hasn't fetched gets
-global emotes only. OkHttp ships unrenamed in Kick; the patch checks every class and method
-the interceptor uses and fails instead of crashing later if one is gone.
+The page independently fetches globals and the channel owner's set from 7tv.io. Each
+request has a 10-second header/body deadline, a 2 MiB response limit and at most three
+transient attempts; 429 honors a capped Retry-After. Successful globals render while
+owner lookup stalls. Failed or malformed refreshes retain the last valid catalog. Authoritative no-set responses
+and omitted empty emote vectors clear the removed entries and reconcile set subscriptions. When needed, the
+owner lookup uses `kick.com/api/v2/channels/<slug>` without credentials. Native channel
+lookup maps hold at most 256 entries. A channel not yet observed gets globals only.
 
-Not included: the emote picker and autocomplete (the app's own React Native UI), 7TV badges
-and paints, and live set updates. Earlier the app's Pusher and Centrifugo listeners were
-considered as hooks; they never see what the page draws, because the page has its own
-realtime connection, and its emote pattern (`\[emote:(\d+):[^\]]+\]`) only accepts Kick's
-numeric IDs. Checked on the emulator, signed out, on a large live channel: on the stream
-screen and the Chat tab the page loaded the channel's 988 and the 45 global emotes after the
-owner lookup, and 7TV images showed in live messages.
+Active-set and emote-data zero-width flags layer over the adjacent emote, including a
+native Kick image; layers never cross text, links, newlines or messages. A standalone
+overlay renders normally. Live refresh restores only Lurk-owned nodes and preserves
+existing native/link handlers. Catalog changes update existing messages and native
+suggestions without replacing draft/reply state.
+
+The feature subscribes to current set IDs at **wss://events.7tv.io/v3**, debounces
+validated set updates into refetches, watches heartbeats, and reconnects with capped
+backoff (at most eight attempts per burst). Visible pages revalidate every five minutes
+to find changed channel sets. Hidden pages abort requests and close sockets; page
+teardown cancels observers, timers, sockets and fetches. Provider GETs omit cookies and
+referrers; images use no-referrer. 7TV receives the channel owner's Kick ID, set IDs and
+normal request IP metadata; it receives no Kick credentials or chat draft. Images load
+from **cdn.7tv.app**. With the patch excluded or the switch off, Lurk makes no provider
+requests. 7TV badges and paints are not included.
+
+The WebView sends only bounded catalog snapshots for its current native document token
+and channel. Native validation strips unknown fields, rejects foreign origins/stale
+documents and allows only 7TV CDN emote URLs. Input-ref reset/remount retires the native
+catalog generation; a fresh page association is required before augmentation resumes.
+Pagehide and native WebView destruction invalidate only that page’s authority. The stock WebView bridge continues to
+handle ordinary messages. A separately compiled HBC99 bootstrap extends chatRoomStore,
+ImageCacheV2.getImage and the existing picker/autocomplete actions. Module IDs come
+from unique export/Metro registration signatures in the hash-locked stock bundle.
+Native images use Kick's cache. Exact `files.kick.com` and `files.cdn.kick.com` image
+requests are mapped to 7TV. Static requests use `2x_static.webp` for animated sources;
+naturally static sources retain `2x.webp`. The native section supplies Kick's supported
+globe tab icon and an accessible 7TV label.
+
+Builds compile committed `patches/src/main/runtime/{kick,twitch}/*.js` through
+`bin/lib/compile-hermes.py`, using official mise-managed `hermes-compiler` packages
+`260318099.0.4` (HBC99) and `250829098.0.19` (HBC98). The packages have no executable shim;
+the script resolves their package location with Node and verifies package provenance,
+compiler version and emitted header. Generated resource metadata records source,
+compiler-binary and bytecode SHA-256. Gradle regenerates resources and removes obsolete
+outputs; CI installs the same pins before host checks and build. No generated HBC is
+checked in. The reusable Java loader validates metadata and queues the compiled bundle
+after either main-loader branch, retaining only weak runtime references cleared on
+destroy.
+
+`tests/kick/test_chat_page.py` executes the real page script in offline Chrome;
+`test_composer.js` is a boundary fixture, not proof of the native UI.
+`test_page_lifecycle.js` drives the production page function with controlled provider
+responses and timers to verify authoritative removals, sequence-gap refetch, heartbeat
+expiry, retry exhaustion, set-ID resubscription and disposal. `bin/test-kick-modules <stock index.android.bundle>` checks the pinned HBC export/registration discovery, and `bin/test-kick-catalog` exercises
+the APK's Java data validator on ART. Actual runtime loader ordering, image rendering,
+composer insertion and sourceURL preservation are checked separately in the target app.
+The emulator smoke rendered the native 7TV picker and suggestions, inserted raw words
+into a middle-of-draft selection and proved its native caret by subsequent typing. It
+uses the documented ARM translation workaround, so it is not physical-phone UI proof.
+Insertion uses the pinned AndroidTextInput Commands.setTextAndSelection with the current
+host event counter, followed by stock draft/selection setters. Text and caret change
+atomically, so the later native span replacement preserves the caret's distance from
+the new end. There is no delayed correction to overwrite later user movement. Authenticated
+send correctness requires a separately authorized send test.
 
 ## Implementation contracts and verification
 
@@ -577,12 +636,20 @@ The edit helpers, all equal-length and fail-closed:
 - `skipGuard`: a handler's opening `if (!event) return;` jump becomes a `Mov` of the
   tested register onto itself, so the handler always returns before doing anything.
 - `dataEdit` / `dataChoice`: values in the literal buffer that array and object literals
-  read, as a switch or a choice. Their replacement window is grown until its original
-  bytes are unique in the bundle.
+  read, as a switch or a choice. Hermes shares value bytes between literals, so each edit
+  names the literals allowed to read its bytes and fails if any other literal does. Their
+  replacement window is grown until its original bytes are unique in the bundle.
 - `functionUsing`: selects an anonymous function by the properties it reads and the
   strings it loads, rather than by bytes that embed build-local string IDs.
 - `objectKeys`: an object literal's property names, read from the bundle's shape table in
   slot order, so an edit can find the slot a named property is stored in.
+- `literals` / `slotArrays`: every array and object literal instruction with the value
+  bytes it reads, and the array literals stored into an object's slots right after it is
+  made. Literal edits find their values through these, not through buffer offsets.
+- `sequence`, `reads`, `creates`, `getById`: one run of instructions matched by opcode,
+  property, object keys and register flow, and a `GetById` pattern built with this bundle's
+  string ID. Shape numbers, literal offsets and string IDs change in every Kick release;
+  these keep the registers and code shape exact without pinning those numbers.
 
 Verification tools retained in this repository:
 
@@ -643,6 +710,17 @@ Firebase's content provider initializes before the application collection hook, 
 Disable analytics also sets the manifest's `firebase_analytics_collection_enabled`
 default to false; Firebase prefers the value the startup hook persists, so the switch
 still turns collection back on.
-Authenticated flows, broadcaster token sharing and every server ad configuration
+The [dated verification record](verification-2026-10-17.md) distinguishes current native
+composer/provider and loader evidence from historical observations above.
+Authenticated feature flows, broadcaster token sharing and every server ad configuration
 need device/account coverage. Do not interpret SDK suppression or static VOD fallback
 validation as verified removal of every video ad.
+
+Retained patch-integration regressions: `tests/kick/verify_hosting.py` executes the emitted
+`stay_on_host` manifest edit, actual JSX handlers/countdown and persistent React compiler caches.
+It covers waiting, Watch now, Cancel/close, stock/off behavior, route guards and consecutive events,
+with three failing bytecode mutations. `bin/test-kick-chat <patched.apk>` captures production
+KickHttp/KickChat JavaScript on ART and runs it in offline Chrome, covering response preservation,
+full/info channel IDs, malformed and missing config, globals, previews and independent switches.
+Malformed config now falls back to global emotes while retaining hide/ignore-clear options.
+See `tests/README.md` for prerequisites and the exact boundary limitations.

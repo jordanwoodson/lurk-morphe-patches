@@ -11,7 +11,7 @@ dir="$PATCHES_SRC/$slug/shared"
 [[ ! -e "$dir/Constants.kt" ]] || die "$slug already exists"
 if existing="$(slug_for_package "$package")"; then die "$package is already app '$existing'"; fi
 
-mkdir -p "$dir" "$ROOT/apks/$slug"
+mkdir -p "$dir" "$APKS/$slug"
 cat >"$dir/Constants.kt" <<KT
 package io.github.jordanwoodson.patches.$slug.shared
 

@@ -1,9 +1,13 @@
 name: Build
 
-# Pull requests get a build check. Pushes are covered by release.yml, which also compiles
-# when nothing is released.
+# Pull requests into dev get a build check. Pushes are covered by release.yml, which also compiles
+# when nothing is released. The dev → main pull request is left out: open_pull_request.yml opens it
+# with GITHUB_TOKEN, whose events can't start jobs, so its run only ever failed. Its head commit
+# already has release.yml's check from the push to dev.
 on:
   pull_request:
+    branches:
+      - dev
 
 permissions:
   contents: read
@@ -26,6 +30,25 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Setup host dependencies
+        run: |
+          python3 -m pip install --disable-pip-version-check -r tests/requirements-host.txt
+          # Chrome is supplied by the GitHub-hosted Ubuntu image; fail if it is unavailable.
+          google-chrome --version
+
+      - name: Setup pinned Hermes compilers
+        uses: jdx/mise-action@v3
+        with:
+          install_args: npm:hermes-compiler@250829098.0.19 npm:hermes-compiler@260318099.0.4
+
+      - name: Verify host checks
+        run: bin/test-host
 
       # Morphe's Gradle plugin is published on GitHub Packages; GITHUB_TOKEN can read it.
       - name: Build

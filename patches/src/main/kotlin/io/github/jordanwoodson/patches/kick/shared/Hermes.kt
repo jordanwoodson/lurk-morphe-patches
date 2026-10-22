@@ -32,7 +32,7 @@ internal class HermesBundle(input: ByteArray) {
         ensure(u32(32) == bytes.size, "file length does not match header")
         ensure(digest("SHA-1", bytes.copyOfRange(0, bytes.size - 20))
             .contentEquals(bytes.copyOfRange(bytes.size - 20, bytes.size)), "invalid SHA-1 footer")
-        ensure(bytes.sha256() == SOURCE_SHA256, "unrecognized Kick 40.32.1 bundle")
+        ensure(bytes.sha256() == SOURCE_SHA256, "unrecognized Kick 40.32.3 bundle")
         val functionCount = u32(40)
         val stringCount = u32(52)
         val overflowCount = u32(56)
@@ -94,6 +94,34 @@ internal class HermesBundle(input: ByteArray) {
             HermesFunction(id, strings[name], offset, bytes.copyOfRange(offset, offset + size),
                 frame, numbers, nonPointers, actualFlags)
         }
+    }
+
+    /** Discover a Metro registration from unique export signatures in its factory, never a portable ID. */
+    fun metroModule(exports: List<String>, direct: Boolean = false): Int {
+        ensure(exports.isNotEmpty(), "empty Metro signature")
+        val exportIds = exports.map(::stringId)
+        val global = instructions(function("global"))
+        val candidates = mutableListOf<Int>()
+        for (index in 0 until global.size - 4) {
+            val load = global[index]
+            if (load.propertyId() != stringId("__d")) continue
+            val id = global[index + 1]
+            val deps = global[index + 2]
+            val closure = global[index + 3]
+            val call = global[index + 4]
+            if (id.opcode !in setOf(0x8b, 0x8c) || deps.opcode !in setOf(0x07, 0x08, 0x09) ||
+                closure.opcode != 0x84 || call.opcode != 0x70) continue
+            // __d(factory, numericId, dependencies): require exact register flow.
+            if (call.u8(2) != load.u8(1) || call.u8(4) != closure.u8(1) ||
+                call.u8(5) != id.u8(1) || call.u8(6) != deps.u8(1)) continue
+            val factory = functions.getOrNull(closure.u16(3)) ?: continue
+            val body = instructions(factory)
+            if (exportIds.all { expected -> body.any { instruction ->
+                    (!direct && instruction.stringLoaded() == expected) ||
+                        (instruction.opcode == 0x4b && instruction.u16(4) == expected)
+                } }) candidates += if (id.opcode == 0x8b) id.u8(2) else id.u32(2)
+        }
+        return candidates.singleOrNull() ?: fail("expected one Metro factory exporting ${exports.joinToString()}")
     }
 
     fun stringId(value: String): Int = strings.indexOf(value).also { ensure(it >= 0, "missing string $value") }
@@ -184,6 +212,128 @@ internal class HermesBundle(input: ByteArray) {
         ensure(anchor.isNotEmpty(), "empty function anchor")
         return functions.filter { it.body.positions(anchor).isNotEmpty() }.singleOrNull()
             ?: fail("expected one function with bytecode anchor ${anchor.toHex()}")
+    }
+
+    /**
+     * GetById's encoding with the property's string ID of this bundle, for patterns and anchors. Registers
+     * and the cache index come from the function; only the ID differs between app versions.
+     */
+    fun getById(result: Int, objectRegister: Int, cache: Int, property: String): ByteArray {
+        val id = stringId(property)
+        ensure(id <= 0xffff, "$property needs the long GetById form")
+        return byteArrayOf(GET_BY_ID.toByte(), result.toByte(), objectRegister.toByte(), cache.toByte(),
+            id.toByte(), (id ushr 8).toByte())
+    }
+
+    /** Functions with [name] and a body; a generator's wrapper and body share their name. */
+    fun functionsNamed(name: String): List<HermesFunction> = functions.filter { it.name == name && it.body.isNotEmpty() }
+
+    /** Matches an instruction reading [property] by any GetById variant. */
+    fun reads(property: String): (HermesInstruction) -> Boolean {
+        val id = stringId(property)
+        return { it.propertyId() == id }
+    }
+
+    /** Matches an object literal instruction whose keys are exactly [keys]. */
+    fun creates(vararg keys: String): (HermesInstruction) -> Boolean = {
+        it.opcode in setOf(NEW_OBJECT_WITH_BUFFER, NEW_OBJECT_WITH_BUFFER_LONG) && objectKeys(it) == keys.toList()
+    }
+
+    /**
+     * The one run of consecutive instructions in [candidates] that matches [steps] in order and passes
+     * [accept] (register flow). Opcodes, registers, strings and object keys select it, never the shape
+     * or literal numbers, which every app version renumbers.
+     */
+    fun sequence(what: String, candidates: List<HermesFunction>, steps: List<(HermesInstruction) -> Boolean>,
+                 accept: (List<HermesInstruction>) -> Boolean = { true }): Pair<HermesFunction, List<HermesInstruction>> {
+        ensure(steps.isNotEmpty(), "empty instruction sequence")
+        val found = candidates.flatMap { function ->
+            val instructions = instructions(function)
+            (0..instructions.size - steps.size).mapNotNull { start ->
+                val run = instructions.subList(start, start + steps.size)
+                if (run.indices.all { steps[it](run[it]) } && accept(run)) function to run else null
+            }
+        }
+        return found.singleOrNull() ?: fail("expected one $what, found ${found.size}")
+    }
+
+    /** Replaces one decoded instruction of [function] with [after], of the same length. */
+    fun replaceInstruction(function: HermesFunction, key: String, instruction: HermesInstruction, after: ByteArray,
+                           defaultEnabled: Boolean = true) =
+        add(function, key, instruction.offset, instruction.bytes, after, defaultEnabled)
+
+    /**
+     * Every array and object literal instruction that reads the literal value buffer, with the bytes its
+     * values occupy. Functions sharing one body are listed once. Fails if any function doesn't decode, so
+     * a check over these readers can't miss one.
+     */
+    val literals: List<HermesLiteral> by lazy {
+        val seen = HashSet<Int>()
+        functions.filter { it.body.isNotEmpty() && seen.add(it.offset) }.flatMap { function ->
+            instructions(function).mapNotNull { instruction ->
+                val (count, start) = when (instruction.opcode) {
+                    NEW_OBJECT_WITH_BUFFER -> shapeSize(instruction.u16(2)) to instruction.u16(4)
+                    NEW_OBJECT_WITH_BUFFER_LONG -> shapeSize(instruction.u32(2)) to instruction.u32(6)
+                    NEW_OBJECT_WITH_BUFFER_AND_PARENT -> shapeSize(instruction.u32(3)) to instruction.u32(7)
+                    NEW_ARRAY_WITH_BUFFER -> instruction.u16(4) to instruction.u16(6)
+                    NEW_ARRAY_WITH_BUFFER_LONG -> instruction.u16(4) to instruction.u32(6)
+                    else -> return@mapNotNull null
+                }
+                val keys = when (instruction.opcode) {
+                    NEW_OBJECT_WITH_BUFFER, NEW_OBJECT_WITH_BUFFER_LONG -> objectKeys(instruction)
+                    else -> null
+                }
+                HermesLiteral(function, instruction, keys, start, valuesEnd(start, count))
+            }
+        }
+    }
+
+    /** The literals whose values cover any byte of the value-buffer range [start, end). */
+    fun literalsReading(start: Int, end: Int): List<HermesLiteral> = literals.filter { it.start < end && start < it.end }
+
+    /**
+     * The array literals stored into [literal]'s slots right after the object is created: each a
+     * NewArrayWithBuffer into a register, then PutOwnBySlotIdx of that register into the object. By slot.
+     */
+    fun slotArrays(literal: HermesLiteral): Map<Int, HermesLiteral> {
+        val instructions = instructions(literal.function)
+        val register = literal.instruction.u8(1)
+        var index = instructions.indexOfFirst { it.offset == literal.instruction.offset } + 1
+        ensure(index > 0, "literal outside its function")
+        val result = mutableMapOf<Int, HermesLiteral>()
+        while (index + 1 < instructions.size) {
+            val array = instructions[index]
+            val put = instructions[index + 1]
+            if (array.opcode !in setOf(NEW_ARRAY_WITH_BUFFER, NEW_ARRAY_WITH_BUFFER_LONG) ||
+                put.opcode != PUT_OWN_BY_SLOT_IDX || put.u8(1) != register || put.u8(2) != array.u8(1)) break
+            val read = literals.single { it.function.offset == literal.function.offset && it.instruction.offset == array.offset }
+            ensure(result.put(put.u8(3), read) == null, "slot ${put.u8(3)} assigned twice")
+            index += 2
+        }
+        return result
+    }
+
+    private fun shapeSize(shape: Int): Int {
+        ensure(shape in 0 until shapeCount, "object shape outside the table")
+        return u32(shapeTable + shape * 8 + 4)
+    }
+
+    /**
+     * Where [count] serialized literal values starting at [start] end, in value-buffer offsets. Value tags:
+     * null, true, false, number (8 bytes), long string (4), short string (2), undefined, integer (4).
+     */
+    private fun valuesEnd(start: Int, count: Int): Int {
+        var cursor = start
+        var items = 0
+        while (items < count) {
+            ensure(cursor < literalSize, "literal values outside the value buffer")
+            val tag = u8(literalStart + cursor++)
+            val run = if (tag and 0x80 != 0) ((tag and 0x0f) shl 8) or u8(literalStart + cursor++) else tag and 0x0f
+            cursor += run * intArrayOf(0, 0, 0, 8, 4, 2, 0, 4)[(tag ushr 4) and 7]
+            items += run
+        }
+        ensure(items == count && cursor <= literalSize, "literal value run overruns its count")
+        return cursor
     }
 
     fun returnNull(functionName: String, key: String, defaultEnabled: Boolean = true) {
@@ -281,11 +431,13 @@ internal class HermesBundle(input: ByteArray) {
 
     /**
      * An edit inside the literal value buffer, [offset] bytes from its start: a value an array or object
-     * literal reads, such as a number or a string ID. A test (verify_literals.py) checks that only the
-     * intended literal instructions read those bytes.
+     * literal reads, such as a number or a string ID. Hermes shares value bytes between literals, so the
+     * literals reading the edited bytes must be exactly [readers]; verify_literals.py checks the same.
      */
-    fun dataEdit(offset: Int, key: String, before: ByteArray, after: ByteArray, defaultEnabled: Boolean = true): HermesEdit {
+    fun dataEdit(offset: Int, key: String, before: ByteArray, after: ByteArray, readers: Collection<HermesLiteral>,
+                 defaultEnabled: Boolean = true): HermesEdit {
         ensure(before.size == after.size, "edit must preserve literal length")
+        onlyReaders(offset, before.size, readers, key)
         return record(HermesEdit(key, literal(offset, before), before.copyOf(), after.copyOf(), defaultEnabled, DATA))
     }
 
@@ -294,12 +446,20 @@ internal class HermesBundle(input: ByteArray) {
      * value, normally "0", keeps [before]. The patched APK ships the bytes of [defaultValue].
      */
     fun dataChoice(offset: Int, key: String, before: ByteArray, values: Map<String, ByteArray>,
-                   defaultValue: String = "0"): HermesEdit {
+                   readers: Collection<HermesLiteral>, defaultValue: String = "0"): HermesEdit {
         ensure(values.isNotEmpty() && values.values.all { it.size == before.size }, "choice must preserve literal length")
         ensure((values.keys + defaultValue).all { it.matches(Regex("-?[0-9]+")) }, "choice values must be numbers")
+        onlyReaders(offset, before.size, readers, key)
         val copies = values.mapValues { it.value.copyOf() }
         return record(HermesEdit(key, literal(offset, before), before.copyOf(), before.copyOf(), false, DATA,
             copies, defaultValue))
+    }
+
+    private fun onlyReaders(offset: Int, length: Int, readers: Collection<HermesLiteral>, key: String) {
+        ensure(readers.isNotEmpty(), "$key names no literal readers")
+        fun HermesLiteral.position() = function.offset + instruction.offset
+        val actual = literalsReading(offset, offset + length).map { it.position() }.toSet()
+        ensure(actual == readers.map { it.position() }.toSet(), "$key: other literals share the edited values")
     }
 
     /** The literal value buffer's bytes at [offset], for checking a value before editing it. */
@@ -342,17 +502,29 @@ internal class HermesBundle(input: ByteArray) {
         val function = function("preferencesSettingsSlice")
         val body = function.body
         ensure(body.size == 97 && function.flags and 0x18 == 0, "unexpected preview slice")
-        ensure(body.copyOfRange(0x11, 0x1b).contentEquals(hex("0200930f00000ffa0200")),
-            "unexpected preview state object")
-        ensure(body.copyOfRange(0x1b, 0x25).contentEquals(hex("0202940f0000dc ca0100")),
-            "unexpected PiP state object")
-        val values = bytes.copyOfRange(literalStart, literalStart + minOf(literalSize, 65536))
-        val mainLiteral = values.positions(hex("1507")).firstOrNull() ?: fail("no short preview literals")
-        val pipLiteral = values.positions(hex("03")).firstOrNull() ?: fail("no short PiP literals")
-        fun shortObject(register: Int, shape: Int, literal: Int) = byteArrayOf(1, register.toByte(),
-            shape.toByte(), (shape ushr 8).toByte(), literal.toByte(), (literal ushr 8).toByte())
-        val replacement = body.copyOfRange(0, 0x11) + shortObject(0, 3987, mainLiteral) +
-            byteArrayOf(0x96.toByte(), 2, 0x52, 0, 2, 2) + shortObject(2, 3988, pipLiteral) +
+        val instructions = instructions(function)
+        ensure(instructions.none { it.target() != null }, "preview slice has branches")
+        val main = instructions.singleOrNull { it.offset == 0x11 } ?: fail("unexpected preview state object")
+        ensure(main.opcode == NEW_OBJECT_WITH_BUFFER_LONG && main.u8(1) == 0 &&
+            objectKeys(main).size == 12 && objectKeys(main)[2] == "showStreamPreviews", "unexpected preview state object")
+        val pip = instructions.singleOrNull { it.offset == 0x1b } ?: fail("unexpected PiP state object")
+        ensure(pip.opcode == NEW_OBJECT_WITH_BUFFER_LONG && pip.u8(1) == 2 &&
+            objectKeys(pip) == listOf("top", "left", "scale"), "unexpected PiP state object")
+        ensure(body.copyOfRange(0x25, 0x29).contentEquals(hex("52 00 02 05")), "PiP state isn't slot 5")
+        // The short form reaches the first 64 KiB of values: point it at the same serialized run there.
+        val window = bytes.copyOfRange(literalStart, literalStart + minOf(literalSize, 65536))
+        fun shortObject(instruction: HermesInstruction): ByteArray {
+            val shape = instruction.u32(2)
+            ensure(shape <= 0xffff, "state shape needs the long form")
+            val start = instruction.u32(6)
+            val values = literal(start, valuesEnd(start, shapeSize(shape)) - start)
+            val short = window.positions(values).firstOrNull() ?: fail("no short copy of literal values at $start")
+            return byteArrayOf(NEW_OBJECT_WITH_BUFFER.toByte(), instruction.bytes[1], shape.toByte(),
+                (shape ushr 8).toByte(), short.toByte(), (short ushr 8).toByte())
+        }
+        // Main state object, showStreamPreviews (slot 2) = false, PiP position object; then two pad bytes.
+        val replacement = body.copyOfRange(0, 0x11) + shortObject(main) +
+            byteArrayOf(0x96.toByte(), 2, PUT_OWN_BY_SLOT_IDX.toByte(), 0, 2, 2) + shortObject(pip) +
             body.copyOfRange(0x25, body.size) + byteArrayOf(0, 0)
         return replaceBody(function.name, key, replacement, defaultEnabled)
     }
@@ -484,7 +656,7 @@ internal class HermesBundle(input: ByteArray) {
     }
 
     companion object {
-        const val SOURCE_SHA256 = "a9d911b3f8b640d8e56b7527929a093c2356d97992409c453d167fdf39538d9a"
+        const val SOURCE_SHA256 = "dd5e4d45bffa1a7befbf943985eb3f0d0d1896d303d28abf0a5748b1d5f124dc"
 
         /** [HermesEdit.functionId] of an edit in the literal value buffer. */
         const val DATA = -1
@@ -499,7 +671,11 @@ internal class HermesBundle(input: ByteArray) {
             "47474747474747474747"
         private const val NEW_OBJECT_WITH_BUFFER = 0x01
         private const val NEW_OBJECT_WITH_BUFFER_LONG = 0x02
+        private const val NEW_OBJECT_WITH_BUFFER_AND_PARENT = 0x03
+        private const val NEW_ARRAY_WITH_BUFFER = 0x07
+        private const val NEW_ARRAY_WITH_BUFFER_LONG = 0x08
         private const val MOV = 0x10
+        private const val PUT_OWN_BY_SLOT_IDX = 0x52
         private const val GET_BY_ID = 0x45
         private const val RET = 0x76
         private const val LOAD_UNDEFINED = 0x93
@@ -522,6 +698,22 @@ internal class HermesBundle(input: ByteArray) {
         )
     }
 }
+
+/** v99 opcodes that patches match or write (BytecodeList.def of the static_h branch). */
+internal object HermesOp {
+    const val NEW_OBJECT = 0x05
+    const val MOV = 0x10
+    const val PUT_OWN_BY_SLOT_IDX = 0x52
+    const val GET_BY_INDEX = 0x5e
+    const val CALL2 = 0x6e
+    const val CALL3 = 0x6f
+    const val LOAD_CONST_NULL = 0x94
+    const val JMP_TRUE_LONG = 0xb2
+}
+
+/** An array or object literal [instruction] in [function], whose values occupy value-buffer bytes [start, end). */
+internal class HermesLiteral(val function: HermesFunction, val instruction: HermesInstruction, val keys: List<String?>?,
+    val start: Int, val end: Int)
 
 internal data class HermesFunction(val id: Int, val name: String, val offset: Int, val body: ByteArray,
     val frameSize: Int, val numberRegisters: Int, val nonPointerRegisters: Int, val flags: Int) {

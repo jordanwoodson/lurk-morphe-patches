@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 repo = Path(__file__).resolve().parents[1]
-work = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe"))
+work = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches"))
 root = work / "twitch-interface"
 root.mkdir(parents=True, exist_ok=True)
 libraries = sorted((Path.home() / ".gradle/wrapper/dists").glob("gradle-*/**/lib/kotlin-compiler-embeddable-*.jar"))
@@ -23,7 +23,7 @@ commands = [[java, "-cp", classpath, "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
              "-classpath", classpath, "-d", str(root / "interface-probe.jar"), *map(str, sources)],
             [java, "-cp", str(root / "interface-probe.jar") + os.pathsep + classpath,
              "io.github.jordanwoodson.patches.twitch.clips.InterfaceHermesProbeKt",
-             sys.argv[1] if len(sys.argv) > 1 else str(work / "twitch/31.6.0/apktool/assets/index.android.bundle"),
+             sys.argv[1] if len(sys.argv) > 1 else str(work / "twitch/31.7.0/apktool/assets/index.android.bundle"),
              str(root / "interface.bundle"), str(root / "interface-manifest.json"), *sys.argv[2:]]]
 for command in commands:
     result = subprocess.run(command)

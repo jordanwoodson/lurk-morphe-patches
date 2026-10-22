@@ -9,9 +9,26 @@ remote=/data/local/tmp/lurk-twitch-ads
 mkdir -p "$out/classes" "$out/dex" "$WORK/tmp"
 export TMPDIR="$WORK/tmp"
 android="$ANDROID_HOME/platforms/android-36/android.jar"
-javac --release 17 -classpath "$android" -d "$out/classes" "$ROOT/tests/twitch/AdsProbe.java"
+# A compile-only stub of the React Native player's display interface, so the probe can give a
+# playback session a View display. It stays out of the DEX: the app's own interface loads at run time.
+mkdir -p "$out/stub-src/com/twitchrn/player" "$out/stub-classes"
+cat > "$out/stub-src/com/twitchrn/player/PlaybackDisplay.java" <<'JAVA'
+package com.twitchrn.player;
+public interface PlaybackDisplay {
+    void onContentSize(int width, int height);
+    void onPlaybackStarted();
+    void onSecureSurfaceRequired(boolean required);
+    void onSourceLoadStarted(boolean warm);
+    void onSurfaceArrived();
+    void onWarmPlayerAdopted();
+}
+JAVA
+javac --release 17 -d "$out/stub-classes" "$out/stub-src/com/twitchrn/player/PlaybackDisplay.java"
+(cd "$out/stub-classes" && jar cf "$out/stubs.jar" com)
+rm -rf "$out/classes"/*
+javac --release 17 -classpath "$android:$out/stubs.jar" -d "$out/classes" "$ROOT/tests/twitch/AdsProbe.java"
 # Only the probe enters DEX; every Twitch class and the extension come from the patched APK.
-"$(build_tool d8)" --min-api 30 --lib "$android" --output "$out/dex" "$out/classes/"*.class
+"$(build_tool d8)" --min-api 30 --lib "$android" --classpath "$out/stubs.jar" --output "$out/dex" "$out/classes/"*.class
 (cd "$out/dex" && jar cf "$out/probe.jar" classes.dex)
 adb -s "$serial" shell mkdir -p "$remote"
 trap 'adb -s "$serial" shell rm -rf "$remote" >/dev/null 2>&1 || true' EXIT

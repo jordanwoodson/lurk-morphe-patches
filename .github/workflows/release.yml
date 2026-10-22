@@ -33,6 +33,26 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Setup host dependencies
+        run: |
+          python3 -m pip install --disable-pip-version-check -r tests/requirements-host.txt
+          # Chrome is supplied by the GitHub-hosted Ubuntu image; fail if it is unavailable.
+          google-chrome --version
+
+      # A failed host check stops the job before any release commit, tag or publication.
+      - name: Setup pinned Hermes compilers
+        uses: jdx/mise-action@v3
+        with:
+          install_args: npm:hermes-compiler@250829098.0.19 npm:hermes-compiler@260318099.0.4
+
+      - name: Verify host checks
+        run: bin/test-host
+
       # Morphe's Gradle plugin is published on GitHub Packages; GITHUB_TOKEN can read it.
       - name: Release
         id: release

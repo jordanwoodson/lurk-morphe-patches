@@ -9,12 +9,9 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
@@ -28,6 +25,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -67,7 +65,6 @@ public final class TwitchBackupStream {
     private static final String BACKUP_PLATFORM = "android";
     /** Each switch must finish well inside IVS's 10 s request timeout. */
     private static final long BUDGET_MS = 6000;
-    private static final int TIMEOUT_MS = 2500;
     /** After a failed switch, the next try waits this long; the break plays (muted) meanwhile. */
     private static final long RETRY_MS = 15000;
     /** Longer than any Twitch break (3 minutes at most): then a new full-quality session takes over. */
@@ -75,6 +72,9 @@ public final class TwitchBackupStream {
     private static final long FRESH_RETRY_MS = 20000;
     private static final int MAIN_FAILURES = 3;
     private static final long NO_TIME = Long.MIN_VALUE;
+
+    /** A retired response with no accepted window must use IVS's error path, never synthetic HLS. */
+    private static final class UnavailablePlaylist extends RuntimeException { }
 
     private TwitchBackupStream() {
     }
@@ -101,10 +101,14 @@ public final class TwitchBackupStream {
         }
     }
 
-    /** One usher load: a player's stream. Switches happen under its lock. */
+    /** One usher load. The state monitor is never held during provider I/O. */
     static final class Stream {
         final String masterUrl;
         final String channel;
+        /** Only bounded operation workers take this monitor, never an injected request hook. */
+        final Object processing = new Object();
+        /** Incremented on every source transition, including an unanswered-backup fallback. */
+        long generation;
         /** The player's own session as loaded, served unchanged. */
         final Source own;
         /** What the player is served from now. */
@@ -112,7 +116,7 @@ public final class TwitchBackupStream {
         /** The full-quality session to return to after the break. */
         Source main;
         long breakStart;
-        long retryAfter;
+        volatile long retryAfter;
         long freshAfter;
         int mainFailures;
 
@@ -132,6 +136,8 @@ public final class TwitchBackupStream {
         long servedFirst = -1;
         long servedLast = -1;
         Source lastSource;
+        /** Last accepted body, used when an interleaved response belongs to a retired source. */
+        volatile String lastPlaylist;
         /** Requests sent to a backup since one was answered. */
         int unanswered;
         /** Where served segments change sessions. */
@@ -178,29 +184,27 @@ public final class TwitchBackupStream {
      * goes to the session its stream is served from.
      */
     public static String requestUrl(Object request, String url) {
-        if (url == null || !url.contains(".m3u8")) return url;
+        if (url == null || !url.contains(".m3u8") || !Settings.isEnabled(KEY)) return url;
         try {
             Media known = media.get(key(url));
             if (known == null) return url;
             Stream stream = known.stream;
-            Source current = stream.current;
-            if (current.backup && ++known.unanswered > MAIN_FAILURES) {
-                // IVS asked again and again without getting a playlist from it (an HTTP error): leave it.
-                synchronized (stream) {
-                    if (stream.current == current) {
-                        stream.current = stream.main;
-                        stream.retryAfter = System.currentTimeMillis() + RETRY_MS;
-                        Logger.d("ads: picture-by-picture stream of " + stream.channel + " not answering, the break plays");
-                    }
+            synchronized (stream) {
+                Source current = stream.current;
+                if (current.backup && ++known.unanswered > MAIN_FAILURES) {
+                    stream.current = stream.main;
+                    stream.generation++;
+                    stream.retryAfter = TwitchRequest.now() + RETRY_MS;
                     current = stream.current;
+                    Logger.d("ads: picture-by-picture stream of " + stream.channel + " not answering, the break plays");
                 }
+                Rendition target = match(current.renditions, known.rendition);
+                if (target == null) return url;
+                synchronized (requested) {
+                    requested.put(request, current);
+                }
+                return current == stream.own ? url : target.url;
             }
-            Rendition target = match(current.renditions, known.rendition);
-            if (target == null) return url;
-            synchronized (requested) {
-                requested.put(request, current);
-            }
-            return current == stream.own ? url : target.url;
         } catch (RuntimeException e) {
             Logger.d("ads: playlist request left as is: " + e);
             return url;
@@ -224,41 +228,84 @@ public final class TwitchBackupStream {
             }
             master = isUsherMaster(url);
             known = master ? null : media.get(key(url));
-            if (master ? !Settings.isEnabled(KEY) : known == null) return false;
+            if (!Settings.isEnabled(KEY) || !master && known == null) return false;
             if ((Boolean) method(request, "isCancelled").invoke(request)) return true;
         } catch (ReflectiveOperationException | RuntimeException e) {
             return false;
         }
 
-        byte[] body;
-        try {
-            body = read(consumer);
-        } catch (IOException e) {
-            fail(request, callback, e);
+        final String requestUrl = url;
+        final Source requestSource = source;
+        final Media requestMedia = known;
+        final boolean isMaster = master;
+        long deadline = TwitchRequest.now() + BUDGET_MS;
+        byte[] body = TwitchRequest.run(deadline,
+                () -> Settings.isEnabled(KEY) && !cancelled(request), () -> read(consumer));
+        if (body == null) {
+            if (Settings.isEnabled(KEY)) fail(request, callback, new IOException("Lurk: playlist read expired or unavailable"));
             return true;
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            Logger.d("ads: playlist not read: " + e);
-            return false;
         }
-        byte[] out = body;
-        try {
-            boolean gzip = body.length > 2 && (body[0] & 0xff) == 0x1f && (body[1] & 0xff) == 0x8b;
-            String text = new String(gzip ? gunzip(body) : body, StandardCharsets.UTF_8);
-            if (master) {
-                onMaster(url, text);
-            } else {
-                String served = onMedia(known, source == null ? known.stream.own : source, text);
-                if (served != null) {
-                    byte[] bytes = served.getBytes(StandardCharsets.UTF_8);
-                    out = gzip ? gzip(bytes) : bytes;
+        AtomicBoolean unavailable = new AtomicBoolean();
+        byte[] out = TwitchRequest.run(deadline,
+                () -> Settings.isEnabled(KEY) && !cancelled(request), () -> {
+            byte[] result = body;
+            try {
+                boolean gzip = body.length > 2 && (body[0] & 0xff) == 0x1f && (body[1] & 0xff) == 0x8b;
+                String text = new String(gzip ? gunzip(body) : body, StandardCharsets.UTF_8);
+                TwitchRequest.check();
+                if (isMaster) {
+                    onMaster(requestUrl, text);
+                } else {
+                    String served = onMedia(requestMedia,
+                            requestSource == null ? requestMedia.stream.own : requestSource, text);
+                    if (served != null) {
+                        byte[] bytes = served.getBytes(StandardCharsets.UTF_8);
+                        result = gzip ? gzip(bytes) : bytes;
+                    }
                 }
+            } catch (UnavailablePlaylist e) {
+                unavailable.set(true);
+                return null;
+            } catch (IOException | RuntimeException e) {
+                Logger.d("ads: playlist passed unchanged: " + e);
             }
-        } catch (IOException | RuntimeException e) {
-            Logger.d("ads: playlist passed unchanged: " + e);
-            out = body;
+            TwitchRequest.check();
+            return result;
+        });
+        if (!Settings.isEnabled(KEY) || cancelled(request)) return true;
+        if (unavailable.get()) {
+            fail(request, callback, new IOException("Lurk: retired playlist unavailable"));
+            return true;
+        }
+        if (out == null) {
+            // A failed/expired switch must retain the existing ad fallback once the body is read.
+            // Never replay an in-flight body belonging to a source that another rendition retired.
+            Source answered = source == null && known != null ? known.stream.own : source;
+            if (known == null || answered == known.stream.current) {
+                out = body;
+                if (known != null && !answered.backup) {
+                    known.stream.retryAfter = TwitchRequest.now() + RETRY_MS;
+                }
+            } else {
+                String accepted = known.lastPlaylist;
+                if (accepted == null) {
+                    fail(request, callback, new IOException("Lurk: retired playlist unavailable"));
+                    return true;
+                }
+                byte[] bytes = accepted.getBytes(StandardCharsets.UTF_8);
+                try {
+                    out = body.length > 2 && (body[0] & 0xff) == 0x1f && (body[1] & 0xff) == 0x8b
+                            ? gzip(bytes) : bytes;
+                } catch (IOException e) { fail(request, callback, e); return true; }
+            }
         }
         deliver(request, callback, out);
         return true;
+    }
+
+    private static boolean cancelled(Object request) {
+        try { return (Boolean) method(request, "isCancelled").invoke(request); }
+        catch (ReflectiveOperationException | RuntimeException e) { return true; }
     }
 
     // Master playlists ----------------------------------------------------------------------------
@@ -360,81 +407,119 @@ public final class TwitchBackupStream {
      * player, or null to serve it unchanged.
      */
     static String onMedia(Media known, Source source, String text) {
-        if (source.backup) known.unanswered = 0;
         return onMedia(known, source, Playlist.parse(text), true);
     }
 
     private static String onMedia(Media known, Source source, Playlist playlist, boolean redirect) {
-        if (!source.backup && !playlist.hasAdAfter(known.servedLast - source.offset)) return serve(known, playlist, source);
         Stream stream = known.stream;
-        long now = System.currentTimeMillis();
-        synchronized (stream) {
-            Source current = stream.current;
-            if (current != source) {
-                // Another rendition switched while this request was out: serve from where it switched to.
-                Playlist switched = redirect ? fetch(current, known, now + BUDGET_MS) : null;
-                return switched != null ? onMedia(known, current, switched, false) : serve(known, playlist, source);
-            }
-            if (source.backup) return duringBreak(known, source, playlist, now);
-            if (now >= stream.retryAfter && Settings.isEnabled(KEY)) {
-                Source backup = openBackup(stream, known, playlist.renumbered(source.offset), now + BUDGET_MS);
-                if (backup != null) {
-                    stream.main = source;
-                    stream.current = backup;
-                    stream.breakStart = now;
-                    stream.mainFailures = 0;
-                    Logger.blocked("stitched ad break on " + stream.channel + ", picture-by-picture stream until it's over");
-                    return serve(known, backup.first, backup);
+        // Serialization is confined to workers whose callers have a deadline. requestUrl only needs
+        // the separate, short state monitor and can retire a blocked worker's source immediately.
+        synchronized (stream.processing) {
+            long now = TwitchRequest.now();
+            Source current;
+            long generation;
+            boolean tryBackup;
+            synchronized (stream) {
+                if (!TwitchRequest.active() || !Settings.isEnabled(KEY)) return known.lastPlaylist;
+                current = stream.current;
+                generation = stream.generation;
+                if (source == current && source.backup) known.unanswered = 0;
+                if (source == current && !source.backup && !playlist.hasAdAfter(known.servedLast - source.offset)) {
+                    return serve(known, playlist, source);
                 }
-                stream.retryAfter = now + RETRY_MS;
-                Logger.d("ads: no picture-by-picture stream for " + stream.channel + ", the break plays");
+                tryBackup = now >= stream.retryAfter;
+            }
+            if (current != source) {
+                Playlist switched = redirect ? fetch(current, known, now + BUDGET_MS) : null;
+                synchronized (stream) {
+                    if (!current(stream, current, generation)) return retired(known);
+                }
+                if (switched != null) return onMedia(known, current, switched, false);
+                return retired(known);
+            }
+            if (source.backup) return duringBreak(known, source, playlist, now, generation);
+            Source backup = tryBackup
+                    ? openBackup(stream, known, playlist.renumbered(source.offset), now + BUDGET_MS) : null;
+            synchronized (stream) {
+                if (!current(stream, source, generation)) return retired(known);
+                if (tryBackup) {
+                    if (backup != null) {
+                        stream.main = source;
+                        stream.current = backup;
+                        stream.generation++;
+                        stream.breakStart = now;
+                        stream.mainFailures = 0;
+                        Logger.blocked("stitched ad break on " + stream.channel + ", picture-by-picture stream until it's over");
+                        return serve(known, backup.first, backup);
+                    }
+                    stream.retryAfter = now + RETRY_MS;
+                    Logger.d("ads: no picture-by-picture stream for " + stream.channel + ", the break plays");
+                }
+                return serve(known, playlist, source);
             }
         }
-        return serve(known, playlist, source);
     }
 
-    /**
-     * A refresh of the stream's picture-by-picture session, under the stream's lock. Back to full quality
-     * once the break is over; back to the break (muted) if the session is lost.
-     */
-    private static String duringBreak(Media known, Source backup, Playlist playlist, long now) {
+    private static String retired(Media known) {
+        String accepted = known.lastPlaylist;
+        if (accepted == null) throw new UnavailablePlaylist();
+        return accepted;
+    }
+
+    /** Called under the state monitor before committing any result from outside it. */
+    private static boolean current(Stream stream, Source source, long generation) {
+        return TwitchRequest.active() && Settings.isEnabled(KEY)
+                && stream.current == source && stream.generation == generation;
+    }
+
+    /** A backup refresh; network I/O never retains the state monitor used by requestUrl. */
+    private static String duringBreak(Media known, Source backup, Playlist playlist, long now, long generation) {
         Stream stream = known.stream;
+        Source mainSource;
+        synchronized (stream) {
+            if (!current(stream, backup, generation)) return retired(known);
+            mainSource = stream.main;
+        }
         boolean lost = playlist.segments.isEmpty();
-        Playlist main = fetch(stream.main, known, now + BUDGET_MS);
-        Source back = back(stream, known, main, playlist.renumbered(backup.offset), lost, now);
-        if (back != null) {
-            stream.current = back;
-            stream.main = back;
-            Logger.d("ads: break over on " + stream.channel + " after " + (now - stream.breakStart) / 1000
-                    + " s, back to its stream");
-            return serve(known, back.first, back);
+        Playlist main = fetch(mainSource, known, now + BUDGET_MS);
+        Source back = back(stream, known, mainSource, backup, generation, main,
+                playlist.renumbered(backup.offset), lost, now);
+        synchronized (stream) {
+            if (!current(stream, backup, generation)) return retired(known);
+            if (back != null) {
+                stream.current = back;
+                stream.main = back;
+                stream.generation++;
+                Logger.d("ads: break over on " + stream.channel + " after " + (now - stream.breakStart) / 1000
+                        + " s, back to its stream");
+                return serve(known, back.first, back);
+            }
+            if (lost && main != null) {
+                stream.current = mainSource;
+                stream.generation++;
+                stream.retryAfter = now + RETRY_MS;
+                Logger.d("ads: picture-by-picture stream of " + stream.channel + " lost, the break plays");
+                return serve(known, main, mainSource);
+            }
+            return serve(known, playlist, backup);
         }
-        if (lost && main != null) {
-            stream.current = stream.main;
-            stream.retryAfter = now + RETRY_MS;
-            Logger.d("ads: picture-by-picture stream of " + stream.channel + " lost, the break plays");
-            return serve(known, main, stream.main);
-        }
-        return serve(known, playlist, backup);
     }
 
-    /**
-     * The full-quality session to serve again: the stream's own once [main] (its playlist now, null if it
-     * can't be read) is past its ads, or a new one when the break runs longer than any Twitch break, the
-     * stream's playlist can't be read or the backup is [lost]. Null to stay on the backup.
-     */
-    private static Source back(Stream stream, Media known, Playlist main, Playlist served, boolean lost, long now) {
+    /** Resolve a return session; its caller validates the generation again before committing it. */
+    private static Source back(Stream stream, Media known, Source mainSource, Source backup, long generation,
+                               Playlist main, Playlist served, boolean lost, long now) {
         long deadline = now + BUDGET_MS;
-        if (main == null) {
-            stream.mainFailures++;
-        } else {
-            stream.mainFailures = 0;
-            Source back = resume(stream.main.renditions, stream.main.masterUrl, main, served, known.servedLast);
-            if (back != null) return back;
+        Source resumed = main == null ? null
+                : resume(mainSource.renditions, mainSource.masterUrl, main, served, known.servedLast);
+        synchronized (stream) {
+            if (!current(stream, backup, generation)) return null;
+            if (main == null) stream.mainFailures++;
+            else stream.mainFailures = 0;
+            if (resumed != null) return resumed;
+            boolean overdue = lost || now - stream.breakStart > MAX_BREAK_MS || stream.mainFailures >= MAIN_FAILURES;
+            if (!overdue || now < stream.freshAfter) return null;
+            stream.freshAfter = now + FRESH_RETRY_MS;
         }
-        boolean overdue = lost || now - stream.breakStart > MAX_BREAK_MS || stream.mainFailures >= MAIN_FAILURES;
-        if (!overdue || now < stream.freshAfter) return null;
-        stream.freshAfter = now + FRESH_RETRY_MS;
         String masterUrl = tokenValid(stream.masterUrl) ? newSession(stream.masterUrl) : newToken(stream, null, deadline);
         String master = masterUrl == null ? null : http(masterUrl, null, deadline);
         if (master == null) return null;
@@ -479,14 +564,20 @@ public final class TwitchBackupStream {
 
     /** What the player gets of [playlist] from [source]; records it. Null when that is the playlist as is. */
     private static String serve(Media known, Playlist playlist, Source source) {
+        if (!TwitchRequest.active()) return known.lastPlaylist;
+        if (playlist.lastSeq() + source.offset < known.servedFirst && known.lastPlaylist != null) {
+            return known.lastPlaylist;
+        }
         if (known.lastSource != null && known.lastSource != source && known.servedLast >= 0
                 && !known.discontinuities.contains(known.servedLast + 1)) {
             known.discontinuities.add(known.servedLast + 1);
         }
         known.lastSource = source;
-        if (source == known.stream.own && known.discontinuities.isEmpty()) {
+        if (source == known.stream.own && known.discontinuities.isEmpty()
+                && playlist.firstSeq >= known.servedFirst) {
             known.servedFirst = Math.max(known.servedFirst, playlist.firstSeq);
             known.servedLast = Math.max(known.servedLast, playlist.lastSeq());
+            known.lastPlaylist = playlist.text();
             return null;
         }
         Playlist out = playlist.renumbered(source.offset).trimmedBelow(Math.max(0, known.servedFirst));
@@ -498,7 +589,8 @@ public final class TwitchBackupStream {
         }
         known.servedFirst = Math.max(known.servedFirst, out.firstSeq);
         known.servedLast = Math.max(known.servedLast, out.lastSeq());
-        return out.text();
+        known.lastPlaylist = out.text();
+        return known.lastPlaylist;
     }
 
     private static Playlist fetch(Source source, Media known, long deadline) {
@@ -512,7 +604,7 @@ public final class TwitchBackupStream {
      * rendition has no ads. [served] is the player's playlist with the ads, numbered as the player has it.
      */
     private static Source openBackup(Stream stream, Media known, Playlist served, long deadline) {
-        for (int attempt = 0; attempt < 2 && System.currentTimeMillis() < deadline; attempt++) {
+        for (int attempt = 0; attempt < 2 && TwitchRequest.active() && TwitchRequest.now() < deadline; attempt++) {
             String masterUrl = newToken(stream, BACKUP_TYPE, deadline);
             String master = masterUrl == null ? null : http(masterUrl, null, deadline);
             if (master == null) continue;
@@ -729,10 +821,11 @@ public final class TwitchBackupStream {
          * playlist-wide date ranges (session, timestamp) move to the first segment kept.
          */
         Playlist trimmedBelow(long seq) {
-            if (segments.isEmpty() || segments.get(0).seq >= seq || segments.get(segments.size() - 1).seq < seq) {
+            if (firstSeq >= seq) {
                 return this;
             }
             Playlist out = copyHeader(seq, true);
+            if (segments.isEmpty() || lastSeq() < seq) out.trailer.clear();
             List<String> carried = new ArrayList<>();
             for (Segment s : segments) {
                 if (s.seq < seq) {
@@ -837,6 +930,7 @@ public final class TwitchBackupStream {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] chunk = new byte[16384];
         while (true) {
+            TwitchRequest.check();
             buffer.clear();
             int read;
             try {
@@ -845,10 +939,12 @@ public final class TwitchBackupStream {
                 if (e.getCause() instanceof IOException) throw (IOException) e.getCause();
                 throw e;
             }
+            TwitchRequest.check();
             if (read < 0) return out.toByteArray();
             buffer.flip();
             int n = buffer.remaining();
             buffer.get(chunk, 0, n);
+            if (n > TwitchRequest.MAX_BYTES - out.size()) throw new IOException("Twitch playlist too large");
             out.write(chunk, 0, n);
         }
     }
@@ -892,47 +988,12 @@ public final class TwitchBackupStream {
 
     /** GET [url], or POST [json] to GQL, within the time left before [deadline]. Null on any failure. */
     private static String http(String url, String json, long deadline) {
-        int timeout = (int) Math.min(TIMEOUT_MS, deadline - System.currentTimeMillis());
-        if (timeout <= 0) return null;
-        HttpURLConnection connection = null;
-        try {
-            connection = (HttpURLConnection) new URL(url).openConnection();
-            connection.setConnectTimeout(timeout);
-            connection.setReadTimeout(timeout);
-            if (json != null) {
-                connection.setRequestMethod("POST");
-                connection.setDoOutput(true);
-                connection.setRequestProperty("Client-ID", CLIENT_ID);
-                connection.setRequestProperty("Content-Type", "application/json");
-                try (OutputStream out = connection.getOutputStream()) {
-                    out.write(json.getBytes(StandardCharsets.UTF_8));
-                }
-            }
-            if (connection.getResponseCode() != 200) {
-                Logger.d("ads: " + connection.getURL().getHost() + " answered " + connection.getResponseCode());
-                return null;
-            }
-            try (InputStream in = connection.getInputStream()) {
-                return new String(readAll(in), StandardCharsets.UTF_8);
-            }
-        } catch (IOException | RuntimeException e) {
-            Logger.d("ads: playlist session request failed: " + e);
-            return null;
-        } finally {
-            if (connection != null) connection.disconnect();
-        }
-    }
-
-    private static byte[] readAll(InputStream in) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        byte[] chunk = new byte[16384];
-        for (int n; (n = in.read(chunk)) >= 0; ) out.write(chunk, 0, n);
-        return out.toByteArray();
+        return TwitchRequest.http(url, json, CLIENT_ID, deadline, () -> Settings.isEnabled(KEY));
     }
 
     private static byte[] gunzip(byte[] body) throws IOException {
         try (InputStream in = new GZIPInputStream(new ByteArrayInputStream(body))) {
-            return readAll(in);
+            return TwitchRequest.read(in);
         }
     }
 

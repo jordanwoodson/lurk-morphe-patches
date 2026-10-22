@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Run the Android gesture/overlay boundaries on ART, with isolated preferences.
+source "$(dirname "$0")/lib/common.sh"
+[[ $# -ge 1 && $# -le 2 && -f "$1" ]] || die "usage: bash bin/test-twitch-ui <patched.apk> [scenario]"
+serial=${ANDROID_SERIAL:-emulator-5580}
+out="$WORK/tests/twitch-ui"
+remote=/data/local/tmp/morphe-twitch-ui-test
+mkdir -p "$out/classes" "$out/dex" "$WORK/tmp"
+export TMPDIR="$WORK/tmp"
+javac --release 17 -classpath "$ANDROID_HOME/platforms/android-36/android.jar" \
+    -d "$out/classes" "$ROOT/tests/twitch/UiBoundaryProbe.java"
+"$(build_tool d8)" --min-api 29 --lib "$ANDROID_HOME/platforms/android-36/android.jar" \
+    --output "$out/dex" "$out/classes/"*.class
+(cd "$out/dex" && jar cf "$out/probe.jar" classes.dex)
+adb -s "$serial" shell mkdir -p "$remote"
+trap 'adb -s "$serial" shell rm -rf "$remote" >/dev/null 2>&1 || true' EXIT
+adb -s "$serial" push "$1" "$remote/app.apk" >/dev/null
+adb -s "$serial" push "$out/probe.jar" "$remote/probe.jar" >/dev/null
+failures=0
+for scenario in ${2:-overlay-navigation overlay-recreated overlay-channel overlay-off overlay-owner overlay-portrait-owner overlay-blocked overlay-unicode overlay-lifecycle gesture-off gesture-pointer gesture-cancel gesture-boundaries gesture-brightness}; do
+    case "$scenario" in overlay-navigation|overlay-recreated|overlay-channel|overlay-off|overlay-owner|overlay-portrait-owner|overlay-blocked|overlay-unicode|overlay-lifecycle|gesture-off|gesture-pointer|gesture-cancel|gesture-boundaries|gesture-brightness) ;; *) die "unknown scenario: $scenario" ;; esac
+    adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin UiBoundaryProbe $scenario" || failures=$((failures + 1))
+done
+[[ $failures == 0 ]]

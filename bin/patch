@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Build the bundle and patch an app with it. The patched APK goes to $WORK/out/.
-# Usage: bin/patch <app> [version] [--no-build] [--install[=SERIAL]] [-- <morphe patch options>]
+# Usage: bin/patch <app> [version] [--no-build] [--abi=ABI] [--install[=SERIAL]] [-- <morphe patch options>]
 # Morphe options, for example: -e "Patch name" (enable), -d "Patch name" (disable), --exclusive, -f
+# --abi picks the stored variant of the version with native libraries for that ABI (arm64-v8a for
+# the phone, x86_64 for the emulator). Installing to an emulator-* serial picks x86_64 by itself when
+# such a variant is stored; otherwise the emulator runs ARM code through its translation layer.
 source "$(dirname "$0")/lib/common.sh"
 
-slug="" version="" build=1 install=() extra=()
+slug="" version="" build=1 abi="" install=() extra=()
 while (($#)); do
     case "$1" in
         --no-build) build="" ;;
+        --abi=*) abi="${1#--abi=}" ;;
         --install) install=(--install) ;;
         --install=*) install=("--install=${1#--install=}") ;;
         --) shift; extra=("$@"); break ;;
@@ -16,10 +20,23 @@ while (($#)); do
     esac
     shift
 done
-[[ -n "$slug" ]] || die "usage: bin/patch <app> [version] [--no-build] [--install[=SERIAL]] [-- <morphe options>]"
+[[ -n "$slug" ]] || die "usage: bin/patch <app> [version] [--no-build] [--abi=ABI] [--install[=SERIAL]] [-- <morphe options>]"
 [[ -f "$MORPHE_DESKTOP_JAR" ]] || die "Morphe Desktop missing: run bin/bootstrap"
 version="$(app_version "$slug" "$version")"
-input="$(app_input "$slug" "$version")"
+default_input="$(app_input "$slug" "$version")"
+input="$default_input"
+if [[ -n "$abi" ]]; then
+    input="$(app_input "$slug" "$version" "$abi")" ||
+        die "no stored $slug $version file with $abi libraries (bin/apk-info $slug lists the variants)"
+elif [[ "${install[0]:-}" == --install=emulator-* ]]; then
+    if ! input="$(app_input "$slug" "$version" x86_64)"; then
+        input="$default_input"
+        note "no x86_64 variant of $slug $version stored: the emulator will run $(basename "$input") through ARM translation (bin/apk-add one from APKMirror or Uptodown to avoid that)"
+    fi
+fi
+# A variant chosen by ABI gets its own output name, so the phone's and the emulator's builds coexist.
+out="$WORK/out/$slug-$version-patched.apk"
+[[ "$input" == "$default_input" ]] || out="$WORK/out/$slug-$version-$(apk_py abis "$input" | tr ' ' '+')-patched.apk"
 
 if [[ -n "$build" ]]; then
     mpp="$("$ROOT/bin/build")"
@@ -29,8 +46,14 @@ else
 fi
 
 mkdir -p "$WORK/out" "$WORK/tmp" "$MORPHE_DATA_DIR"
-out="$WORK/out/$slug-$version-patched.apk"
+# Morphe extracts APKM components beside its input even with -t. Isolate both
+# that extraction and its explicit temporary files, including overlapping runs.
+run="$(mktemp -d "$WORK/tmp/patch.XXXXXXXX")"
+trap 'rm -rf "$run"' EXIT
+mkdir -p "$run/input" "$run/tmp"
+staged="$run/input/$(basename "$input")"
+cp "$input" "$staged"
 note "patching $(basename "$input") with $(basename "$mpp")"
 java -jar "$MORPHE_DESKTOP_JAR" patch "${install[@]}" \
-    -p "$mpp" -o "$out" -t "$WORK/tmp" "${extra[@]}" "$input"
+    -p "$mpp" -o "$out" -t "$run/tmp" "${extra[@]}" "$staged"
 echo "$out"

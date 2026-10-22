@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Native catalog validation on ART, using the actual patched APK's class.
+source "$(dirname "$0")/lib/common.sh"
+[[ $# == 1 && -f "$1" ]] || die "usage: bin/test-kick-catalog <patched.apk>"
+serial=${ANDROID_SERIAL:-emulator-5580}
+out="$WORK/tests/kick-catalog"
+remote=/data/local/tmp/lurk-kick-catalog-test
+mkdir -p "$out/classes" "$out/dex" "$WORK/tmp"
+export TMPDIR="$WORK/tmp"
+javac --release 11 -classpath "$ANDROID_HOME/platforms/android-36/android.jar" -d "$out/classes" "$ROOT/tests/kick/CatalogProbe.java"
+"$(build_tool d8)" --min-api 26 --output "$out/dex" "$out"/classes/*.class
+(cd "$out/dex" && jar cf "$out/probe.jar" classes.dex)
+adb -s "$serial" shell mkdir -p "$remote"
+trap 'adb -s "$serial" shell rm -rf "$remote" >/dev/null 2>&1 || true' EXIT
+adb -s "$serial" push "$1" "$remote/app.apk" >/dev/null
+adb -s "$serial" push "$out/probe.jar" "$remote/probe.jar" >/dev/null
+result=$(adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin CatalogProbe")
+printf '%s\n' "$result"
+[[ "$result" == *"PASS: native catalog"* ]] || die "catalog probe did not pass"

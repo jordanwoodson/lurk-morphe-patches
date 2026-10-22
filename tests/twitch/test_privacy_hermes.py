@@ -14,12 +14,13 @@ from io import BytesIO
 import json
 from pathlib import Path
 import re
+import struct
 from zipfile import is_zipfile, ZipFile
 
 from hermes_dec.parsers.hbc_bytecode_parser import parse_hbc_bytecode
 from hermes_dec.parsers.hbc_file_parser import HBCReader
 
-STOCK_SHA256 = "50e73cce33e67272f9eb9a38b8d8e6f1ecd06ceccf4b88cc9dbc091743493fc9"
+STOCK_SHA256 = "928f89c5766562e9cb266485282e90c058dd7947f73c9bcafa1d0fc626debf5e"
 
 
 def footer(data):
@@ -46,7 +47,12 @@ def verify(stock, embedded, manifest):
     assert manifest["format"] == 1 and manifest["version"] == 98, "Unexpected manifest format"
     assert manifest["sourceSha256"] == STOCK_SHA256, "Manifest source differs"
     assert sha256(embedded).hexdigest() == manifest["embeddedSha256"], "Embedded hash differs"
-    assert len(embedded) == len(stock), "Bundle length changed"
+    append = manifest.get("append")
+    if append:
+        from verify_delayed_hermes import verify as verify_append
+        verify_append(stock, embedded, manifest)
+    else:
+        assert len(embedded) == len(stock), "Bundle length changed without append manifest"
     assert footer(embedded) == embedded, "Invalid embedded SHA-1 footer"
     edits = manifest["edits"]
     assert edits, "No registered edits"
@@ -65,6 +71,10 @@ def verify(stock, embedded, manifest):
         assert type(edit["default"]) is bool, "Default is not a boolean"
         if edit["default"]:
             expected[offset:previous_end] = replacement
+    if append:
+        expected = expected[:-20] + bytes.fromhex(append["tail"]) + bytes(20)
+        expected[append["headerOffset"]:append["headerOffset"]+12] = bytes.fromhex(append["replacementHeader"])
+        struct.pack_into('<I',expected,32,len(expected))
     assert footer(expected) == embedded, "Embedded content differs outside declared edits"
 
     reader = HBCReader()
@@ -79,6 +89,8 @@ def verify(stock, embedded, manifest):
         affected.add(owners[0])
 
     keys = sorted({edit["key"] for edit in edits})
+    if append and append["key"] not in keys:
+        keys.append(append["key"])
     # All off, all on, and each toggle alone must remain valid independently.
     states = [set(), set(keys)] + [{key} for key in keys]
     for enabled in states:
@@ -86,6 +98,10 @@ def verify(stock, embedded, manifest):
         for edit in edits:
             value = bytes.fromhex(edit["replacement"] if edit["key"] in enabled else edit["original"])
             selected[edit["offset"]:edit["offset"] + len(value)] = value
+        if append and append["key"] not in enabled:
+            selected = selected[:append["originalLength"]]
+            selected[append["headerOffset"]:append["headerOffset"]+12] = bytes.fromhex(append["originalHeader"])
+            struct.pack_into('<I',selected,32,len(selected))
         selected = footer(selected)
         if not enabled:
             assert selected == stock, "All-off failed to restore stock byte for byte"
@@ -106,7 +122,7 @@ def verify(stock, embedded, manifest):
     assert names == {"enqueue", "flush"}
 
     print(f"PASS: {len(edits)} edits in {len(affected)} functions; {len(keys)} independent settings; "
-          "all-off exact restoration, unchanged layout, valid instruction boundaries and branches")
+          "all-off exact restoration, declared layout, valid instruction boundaries and branches")
 
 
 if __name__ == "__main__":

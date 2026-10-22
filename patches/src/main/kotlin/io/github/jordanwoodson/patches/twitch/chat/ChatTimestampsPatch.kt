@@ -22,7 +22,7 @@ val chatTimestampsPatch = bytecodePatch(
         "it on chat history, in 24-hour or 12-hour format. Whispers are unchanged.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
-    dependsOn(twitchSettingsPatch)
+    dependsOn(twitchRNChatPatch, twitchSettingsPatch)
     execute {
         showTimeOnLiveMessages()
         chooseTimeFormat()

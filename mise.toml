@@ -6,4 +6,6 @@
 # Kick is React Native: its logic is Hermes bytecode in assets/index.android.bundle.
 "pipx:hermes-dec" = "0.1.7"
 # bin/app-icon runs its Python image tools (Pillow, NumPy, potrace) through uv.
-uv = "0.13.0"
+uv = "0.13.1"
+# Official no-bin packages; bin/lib/compile-hermes.py resolves their platform executable.
+"npm:hermes-compiler" = ["250829098.0.19", "260318099.0.4"]

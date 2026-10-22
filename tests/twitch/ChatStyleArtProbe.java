@@ -17,9 +17,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Version-pinned integration test for Chat keywords and Chat appearance: Twitch 31.6.0's real chat line builder
+ * Version-pinned integration test for Chat keywords and Chat appearance: Twitch 31.7.0's real chat line builder
  * (with the emitted hooks) and live message models, run on ART with a fake settings store and a fake signed-in
  * account. Each setting is checked on and off; off must give Twitch's own line.
+ * The short class and field names below are Twitch 31.7.0's R8 output.
  */
 public final class ChatStyleArtProbe {
     private static final Map<String, Object> settings = new HashMap<>();
@@ -75,35 +76,35 @@ public final class ChatStyleArtProbe {
 
     /** A config (click configuration) for channel chat or a whisper thread. */
     private static Object config(String source) throws Exception {
-        return Class.forName("rb6").getConstructors()[0].newInstance(true, Class.forName("yt90").getField(source).get(null), null);
+        return Class.forName("cc6").getConstructors()[0].newInstance(true, Class.forName("vz90").getField(source).get(null), null);
     }
 
     private static Object sender(String login) throws Exception {
         Class<?> tuid = Class.forName("tv.twitch.android.models.Tuid");
-        return Class.forName("sb6").getConstructor(tuid, String.class, String.class)
+        return Class.forName("dc6").getConstructor(tuid, String.class, String.class)
             .newInstance(null, login, Character.toUpperCase(login.charAt(0)) + login.substring(1));
     }
 
     private static List<Object> tokens(String text) throws Exception {
-        return Collections.singletonList(Class.forName("cxp").getConstructor(String.class).newInstance(text));
+        return Collections.singletonList(Class.forName("dyp").getConstructor(String.class).newInstance(text));
     }
 
-    /** Twitch's line builder (za6.b) for one message; returns its span group (ab6). */
+    /** Twitch's line builder (kb6.b) for one message; returns its span group (lb6). */
     private static Object line(String login, String text, String id, boolean action, String source) throws Exception {
         Method build = null;
-        for (Method method : Class.forName("za6").getDeclaredMethods()) {
+        for (Method method : Class.forName("kb6").getDeclaredMethods()) {
             if (method.getName().equals("b") && method.getParameterTypes().length == 21) build = method;
         }
         check(build != null, "No line builder");
-        Object style = staticField(action ? "h040" : "i040", "b");
+        Object style = staticField(action ? "r340" : "s340", "c");
         // Overlay mode (second to last): no reply header or readable-colour lookups.
-        Object builder = allocate("za6");
+        Object builder = allocate("kb6");
         Field colors = builder.getClass().getDeclaredField("e");
         colors.setAccessible(true);
-        Object readable = allocate("udz");
-        Field contrast = readable.getClass().getDeclaredField("b");
+        Object readable = allocate("x5r");
+        Field contrast = readable.getClass().getDeclaredField("a");
         contrast.setAccessible(true);
-        contrast.set(readable, allocate("cnw"));
+        contrast.set(readable, allocate("uow"));
         colors.set(builder, readable);
         // A near-white sender colour: readable on the overlay's black, so no colour is computed.
         return build.invoke(null, builder, context, Collections.emptyList(), sender(login), 0xFFFEFEFE, tokens(text),

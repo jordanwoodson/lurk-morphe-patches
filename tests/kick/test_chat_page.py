@@ -8,9 +8,10 @@ https://chat.mobile.kick.com shaped like Kick's (the #app message list, its mess
 elements; none of Kick's code), plus fixed Kick and 7TV responses. Checks the host guard, running once per page,
 hidden highlight lines, ignored clears, 7TV words in existing and new messages (channel over global, exact words
 only, links and Kick emotes untouched), the owner lookup, and that no request carries a referrer or cookies.
-The Chrome profile lives under $MORPHE_WORK (default ~/scratch/morphe) and is removed.
+The Chrome profile lives under $MORPHE_WORK (default ~/build/lurk-morphe-patches) and is removed.
 """
 import asyncio
+import argparse
 import base64
 import json
 import os
@@ -38,12 +39,12 @@ PIXEL = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQV
 JSON_RESPONSES = {
     "https://kick.com/api/v2/channels/xqc": {"id": 668, "slug": "xqc", "user_id": 676},
     "https://7tv.io/v3/users/kick/676": {"emote_set": {"emotes": [
-        {"id": "01CHANNEL0000000000000OMEGA", "name": "OMEGALUL"},
-        {"id": "01CHANNEL00000000000000SHARE", "name": "shared"},
+        {"id": "111111111111111111111111", "name": "OMEGALUL"},
+        {"id": "222222222222222222222222", "name": "shared"},
     ]}},
     "https://7tv.io/v3/emote-sets/global": {"emotes": [
-        {"id": "01GLOBAL000000000000000000EZ", "name": "EZ"},
-        {"id": "01GLOBAL0000000000000000SHARE", "name": "shared"},
+        {"id": "333333333333333333333333", "name": "EZ"},
+        {"id": "444444444444444444444444", "name": "shared"},
         {"name": "no id"},
     ]},
 }
@@ -134,6 +135,7 @@ def check(condition, what):
 
 
 async def scenario(page):
+    page.requests.clear()
     await page.call("Page.enable")
     await page.call("Fetch.enable", patterns=[{"urlPattern": "*"}])
 
@@ -162,15 +164,15 @@ async def scenario(page):
     seven = "https://cdn.7tv.app/emote/"
     check(content == [
         "text:hi ",
-        f"IMG:OMEGALUL:{seven}01CHANNEL0000000000000OMEGA/2x.webp:emote:no-referrer",
+        f"IMG:OMEGALUL:{seven}111111111111111111111111/2x.webp:emote:no-referrer",
         "text: ",
-        f"IMG:EZ:{seven}01GLOBAL000000000000000000EZ/2x.webp:emote:no-referrer",
+        f"IMG:EZ:{seven}333333333333333333333333/2x.webp:emote:no-referrer",
         "text: ",
-        f"IMG:shared:{seven}01CHANNEL00000000000000SHARE/2x.webp:emote:no-referrer",
+        f"IMG:shared:{seven}222222222222222222222222/2x.webp:emote:no-referrer",
         "text: LUL, ok",
         "SPAN:link:https://example.com/OMEGALUL",
         "text: ",
-        f"IMG:EZ:{seven}01GLOBAL000000000000000000EZ/2x.webp:emote:no-referrer",
+        f"IMG:EZ:{seven}333333333333333333333333/2x.webp:emote:no-referrer",
         "IMG:kick:https://files.kick.com/emotes/1/fullsize:emote:",
     ], "existing message: exact words become 7TV images, channel over global; links and Kick emotes stay")
 
@@ -192,7 +194,9 @@ async def scenario(page):
     # Control: the page's own fetches do send one, so the check above can see it.
     page.requests.clear()
     await page.eval("fetch('https://7tv.io/v3/emote-sets/global').then(r => r.status)")
-    check(any(k.lower() == "referer" for k in page.requests[0]["headers"]), "control: a default fetch has a referrer")
+    # Outstanding image requests can arrive after clear(); identify the control fetch itself.
+    control = next(r for r in page.requests if r["url"] == "https://7tv.io/v3/emote-sets/global")
+    check(any(k.lower() == "referer" for k in control["headers"]), "control: a default fetch has a referrer")
 
     page.requests.clear()
     await page.go(PAGE)
@@ -210,8 +214,140 @@ async def scenario(page):
     check(not page.unexpected, "no other requests: " + ", ".join(page.unexpected))
 
 
+async def resilient_scenario(page):
+    await page.call("Page.enable")
+    await page.call("Fetch.enable", patterns=[{"urlPattern": "*"}])
+    # A hung owner must not hold the independently successful global catalog hostage.
+    await page.go(PAGE)
+    await page.eval("""window.fetch = ((original) => (url, opts) => url.includes('/channels/')
+        ? new Promise(() => {}) : original(url, opts))(window.fetch);
+        window.WebSocket = class { close() {} };""")
+    await page.apply({"sevenTv": True, "sevenTvChannel": "xqc"})
+    await page.until("document.querySelector('img[alt=EZ]')")
+    check(True, "successful globals render while owner request never settles")
+
+    await page.go(PAGE)
+    await page.eval("""window.events = [];
+        window.ReactNativeWebView = {postMessage: s => events.push(JSON.parse(s))};
+        window.WebSocket = class {
+            constructor(url) { this.url=url; window.socket=this; this.sent=[]; setTimeout(()=>this.onopen(),0); }
+            send(s) { this.sent.push(JSON.parse(s)); }
+            close() { this.closed=true; if(this.onclose) this.onclose(); }
+        };
+        window.liveSet = {id:'555555555555555555555555', emotes:[
+            {id:'333333333333333333333333',name:'EZ'},
+            {id:'666666666666666666666666',name:'hat',flags:1},
+            {id:'777777777777777777777777',name:'spark',data:{flags:256}}
+        ]};
+        window.fetch = (url, opts) => Promise.resolve(new Response(JSON.stringify(liveSet),{status:200}));
+        document.querySelector('.message-content').textContent = 'EZ hat spark | hat EZ\\nhat EZ link hat';""")
+    await page.eval("""const nativeMessage = document.createElement('span'); nativeMessage.className='message-content';
+        nativeMessage.innerHTML='<img class="emote" id="native-base" src="https://files.kick.com/emotes/1/fullsize"> hat';
+        window.nativeClicks=0; nativeMessage.firstChild.addEventListener('click',()=>nativeClicks++);
+        document.getElementById('app').appendChild(nativeMessage);""")
+    await page.apply({"sevenTv": True, "generation": "document-one", "channelId": "668"})
+    await page.until("document.querySelector('[data-lurk-layer]')")
+    check(await page.eval("document.querySelector('[data-lurk-layer]').querySelectorAll('img').length") == 3,
+          "active-set and emote-data zero-width flags layer in order")
+    check(await page.eval("document.querySelectorAll('[data-lurk-layer]').length") == 2,
+          "standalone overlays and newline/text boundaries do not attach to unrelated bases")
+    check(await page.eval("socket.sent[0].d.condition.object_id") == '555555555555555555555555',
+          "EventAPI subscription is limited to the active set")
+    check(await page.eval("events[events.length-1].emotes.length") == 3,
+          "catalog crosses the existing WebView bridge without draft or message data")
+    await page.eval("""liveSet.emotes = [{id:'333333333333333333333333',name:'hat'}];
+        socket.onmessage({data:JSON.stringify({op:0,s:1,d:{type:'emote_set.update',body:{id:liveSet.id}}})});""")
+    await page.until("document.querySelectorAll('img[data-lurk-emote]').length === 5")
+    check(await page.eval("document.querySelectorAll('[data-lurk-layer]').length") == 0,
+          "live removal unwraps old layers and re-renders existing words")
+    check(await page.eval("document.querySelector('.message-content').textContent.includes('EZ')"),
+          "removed emote becomes readable original text")
+    await page.eval("document.querySelector('img[data-lurk-emote]').dispatchEvent(new Event('error'))")
+    await asyncio.sleep(0.05)
+    check(await page.eval("document.querySelector('.message-content').firstElementChild === null"),
+          "failed image stays readable instead of observer retrying forever")
+    await page.eval("document.getElementById('native-base').click()")
+    check(await page.eval("nativeClicks") == 1, "native base image and its listener survive overlay refresh")
+    await page.eval("window.dispatchEvent(new Event('pagehide'))")
+    check(await page.eval("socket.closed"), "page teardown closes EventAPI")
+
+    # A page initially hidden has no set IDs to refetch when it becomes visible.
+    await page.go(PAGE)
+    await page.eval("""Object.defineProperty(document,'hidden',{configurable:true,value:true});
+        window.fetch=(url,opts)=>Promise.resolve(new Response(JSON.stringify({id:'555555555555555555555555',emotes:[
+            {id:'333333333333333333333333',name:'EZ',data:{animated:true}},
+            {id:'444444444444444444444444',name:'OMEGALUL',data:{animated:false}}
+        ]}),{status:200}));window.WebSocket=class {close(){}};""")
+    await page.apply({"sevenTv":True,"nonAnimatedEmotes":True})
+    await page.eval("Object.defineProperty(document,'hidden',{value:false});document.dispatchEvent(new Event('visibilitychange'))")
+    await page.until("document.querySelector('img[alt=EZ]')")
+    check(await page.eval("document.querySelector('img[alt=EZ]').src.endsWith('/2x_static.webp')"),
+          "visible resume loads missing catalog and animated emotes use a static filename")
+    check(await page.eval("document.querySelector('img[alt=OMEGALUL]').src.endsWith('/2x.webp')"),
+          "naturally static emotes keep their supported original filename")
+
+    # Header and body stalls share the same deadline, with exactly three transient attempts.
+    await page.go(PAGE)
+    await page.eval("""window.attempts=0; window.delays=[];
+        const timer=window.setTimeout;
+        window.setTimeout=(fn,ms,...args)=>{delays.push(ms);return timer(fn,ms/1000,...args);};
+        window.fetch=(url,opts)=>{
+            attempts++;
+            if(url.includes('/global')) return Promise.resolve(new Response(new ReadableStream({start(){}}),{status:200}));
+            return Promise.resolve(new Response('',{status:429,headers:{'Retry-After':'2'}}));
+        };""")
+    await page.apply({"sevenTv":True,"sevenTvUser":"676"})
+    await asyncio.sleep(0.15)
+    check(await page.eval("attempts") == 6, "body stall and 429 each stop after three attempts")
+    check(await page.eval("delays.includes(2000)"), "429 Retry-After is honored within the cap")
+    await page.eval("window.dispatchEvent(new Event('pagehide'))")
+    attempts = await page.eval("attempts")
+    await asyncio.sleep(0.05)
+    check(await page.eval("attempts") == attempts, "no work after teardown")
+
+
+async def native_scenario(page, captures):
+    """Run exactly the strings captured from production WebView.evaluateJavascript on ART."""
+    expected = {"full", "info", "unknown", "provider-off", "malformed", "provider-only",
+                "missing-config", "invalid-id", "clears-only", "subs-only", "hosts-only", "rewards-only"}
+    check(set(captures) == expected, "complete native capture scenarios")
+    for name, script in captures.items():
+        page.requests.clear()
+        await page.go(PAGE)
+        await page.eval(script)
+        single = name in ("clears-only", "subs-only", "hosts-only", "rewards-only")
+        provider = name != "provider-off" and not single
+        clears = name not in ("provider-only", "subs-only", "hosts-only", "rewards-only")
+        display = ["block", "none", "none", "none", "none"]
+        if name in ("provider-only", "clears-only"):
+            display = ["block"] * 5
+        elif single:
+            display = ["block"] * 5
+            for index in {"subs-only": [1, 2], "hosts-only": [3], "rewards-only": [4]}[name]:
+                display[index] = "none"
+        if provider:
+            expected_count = [0, 3] if name in ("unknown", "malformed", "missing-config", "invalid-id") else [2, 3]
+            await page.until("JSON.stringify(window.lurkChat.sevenTvCount) === " + json.dumps(json.dumps(expected_count, separators=(",", ":"))))
+            check(await page.eval("window.lurkChat.sevenTvCount") == expected_count,
+                  f"native {name}: actual response/config selects expected emotes")
+        else:
+            check(not any("7tv" in r["url"] for r in page.requests),
+                  f"native {name}: no provider requests")
+        hidden = await page.eval("Array.from(document.querySelectorAll('#app > div')).map(e => getComputedStyle(e).display)")
+        check(hidden == display,
+              f"native {name}: independent hide switches")
+        remaining = await page.eval("(() => {const app=document.getElementById('app'); app.innerHTML=''; return app.children.length;})()")
+        check(remaining == (5 if clears else 0), f"native {name}: independent clear switch")
+        check(not any(r["url"].startswith("https://kick.com/") for r in page.requests),
+              f"native {name}: known owner or globals require no owner lookup")
+    check(not page.unexpected, "native captures make no unexpected requests")
+
+
 async def main():
-    work = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe"))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--native-captures", type=Path, help="bin/test-kick-chat ART capture log")
+    args = parser.parse_args()
+    work = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches"))
     work.mkdir(parents=True, exist_ok=True)
     profile = Path(tempfile.mkdtemp(prefix="chat-page-", dir=work))
     with socket.socket() as s:
@@ -234,7 +370,16 @@ async def main():
             page = Page(ws)
             reader = asyncio.create_task(page.run())
             try:
+                await resilient_scenario(page)
                 await scenario(page)
+                if args.native_captures:
+                    captures = {}
+                    for line in args.native_captures.read_text().splitlines():
+                        if line.startswith("CAPTURE "):
+                            _, name, encoded = line.split()
+                            check(name not in captures, f"unique native capture {name}")
+                            captures[name] = base64.b64decode(encoded).decode()
+                    await native_scenario(page, captures)
             finally:
                 reader.cancel()
     finally:

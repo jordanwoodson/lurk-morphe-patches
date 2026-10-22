@@ -17,7 +17,7 @@ import java.util.Map;
 import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
 
-/** Selects verified, equal-length Hermes edits at process startup. No bytecode relocation or eval. */
+/** Selects verified Hermes edits and the bounded compiled predicate at process startup; no eval. */
 public final class TwitchBundle {
     private static Context context;
     private static String prepared;
@@ -50,6 +50,15 @@ public final class TwitchBundle {
                 if (!snapshot.containsKey(key)) snapshot.put(key, Settings.isEnabled(key));
                 if (snapshot.get(key) != edit.getBoolean("default")) defaults = false;
             }
+            JSONObject append = manifest.optJSONObject("append");
+            if (append != null) {
+                String key = append.getString("key");
+                if (!"chat_show_deleted".equals(key) || !append.getBoolean("default")) {
+                    throw new IllegalArgumentException("Unsupported predicate selection");
+                }
+                snapshot.put(key, Settings.isEnabled(key));
+                if (!snapshot.get(key)) defaults = false;
+            }
             File output = new File(context.getCodeCacheDir(), "lurk-twitch.hbc");
             if (defaults) {
                 // The embedded asset already has the patch-time defaults: don't copy 28 MB every start.
@@ -80,6 +89,25 @@ public final class TwitchBundle {
                 byte[] selected = snapshot.get(edit.getString("key")) ? replacement : original;
                 System.arraycopy(selected, 0, bundle, offset, selected.length);
                 previousEnd = offset + original.length;
+            }
+            if (append != null) {
+                int originalLength = append.getInt("originalLength");
+                int headerOffset = append.getInt("headerOffset");
+                byte[] originalHeader = unhex(append.getString("originalHeader"));
+                byte[] replacementHeader = unhex(append.getString("replacementHeader"));
+                byte[] tail = unhex(append.getString("tail"));
+                if (originalLength < 148 || originalLength > bundle.length || tail.length == 0 || tail.length > 2048 ||
+                        bundle.length != originalLength + tail.length || originalHeader.length != 12 || replacementHeader.length != 12 ||
+                        headerOffset < 128 || (headerOffset - 128) % 12 != 0 || headerOffset > originalLength - 32 ||
+                        !Arrays.equals(replacementHeader, Arrays.copyOfRange(bundle, headerOffset, headerOffset + 12)) ||
+                        !Arrays.equals(tail, Arrays.copyOfRange(bundle, originalLength - 20, bundle.length - 20))) {
+                    throw new IllegalArgumentException("Invalid appended predicate");
+                }
+                if (!snapshot.get("chat_show_deleted")) {
+                    bundle = Arrays.copyOf(bundle, originalLength);
+                    System.arraycopy(originalHeader, 0, bundle, headerOffset, 12);
+                    for (int i = 0; i < 4; i++) bundle[32 + i] = (byte) (originalLength >>> (8 * i));
+                }
             }
             MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
             sha1.update(bundle, 0, bundle.length - 20);

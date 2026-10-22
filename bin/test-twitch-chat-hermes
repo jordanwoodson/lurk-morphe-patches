@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""Validate the pinned Twitch chat owners and compiled predicate against a stock HBC98 asset."""
+from pathlib import Path
+import os
+import subprocess
+import sys
+
+repo = Path(__file__).resolve().parents[1]
+if len(sys.argv) != 2:
+    raise SystemExit("usage: bin/test-twitch-chat-hermes <stock-index.android.bundle>")
+stock = Path(sys.argv[1]).resolve()
+work = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "twitch-chat-hermes"
+work.mkdir(parents=True, exist_ok=True)
+libraries = sorted((Path.home() / ".gradle/wrapper/dists").glob("gradle-*/**/lib/kotlin-compiler-embeddable-*.jar"))
+if not libraries:
+    raise SystemExit("Use the repository's Gradle wrapper once to provide its existing Kotlin compiler")
+classpath = os.pathsep.join(map(str, libraries[-1].parent.glob("*.jar")))
+stub = work / "PatchException.kt"
+stub.write_text('package app.morphe.patcher.patch\nclass PatchException(message:String):RuntimeException(message)\n')
+shared = repo / "patches/src/main/kotlin/io/github/jordanwoodson/patches/twitch/shared"
+sources = [shared / name for name in ("Hermes.kt", "HermesPredicate.kt", "HermesMetro.kt")]
+sources += [repo / "tests/twitch/DelayedHermesProbe.kt", stub]
+java = str(Path(os.environ["JAVA_HOME"]) / "bin/java") if os.environ.get("JAVA_HOME") else "java"
+commands = [
+    [sys.executable, str(repo / "bin/lib/compile-hermes.py"), "98",
+     str(repo / "patches/src/main/runtime/twitch/delayed.js"), str(work / "delayed.hbc")],
+    [java, "-cp", classpath, "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect",
+     "-classpath", classpath, "-d", str(work / "probe.jar"), *map(str, sources)],
+    [java, "-cp", str(work / "probe.jar") + os.pathsep + classpath,
+     "io.github.jordanwoodson.patches.twitch.shared.DelayedHermesProbeKt", str(stock),
+     str(work / "delayed.hbc"), str(work / "main.hbc"), str(work / "main.json")],
+    [sys.executable, str(repo / "tests/twitch/verify_delayed_hermes.py"), str(stock),
+     str(work / "main.hbc"), str(work / "main.json")],
+]
+for command in commands:
+    result = subprocess.run(command)
+    if result.returncode:
+        raise SystemExit(result.returncode)

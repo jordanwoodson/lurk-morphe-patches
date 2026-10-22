@@ -128,7 +128,7 @@ def verify_countdown_control_flow(method):
             elif line.startswith('const/4 '):
                 register, value = line.removeprefix('const/4 ').split(', ')
                 registers[register] = int(value, 16)
-            elif 'BaseViewDelegate;->q(I)V' in line:
+            elif re.search(r'BaseViewDelegate;->\w+\(I\)V', line):
                 shown += 1
             elif 'ProgressBar;->setProgress(I)V' in line:
                 register = line.split('{')[1].split(',')[0].strip()
@@ -175,7 +175,8 @@ def main():
     assert manual_gate < animator
     assert '->dispose()V' in countdown[2][manual_gate:animator]
     assert 'return-void' in countdown[2][manual_gate:animator]
-    assert 'BaseViewDelegate;->q(I)V' in countdown[2][manual_gate:animator]
+    # The view delegate's setVisibility(int) is R8-renamed (q in 31.6.0, p in 31.7.0).
+    assert re.search(r'BaseViewDelegate;->\w+\(I\)V', countdown[2][manual_gate:animator])
     verify_countdown_control_flow(countdown)
 
     def quality_reader(m):

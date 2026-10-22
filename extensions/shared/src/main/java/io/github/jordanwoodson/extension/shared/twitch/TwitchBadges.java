@@ -40,8 +40,8 @@ public final class TwitchBadges {
     private static final String TUID = "tv.twitch.android.models.Tuid";
     private static final Badge[] NONE = new Badge[0];
 
-    private static final Provider FFZ = new Provider("FrankerFaceZ");
-    private static final Provider CHATTERINO = new Provider("Chatterino");
+    private static final Provider FFZ = new Provider("FrankerFaceZ", KEY_FFZ);
+    private static final Provider CHATTERINO = new Provider("Chatterino", KEY_CHATTERINO);
 
     static final String KEY_PRONOUNS = "badges_pronouns";
 
@@ -87,6 +87,27 @@ public final class TwitchBadges {
             Logger.d("badges: failed: " + e);
             return badges;
         }
+    }
+
+    /** Explicit RN scheduling, separated from the passive cache read below. */
+    static void requestRn(java.util.function.BooleanSupplier wanted) {
+        if (wanted == null || !wanted.getAsBoolean()) return;
+        if (Settings.isRegistered(KEY_FFZ) && Settings.isEnabled(KEY_FFZ)) FFZ.ensure(TwitchBadges::loadFfz,wanted);
+        if (Settings.isRegistered(KEY_CHATTERINO) && Settings.isEnabled(KEY_CHATTERINO)) CHATTERINO.ensure(TwitchBadges::loadChatterino,wanted);
+    }
+
+    static List<String[]> cachedRn(String userId) {
+        List<String[]> out = new ArrayList<>();
+        int id;
+        try { id = Integer.parseInt(userId); } catch (NumberFormatException e) { return out; }
+        if (id <= 0) return out;
+        for (Provider provider : new Provider[]{FFZ,CHATTERINO}) {
+            if (!Settings.isRegistered(provider.setting) || !Settings.isEnabled(provider.setting)) continue;
+            for (Badge badge : provider.badges) {
+                if (Arrays.binarySearch(badge.users,id) >= 0 && out.size() < 32) out.add(new String[]{badge.name,badge.url});
+            }
+        }
+        return out;
     }
 
     private static List add(List out, List badges, Badge[] provider, int id, Class<?> badgeClass)
@@ -348,29 +369,36 @@ public final class TwitchBadges {
     /** One provider's badge list with its expiry. */
     private static final class Provider {
         final String name;
+        final String setting;
         final AtomicBoolean loading = new AtomicBoolean();
         volatile Badge[] badges = NONE;
         volatile long expires;
+        TwitchThirdParty.Demand pending;
 
-        Provider(String name) {
+        Provider(String name, String setting) {
             this.name = name;
+            this.setting = setting;
         }
 
-        void ensure(Loader loader) {
+        void ensure(Loader loader) { ensure(loader,null); }
+
+        synchronized void ensure(Loader loader, java.util.function.BooleanSupplier wanted) {
             if (expires != 0 && SystemClock.elapsedRealtime() < expires) return;
-            if (!loading.compareAndSet(false, true)) return;
-            TwitchThirdParty.run(name + " badges", () -> {
+            if (pending != null) { pending.add(wanted); return; }
+            pending = new TwitchThirdParty.Demand(); pending.add(wanted);
+            TwitchThirdParty.Demand demand = pending;
+            loading.set(true);
+            TwitchThirdParty.run(name + " badges", () -> Settings.isEnabled(setting) && demand.getAsBoolean(), () -> {
                 try {
                     badges = loader.load();
+                    TwitchThirdParty.catalogChanged();
                     expires = SystemClock.elapsedRealtime() + TTL_MS;
                     Logger.d("badges: " + name + ": " + badges.length);
                 } catch (IOException | RuntimeException e) {
                     expires = SystemClock.elapsedRealtime() + RETRY_MS;
                     Logger.d("badges: " + name + " unavailable: " + e);
-                } finally {
-                    loading.set(false);
                 }
-            });
+            }, () -> { synchronized (this) { pending = null; loading.set(false); } });
         }
     }
 

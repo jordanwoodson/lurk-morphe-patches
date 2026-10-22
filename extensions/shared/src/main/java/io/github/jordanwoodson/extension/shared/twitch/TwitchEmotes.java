@@ -68,12 +68,15 @@ public final class TwitchEmotes {
     private static final ConcurrentHashMap<String, Entry> SETS = new ConcurrentHashMap<>();
     private static final Set<String> LOADING = ConcurrentHashMap.newKeySet();
     /** tag + provider emote ID -> width / height, for emotes that aren't square. */
-    private static final ConcurrentHashMap<String, Float> RATIOS = new ConcurrentHashMap<>();
+    private static final Map<String, Float> RATIOS = Collections.synchronizedMap(new LinkedHashMap<String, Float>() {
+        @Override protected boolean removeEldestEntry(Map.Entry<String, Float> eldest) { return size() > 8192; }
+    });
     /** Exact image URL (for instance a generated badge's data URI) -> width / height. */
     private static final ConcurrentHashMap<String, Float> URL_RATIOS = new ConcurrentHashMap<>();
     /** Bumped whenever a list changes, so cached views are rebuilt. */
     private static final AtomicInteger GENERATION = new AtomicInteger();
     private static final ConcurrentHashMap<String, Resolved> RESOLVED = new ConcurrentHashMap<>();
+    private static final Map<String, TwitchThirdParty.Demand> RN_REQUESTS = new HashMap<>();
     private static volatile Union union;
     private static volatile TokenTypes tokenTypes;
 
@@ -201,7 +204,7 @@ public final class TwitchEmotes {
      * the chat renders like Twitch emotes. Every other frame is returned unchanged, and quickly.
      */
     public static String rnFrame(String frame) {
-        if (frame == null || frame.length() < 2 || frame.charAt(0) != '@') return frame;
+        if (frame == null || frame.length() < 2 || (frame.charAt(0) != '@' && !frame.contains("\n@"))) return frame;
         try {
             int mask = enabledMask();
             if (mask == 0) return frame;
@@ -236,7 +239,9 @@ public final class TwitchEmotes {
         String room = tag(tags, "source-room-id");
         if (room == null || room.isEmpty()) room = tag(tags, "room-id");
         if (!isTwitchId(room)) return line;
-        Map<String, String> byCode = resolve(room, mask).byCode;
+        // RN row effects own requests. Socket ingress only consumes the shared cache, so
+        // queued work cannot outlive RN navigation by being mistaken for a native caller.
+        Map<String, String> byCode = cached(room, mask).byCode;
         return byCode.isEmpty() ? line : addEmotes(line, byCode);
     }
 
@@ -408,6 +413,26 @@ public final class TwitchEmotes {
     /** The emotes for {@code channel} under {@code mask}: channel sets first, then global, first code wins. */
     private static Resolved resolve(String channel, int mask) {
         ensure(channel, mask);
+        return cached(channel, mask);
+    }
+
+    /** Passive RN read: missing/expired entries do not schedule requests. */
+    static Map<String, String> cachedRn(String channel) {
+        return cached(channel, enabledMask()).byCode;
+    }
+
+    static int rnRevision() { return GENERATION.get() * 8 + enabledMask(); }
+
+    static void requestRn(String channel, java.util.function.BooleanSupplier wanted) {
+        if (!isTwitchId(channel) || wanted == null || !wanted.getAsBoolean()) return;
+        int mask = enabledMask();
+        for (int provider = 0; provider < KEYS.length; provider++) {
+            if ((mask & (1 << provider)) == 0 || !Settings.isRegistered(KEYS[provider])) continue;
+            ensure(provider,channel,wanted); ensure(provider,GLOBAL,wanted);
+        }
+    }
+
+    private static Resolved cached(String channel, int mask) {
         int generation = GENERATION.get();
         Resolved resolved = RESOLVED.get(channel);
         if (resolved != null && resolved.mask == mask && resolved.generation == generation) return resolved;
@@ -444,38 +469,51 @@ public final class TwitchEmotes {
         }
     }
 
-    private static void ensure(int provider, String scope) {
+    private static void ensure(int provider, String scope) { ensure(provider,scope,null); }
+
+    private static void ensure(int provider, String scope, java.util.function.BooleanSupplier wanted) {
         String key = key(provider, scope);
-        Entry entry = SETS.get(key);
-        if (entry != null && SystemClock.elapsedRealtime() < entry.expires) return;
-        if (!LOADING.add(key)) return;
-        TwitchThirdParty.run(key, () -> load(provider, scope, key));
+        TwitchThirdParty.Demand demand;
+        synchronized (RN_REQUESTS) {
+            Entry entry = SETS.get(key);
+            if (entry != null && SystemClock.elapsedRealtime() < entry.expires) return;
+            demand = RN_REQUESTS.get(key);
+            if (demand != null) { demand.add(wanted); return; }
+            demand = new TwitchThirdParty.Demand(); demand.add(wanted);
+            RN_REQUESTS.put(key,demand); LOADING.add(key);
+        }
+        TwitchThirdParty.Demand pending = demand;
+        TwitchThirdParty.run(key, () -> Settings.isEnabled(KEYS[provider]) && pending.getAsBoolean(),
+            () -> load(provider, scope, key), () -> {
+                synchronized (RN_REQUESTS) { RN_REQUESTS.remove(key); LOADING.remove(key); }
+            });
     }
 
     private static void load(int provider, String scope, String key) {
+        boolean global = GLOBAL.equals(scope);
         try {
-            boolean global = GLOBAL.equals(scope);
-            try {
-                Emote[] emotes = fetch(provider, global ? null : scope);
-                put(key, emotes, global ? GLOBAL_TTL_MS : CHANNEL_TTL_MS);
-                Logger.d("emotes: " + NAMES[provider] + " " + scope + ": " + emotes.length);
-            } catch (IOException | RuntimeException e) {
-                Entry old = SETS.get(key);
-                put(key, old != null ? old.emotes : NONE, RETRY_MS);
-                Logger.d("emotes: " + NAMES[provider] + " " + scope + " unavailable: " + e);
-            }
-        } finally {
-            LOADING.remove(key);
+            Emote[] emotes = fetch(provider, global ? null : scope);
+            put(key, emotes, global ? GLOBAL_TTL_MS : CHANNEL_TTL_MS);
+            Logger.d("emotes: " + NAMES[provider] + " " + scope + ": " + emotes.length);
+        } catch (IOException | RuntimeException e) {
+            Entry old = SETS.get(key);
+            put(key, old != null ? old.emotes : NONE, RETRY_MS);
+            Logger.d("emotes: " + NAMES[provider] + " " + scope + " unavailable: " + e);
         }
     }
 
-    private static void put(String key, Emote[] emotes, long ttl) {
+    private static synchronized void put(String key, Emote[] emotes, long ttl) {
         long now = SystemClock.elapsedRealtime();
-        if (SETS.size() > (MAX_CHANNELS + 1) * KEYS.length) {
-            for (Iterator<Map.Entry<String, Entry>> it = SETS.entrySet().iterator(); it.hasNext(); ) {
-                Map.Entry<String, Entry> old = it.next();
-                if (old.getValue().expires < now && !old.getKey().endsWith(":" + GLOBAL)) it.remove();
+        int limit = (MAX_CHANNELS + 1) * KEYS.length;
+        while (!SETS.containsKey(key) && SETS.size() >= limit) {
+            String oldest = null; long expiry = Long.MAX_VALUE;
+            for (Map.Entry<String,Entry> entry : SETS.entrySet()) {
+                if (!entry.getKey().endsWith(":" + GLOBAL) && entry.getValue().expires <= expiry) {
+                    oldest = entry.getKey(); expiry = entry.getValue().expires;
+                }
             }
+            if (oldest == null) break;
+            SETS.remove(oldest);
         }
         SETS.put(key, new Entry(emotes, now + ttl));
         GENERATION.incrementAndGet();
@@ -856,7 +894,7 @@ public final class TwitchEmotes {
         Resolved(int mask, int generation, Map<String, String> byCode) {
             this.mask = mask;
             this.generation = generation;
-            this.byCode = byCode;
+            this.byCode = java.util.Collections.unmodifiableMap(byCode);
         }
 
         /** The emotes as Twitch emote objects of {@code type}, owned by {@code channel}. */

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Drive the test emulator from the shell: the screen as text, tap by text, wait, open, launch, log.
+# Usage: bin/ui <command> ... (bin/ui --help lists them). Honors ANDROID_SERIAL (default emulator-5580).
+source "$(dirname "$0")/lib/common.sh"
+export MORPHE_WORK="$WORK"
+exec python3 -I "$ROOT/bin/lib/ui.py" "$@"

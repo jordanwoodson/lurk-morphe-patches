@@ -91,13 +91,16 @@ public final class RumbleChat {
      * chat rows. The same list instance while nothing is hidden.
      */
     public static List<?> messages(List<?> messages, Object dto) {
-        if (messages == null || messages.isEmpty() || dto == null) return messages;
+        if (dto == null) return messages;
         try {
+            // Joining can carry users with no history, or while keywords are off. Learn the account
+            // independently of filtering so a later mention can use it without another users update.
+            Map<Long, String> names = userNames(dto);
+            if (messages == null || messages.isEmpty()) return messages;
             boolean raids = on(HIDE_RAIDS);
             boolean gifts = on(HIDE_GIFTS);
             boolean keywords = on(ChatFilter.KEY);
             if (!raids && !gifts && !keywords) return messages;
-            Map<Long, String> names = keywords ? userNames(dto) : null;
             ChatFilter.Lists lists = keywords ? ChatFilter.lists(self, "") : null;
             String settings = raids + "," + gifts + "," + System.identityHashCode(lists);
             synchronized (FILTERED) {
@@ -150,7 +153,7 @@ public final class RumbleChat {
      * The senders' names of a DTO's messages by user ID, from its users list. Learns the signed-in user's name
      * when the list has it.
      */
-    private static Map<Long, String> userNames(Object dto) throws ReflectiveOperationException {
+    private static synchronized Map<Long, String> userNames(Object dto) throws ReflectiveOperationException {
         Map<Long, String> names = new HashMap<>();
         Object users = read(dto, "users");
         if (!(users instanceof List)) return names;
@@ -161,7 +164,8 @@ public final class RumbleChat {
             Object name = read(user, "userName");
             if (!(id instanceof Long) || !(name instanceof String)) continue;
             names.put((Long) id, (String) name);
-            if (current != null && current.equals("_u" + Long.toString((Long) id, 36))) {
+            if (current != null && current.equals(currentUserId)
+                    && current.equals("_u" + Long.toString((Long) id, 36))) {
                 self = ((String) name).trim().toLowerCase(Locale.ROOT);
             }
         }
@@ -172,7 +176,7 @@ public final class RumbleChat {
     // Chat keywords
 
     /** Injection point: the start of the live chat event mapper, with the signed-in user's chat ID. */
-    public static void currentUserId(String id) {
+    public static synchronized void currentUserId(String id) {
         String previous = currentUserId;
         String current = id == null || id.isEmpty() ? null : id;
         if (current == null ? previous != null : !current.equals(previous)) {

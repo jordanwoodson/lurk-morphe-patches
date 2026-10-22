@@ -34,3 +34,31 @@ tasks {
         mainClass.set("util.PatchListGeneratorKt")
     }
 }
+
+// Compile committed sources at build time. No generated HBC is kept in the checkout.
+val compiledHermes = layout.buildDirectory.dir("generated/compiledHermes")
+val compileHermes = tasks.register("compileHermes") {
+    inputs.files(fileTree("src/main/runtime") { include("**/*.js") })
+    inputs.file(rootProject.file("bin/lib/compile-hermes.py"))
+    inputs.file(rootProject.file("mise.toml"))
+    outputs.dir(compiledHermes)
+    doLast {
+        delete(compiledHermes)
+        fileTree("src/main/runtime").matching { include("**/*.js") }.files.sorted().forEach { source ->
+            val relative = source.relativeTo(file("src/main/runtime"))
+            val family = when (relative.invariantSeparatorsPath.substringBefore('/')) {
+                "kick" -> "99"
+                "twitch" -> "98"
+                else -> error("Unknown Hermes runtime family: $relative")
+            }
+            val output = compiledHermes.get().file(relative.invariantSeparatorsPath.removeSuffix(".js") + ".hbc").asFile
+            providers.exec {
+                commandLine("python3", rootProject.file("bin/lib/compile-hermes.py"), family, source, output)
+            }.result.get().assertNormalExitValue()
+        }
+    }
+}
+tasks.named<ProcessResources>("processResources") {
+    dependsOn(compileHermes)
+    from(compiledHermes)
+}

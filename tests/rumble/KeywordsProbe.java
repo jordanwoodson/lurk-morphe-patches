@@ -31,6 +31,30 @@ public final class KeywordsProbe {
         ProbeSupport.set(init, "users", users);
         Method history = initType.getMethod("f"); // Locator for 3.21.0: the history messages getter.
 
+        Object modifier = modifierCompanion();
+        Method highlight = Class.forName(CHAT).getMethod("highlight", Object.class, Object.class);
+        List<Object> empty = new ArrayList<>();
+        ProbeSupport.set(init, "messages", empty);
+        ProbeSupport.check(history.invoke(init) == empty, "empty history keeps its list");
+        ProbeSupport.check(highlight.invoke(null, modifier, entity("viewer", "hi @Lurker")) != modifier,
+                "empty join learns the signed-in identity");
+
+        // An account change clears the name immediately; keywords-off joining must still learn users.
+        currentUserId.invoke(null, "_u" + Long.toString(43, 36));
+        ProbeSupport.check(highlight.invoke(null, modifier, entity("viewer", "hi @Lurker")) == modifier,
+                "account transition clears the previous identity");
+        ProbeSupport.setting("chat_keywords", "false");
+        ProbeSupport.set(init, "users", List.of(user(42, "Lurker"), user(43, "Second")));
+        ProbeSupport.set(init, "messages", messages);
+        ProbeSupport.check(history.invoke(init) == messages, "keywords-off join keeps its messages");
+        ProbeSupport.setting("chat_keywords", "true");
+        ProbeSupport.check(highlight.invoke(null, modifier, entity("viewer", "hi @Second")) != modifier,
+                "keywords-off join learns the new account");
+        ProbeSupport.check(highlight.invoke(null, modifier, entity("viewer", "hi @Lurker")) == modifier,
+                "previous account no longer receives mention highlights");
+        currentUserId.invoke(null, "_u" + Long.toString(42, 36));
+        ProbeSupport.set(init, "users", users);
+
         // On by default with empty lists: nothing hidden.
         ProbeSupport.check(history.invoke(init) == messages, "empty lists hide nothing");
         ProbeSupport.setting("chat_blocked_words", "spam");
@@ -41,8 +65,6 @@ public final class KeywordsProbe {
         ProbeSupport.setting("chat_keywords", "true");
 
         // Highlights, on a real entity (locator Ke.l: d = userName, f = message) and Compose's Modifier.
-        Object modifier = modifierCompanion();
-        Method highlight = Class.forName(CHAT).getMethod("highlight", Object.class, Object.class);
         ProbeSupport.check(highlight.invoke(null, modifier, entity("viewer", "hello there")) == modifier,
                 "a plain message keeps Rumble's modifier");
         Object mention = highlight.invoke(null, modifier, entity("viewer", "hi @Lurker how are you"));

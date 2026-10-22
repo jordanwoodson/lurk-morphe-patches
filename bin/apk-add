@@ -38,7 +38,7 @@ case "$(apk_py pin "$constants" "$digest")" in
     *) note "${constants#"$ROOT"/} has no 'signatures = null,' line to fill; cert is $digest" ;;
 esac
 
-dest="$ROOT/apks/$slug/$version"
+dest="$APKS/$slug/$version"
 mkdir -p "$dest"
 if [[ "$(cd "$(dirname "$file")" && pwd)" == "$dest" ]]; then
     note "already stored there"
@@ -48,5 +48,8 @@ else
     mv "$file" "$dest/"
 fi
 note "$package $version ($version_code) stored as apks/$slug/$version/$(basename "$file")"
+note "variant: $(apk_py variant "$dest/$(basename "$file")")"
+(( $(app_inputs "$slug" "$version" | wc -l) > 1 )) &&
+    note "several variants of $version are stored; bin/patch --abi=... picks one (emulator installs take x86_64 by themselves)"
 grep -q "\"$version\"" "$constants" ||
     note "Constants.kt targets don't list $version yet: update them once patches are tested on it"

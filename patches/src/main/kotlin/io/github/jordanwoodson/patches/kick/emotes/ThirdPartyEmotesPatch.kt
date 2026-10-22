@@ -27,12 +27,12 @@ private val OKHTTP_API = mapOf(
 @Suppress("unused")
 val thirdPartyEmotesPatch = bytecodePatch(
     name = "Third-party emotes",
-    description = "Adds a switch that shows the channel's 7TV emotes, and 7TV's global emotes, in live chat. When " +
-        "on, it sends the channel owner's Kick user ID to 7tv.io and loads emote images from cdn.7tv.app. Not in " +
-        "the emote picker or autocomplete. Starts off. Turn it on in Lurk settings > Chat.",
+    description = "Adds optional 7TV emotes to chat, the native picker and autocomplete, with zero-width layers " +
+        "and live set updates. Sends the channel owner's Kick user ID to 7tv.io, subscribes to set IDs at " +
+        "events.7tv.io and loads images from cdn.7tv.app. Starts off. Turn it on in Lurk settings > Chat.",
 ) {
     compatibleWith(COMPATIBILITY_KICK)
-    dependsOn(kickChatPagePatch)
+    dependsOn(kickChatPagePatch, kickComposerPatch)
 
     execute {
         requireOkHttpApi()
@@ -54,8 +54,8 @@ val thirdPartyEmotesPatch = bytecodePatch(
             SwitchSetting(
                 "emotes_7tv",
                 "7TV emotes",
-                "Shows 7TV emotes in chat. Sends the channel owner's Kick user ID to 7tv.io and loads images from " +
-                    "cdn.7tv.app.",
+                "Shows 7TV in chat, picker and autocomplete. Sends the channel owner's Kick user ID to 7tv.io, " +
+                    "subscribes to live set changes at events.7tv.io and loads images from cdn.7tv.app.",
                 Section.CHAT,
                 default = false,
                 restart = true,

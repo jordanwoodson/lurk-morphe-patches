@@ -2,7 +2,7 @@
 """Run production KickPlayer Java with boundary doubles; no Android device is needed.
 
 Usage: python3 tests/kick/verify_player.py
-Requires the configured JDK. Generated sources/classes live under $MORPHE_WORK (default ~/scratch/morphe)
+Requires the configured JDK. Generated sources/classes live under $MORPHE_WORK (default ~/build/lurk-morphe-patches)
 and are removed on Linux. Checks the decision tables of the mobile-data quality ceiling, normal latency
 and background audio; the hooks themselves are checked on a device.
 """
@@ -47,7 +47,8 @@ STUBS = {
     "io/github/jordanwoodson/extension/shared/SleepTimer.java": """
         package io.github.jordanwoodson.extension.shared;
         public class SleepTimer {
-            public static void setPauseAction(Runnable action) { }
+            public static final class Expiry { public void pauseLeftovers(String platform) { } }
+            public static void setExpiryAction(java.util.function.Consumer<Expiry> action) { }
             public static void onPlay(Object player) { }
             public static void onStop(Object player) { }
             public static java.util.List<Object> started() { return new java.util.ArrayList<>(); }
@@ -157,7 +158,7 @@ def run(output, repo, lurk_height):
 
 def main():
     repo = Path(__file__).resolve().parents[2]
-    scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "scratch/morphe")) / "kick-tests"
+    scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "kick-tests"
     scratch.mkdir(parents=True, exist_ok=True)
     for lurk_height in (0, 1080):
         output = Path(tempfile.mkdtemp(prefix="player-", dir=scratch))

@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Check production Metro discovery against the pinned, extracted Kick bundle."""
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+if len(sys.argv) != 2 or not Path(sys.argv[1]).is_file():
+    raise SystemExit('usage: bin/test-kick-modules <stock index.android.bundle>')
+root = Path(__file__).resolve().parent.parent
+work = Path(os.environ.get('MORPHE_WORK', Path.home() / 'build/lurk-morphe-patches')) / 'tests/kick-modules'
+work.mkdir(parents=True, exist_ok=True)
+compilers = sorted((Path.home() / '.gradle/wrapper/dists').glob('gradle-*/**/lib/kotlin-compiler-embeddable-*.jar'))
+if not compilers:
+    raise SystemExit('Run the Gradle build first; its existing Kotlin compiler is reused.')
+classpath = os.pathsep.join(map(str, compilers[-1].parent.glob('*.jar')))
+stub = work / 'PatchException.kt'
+stub.write_text('package app.morphe.patcher.patch\nclass PatchException(message:String):RuntimeException(message)\n')
+output = work / 'modules.jar'
+subprocess.run(['java', '-cp', classpath, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+    '-no-stdlib', '-no-reflect', '-classpath', classpath, '-d', str(output),
+    str(root / 'patches/src/main/kotlin/io/github/jordanwoodson/patches/kick/shared/Hermes.kt'),
+    str(root / 'tests/kick/ModuleProbe.kt'), str(stub)], check=True)
+subprocess.run(['java', '-cp', str(output) + os.pathsep + classpath,
+    'io.github.jordanwoodson.patches.kick.shared.ModuleProbeKt', sys.argv[1]], check=True)

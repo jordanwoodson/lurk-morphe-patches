@@ -1,7 +1,12 @@
 package io.github.jordanwoodson.patches.kick.player
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
+import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import io.github.jordanwoodson.patches.kick.settings.kickMatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.settings.kickSettingsPatch
@@ -40,6 +45,29 @@ val sleepTimerPatch = bytecodePatch(
             check-cast p0, ${pause.definingClass}
             invoke-virtual { p0 }, ${pause.definingClass}->pause()V
             return-void
+        """)
+
+        // The view queues its IVS pause on a player executor. Carry only sleep dispatch's expiry to
+        // that Runnable, then check it at execution; a newer play can overtake the queued command.
+        val executor = PlayerOperationExecutorFingerprint.kickMatch("player operation executor").method
+        val enqueue = executor.implementation!!.instructions.mapIndexedNotNull { index, instruction ->
+            val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+            if (instruction.opcode == Opcode.INVOKE_INTERFACE &&
+                reference?.definingClass == "Ljava/util/concurrent/ExecutorService;" &&
+                reference.name == "execute" && reference.returnType == "V" &&
+                reference.parameterTypes.map { it.toString() } == listOf("Ljava/lang/Runnable;")) {
+                val registers = instruction as? FiveRegisterInstruction
+                    ?: throw PatchException("Kick: player executor invocation no longer uses two registers")
+                if (registers.registerCount != 2 || registers.registerD > 255) {
+                    throw PatchException("Kick: player executor registers changed")
+                }
+                index to registers.registerD
+            } else null
+        }.singleOrNull() ?: throw PatchException("Kick: expected exactly one player executor enqueue")
+        val (enqueueIndex, operationRegister) = enqueue
+        executor.addInstructions(enqueueIndex, """
+            invoke-static/range { v$operationRegister .. v$operationRegister }, Lio/github/jordanwoodson/extension/shared/SleepTimer;->guardPauseOperation(Ljava/lang/Runnable;)Ljava/lang/Runnable;
+            move-result-object v$operationRegister
         """)
 
         kickSettings.add(

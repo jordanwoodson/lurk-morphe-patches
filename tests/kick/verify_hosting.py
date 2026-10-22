@@ -1,0 +1,371 @@
+#!/usr/bin/env python3
+"""Execute actual emitted Stay on channel Hermes and stock countdown/callbacks.
+
+Usage (hermes-dec Python): verify_hosting.py stock.bundle patched.apk
+Or: verify_hosting.py stock.bundle patched.bundle manifest.json
+Pinned Kick 40.32.3 (functions found by name). React hooks, JSX, scheduler and routing are boundary doubles;
+compiler memo caches persist across renders. Random duration is seeded at its real
+memo slot (3 seconds). This does not run React Native or a real Pusher/network event.
+"""
+import argparse
+import ast
+from io import BytesIO
+import json
+import math
+from pathlib import Path
+from zipfile import is_zipfile, ZipFile
+
+from hermes_dec.parsers.hbc_bytecode_parser import parse_hbc_bytecode
+from hermes_dec.parsers.hbc_file_parser import HBCReader
+from hermes_dec.parsers.serialized_literal_parser import unpack_slp_array
+from test_hermes import verify as structural
+
+U = object()
+SENTINEL = object()
+
+
+def function_named(reader, name):
+    """The one function with this name: functions are found by name, not by build-local ID."""
+    ids = [fid for fid, header in enumerate(reader.function_headers) if reader.strings[header.functionName] == name]
+    assert len(ids) == 1, f'expected one function named {name}, found {len(ids)}'
+    return ids[0]
+
+
+def closure_at(reader, data, fid, pc):
+    """The function a CreateClosure at pc in function fid creates."""
+    reader.file_buffer = BytesIO(data)
+    found = [i for i in parse_hbc_bytecode(reader.function_headers[fid], reader) if i.original_pos == pc]
+    assert len(found) == 1 and found[0].inst.name == 'CreateClosure', f'no CreateClosure at {pc:#x}'
+    return found[0].arg3
+
+
+def same(a, b):
+    return a is b or (type(a) is type(b) and isinstance(a, (str, int, float, bool)) and a == b)
+
+
+def truth(value):
+    return value is not U and value is not None and (bool(value) if isinstance(value, (str, int, float, bool)) else True)
+
+
+class Env(dict):
+    def __init__(self, parents=()):
+        super().__init__()
+        self.parents = list(parents)
+
+
+class VM:
+    """Small fail-closed executor: only instructions reached by these production functions."""
+    def __init__(self, reader, data):
+        self.reader, self.data, self.code = reader, data, {}
+        self.intervals, self.next_timer = {}, 0
+        self.globals = {
+            'Symbol': {'for': lambda this, key: SENTINEL},
+            'Math': {'floor': lambda this, value: math.floor(value)},
+            'setInterval': self.interval,
+            'clearInterval': lambda this, handle: self.intervals.pop(handle, None),
+        }
+        self.executed = set()
+
+    def interval(self, this, callback, millis):
+        assert millis == 1000
+        self.next_timer += 1
+        self.intervals[self.next_timer] = callback
+        return self.next_timer
+
+    def instructions(self, fid):
+        if fid not in self.code:
+            self.reader.file_buffer = BytesIO(self.data)
+            self.code[fid] = {i.original_pos: i for i in parse_hbc_bytecode(self.reader.function_headers[fid], self.reader)}
+        return self.code[fid]
+
+    def closure(self, fid, env):
+        return lambda this=U, *params: self.run(fid, [env, *env.parents], params)
+
+    def get(self, obj, key):
+        if isinstance(obj, str) and key == 'startsWith':
+            return lambda this, prefix: this.startswith(prefix)
+        if isinstance(obj, list):
+            return obj[key] if key < len(obj) else U
+        return obj.get(key, U)
+
+    def run(self, fid, envs, params=(), pc=0, registers=None):
+        r = {} if registers is None else registers
+        code = self.instructions(fid)
+        for _ in range(4000):
+            i = code[pc]
+            self.executed.add((fid, pc))
+            op = i.inst.name
+            a = [getattr(i, f'arg{j}') for j in range(1, len(i.inst.operands) + 1)]
+            pc = i.next_pos
+            if op == 'GetParentEnvironment': r[a[0]] = envs[a[1]]
+            elif op in ('CreateFunctionEnvironment', 'CreateTopLevelEnvironment'): r[a[0]] = Env(envs if op == 'CreateFunctionEnvironment' else ())
+            elif op == 'LoadFromEnvironment': r[a[0]] = r[a[1]].get(a[2], U)
+            elif op == 'StoreToEnvironment': r[a[0]][a[1]] = r[a[2]]
+            elif op == 'LoadParam': r[a[0]] = params[a[1]-1]
+            elif op == 'LoadConstUndefined': r[a[0]] = U
+            elif op == 'LoadConstNull': r[a[0]] = None
+            elif op == 'LoadConstTrue': r[a[0]] = True
+            elif op == 'LoadConstFalse': r[a[0]] = False
+            elif op == 'LoadConstZero': r[a[0]] = 0
+            elif op in ('LoadConstUInt8', 'LoadConstInt'): r[a[0]] = a[1]
+            elif op in ('LoadConstString', 'LoadConstStringLongIndex'): r[a[0]] = self.reader.strings[a[1]]
+            elif op == 'GetGlobalObject': r[a[0]] = self.globals
+            elif op in ('GetById', 'GetByIdShort', 'TryGetById'): r[a[0]] = self.get(r[a[1]], self.reader.strings[a[3]])
+            elif op == 'GetByIndex': r[a[0]] = self.get(r[a[1]], a[2])
+            elif op == 'PutByIdStrict': r[a[0]][self.reader.strings[a[3]]] = r[a[1]]
+            elif op == 'PutByValStrict': r[a[0]][r[a[1]]] = r[a[2]]
+            elif op in ('NewObjectWithBuffer', 'NewObjectWithBufferLong'):
+                def literal(v):
+                    if v in ('null', 'true', 'false', 'undefined'): return {'null': None, 'true': True, 'false': False, 'undefined': U}[v]
+                    return ast.literal_eval(v)
+                keys = self.reader.object_shape_keys[a[1]]
+                values = unpack_slp_array(self.reader.literal_values[a[2]:], len(keys), 99).to_strings(self.reader.strings)
+                r[a[0]] = {literal(k): literal(v) for k, v in zip(keys, values)}
+            elif op == 'PutOwnBySlotIdx': r[a[0]][list(r[a[0]])[a[2]]] = r[a[1]]
+            elif op == 'NewArray': r[a[0]] = [U] * a[1]
+            elif op == 'DefineOwnInDenseArray': r[a[0]][a[2]] = r[a[1]]
+            elif op == 'Mov': r[a[0]] = r[a[1]]
+            elif op == 'IteratorBegin': r[a[0]] = iter(r[a[1]])
+            elif op == 'IteratorNext':
+                try: r[a[0]] = next(r[a[1]])
+                except StopIteration: r[a[0]], r[a[1]] = U, U
+            elif op == 'IteratorClose': pass
+            elif op == 'CreateClosure': r[a[0]] = self.closure(a[2], r[a[1]])
+            elif op in ('Call1', 'Call2', 'Call3', 'Call4'): r[a[0]] = r[a[1]](*[r[x] for x in a[2:]])
+            elif op == 'StrictEq': r[a[0]] = same(r[a[1]], r[a[2]])
+            elif op == 'Not': r[a[0]] = not truth(r[a[1]])
+            elif op == 'Div': r[a[0]] = r[a[1]] / r[a[2]]
+            elif op == 'Mod': r[a[0]] = r[a[1]] % r[a[2]]
+            elif op == 'Sub': r[a[0]] = r[a[1]] - r[a[2]]
+            elif op in ('Jmp', 'JmpLong'): pc = i.original_pos + a[0]
+            elif op in ('JmpTrue', 'JmpTrueLong', 'JmpFalse'):
+                if truth(r[a[1]]) == (op != 'JmpFalse'): pc = i.original_pos + a[0]
+            elif op in ('JStrictEqual', 'JStrictNotEqual', 'JNotEqual', 'JEqual', 'JGreater'):
+                left, right = r[a[1]], r[a[2]]
+                equal = same(left, right) or (op in ('JNotEqual', 'JEqual') and (left is None or left is U) and (right is None or right is U))
+                branch = left > right if op == 'JGreater' else (not equal if op in ('JStrictNotEqual', 'JNotEqual') else equal)
+                if branch: pc = i.original_pos + a[0]
+            elif op == 'Ret': return r[a[0]]
+            else: raise AssertionError(f'Unsupported executed instruction #{fid} {i.original_pos:#x}: {op}')
+        raise AssertionError('Hermes step bound exceeded')
+
+
+class Hooks:
+    def __init__(self):
+        self.values, self.caches, self.effects, self.pending = [], {}, {}, []
+        self.cursor = 0
+
+    def memo(self, this, size):
+        if size not in self.caches:
+            self.caches[size] = [SENTINEL] * size
+            if size == 57: self.caches[size][2] = 3  # Bypass only random-duration selection.
+        return self.caches[size]
+
+    def slot(self, initial):
+        index = self.cursor
+        self.cursor += 1
+        if index == len(self.values): self.values.append(initial())
+        return index
+
+    def state(self, this, initial):
+        def new():
+            cell = [initial, None]
+            def set_value(this, value): cell[0] = value(U, cell[0]) if callable(value) else value
+            cell[1] = set_value
+            return cell
+        return self.values[self.slot(new)].copy()
+
+    def ref(self, this, initial):
+        return self.values[self.slot(lambda: {'current': initial})]
+
+    def effect(self, this, fn, deps):
+        index = self.slot(lambda: None)
+        old = self.effects.get(index)
+        if old is None or len(old[0]) != len(deps) or any(not same(a, b) for a, b in zip(old[0], deps)):
+            self.pending.append((index, deps, fn))
+
+    def commit(self):
+        pending, self.pending = self.pending, []
+        for index, deps, fn in pending:
+            old = self.effects.get(index)
+            if old and callable(old[1]): old[1](U)
+            self.effects[index] = (deps.copy(), fn(U))
+
+    def unmount(self):
+        for _, cleanup in self.effects.values():
+            if callable(cleanup): cleanup(U)
+
+
+class Scenario:
+    def __init__(self, reader, data):
+        self.vm = VM(reader, data)
+        self.functions = {name: function_named(reader, name)
+                          for name in ('useCountdown', 'JoinHostDialog', 'JoinHostDialogContent')}
+        self.hooks = None
+        self.event, self.tree = None, None
+        self.parent_cache = [SENTINEL] * 13
+        self.redirects, self.toasts = [], []
+        self.path = '/stream/first'
+        self.clear = lambda this: setattr(self, 'event', None)
+        self.redirect = lambda this: self.redirects.append(self.event['hosted']['username']) or self.clear(U)
+        self.translate = lambda this, text, *args: text
+        self.toast = lambda this, toast: self.toasts.append(toast)
+        self.jsx = lambda this, kind, props: {'type': kind, 'props': props}
+        self.module = {
+            0: {'c': lambda this, n: self.hooks.memo(this, n)},
+            1: {'useState': lambda this, value: self.hooks.state(this, value),
+                'useRef': lambda this, value: self.hooks.ref(this, value),
+                'useEffect': lambda this, fn, deps: self.hooks.effect(this, fn, deps)},
+            2: {'useTranslation': lambda this: {'t': self.translate}},
+            3: {key: key for key in ('Title', 'Close', 'Header', 'Description', 'Body', 'Confirm', 'Cancel', 'Footer', 'Root', 'Content')},
+            5: {'currentPath': {'get': lambda this: self.path}},
+            8: {'useChatStore': lambda this, selector: 'current-channel'},
+            10: {'useCountdown': self.countdown},
+            11: {'useToast': lambda this: {'showToast': self.toast}},
+            12: {'JoinHostDialogMediaTile': 'MediaTile'},
+            13: {'jsx': self.jsx, 'jsxs': self.jsx},
+            17: 'JoinHostDialogContent',
+        }
+
+    def countdown(self, this, options):
+        self.options = options
+        return self.vm.run(self.functions['useCountdown'], [self.module], (options,))
+
+    def render(self):
+        # Execute the actual parent's event conditional and JSX output seam. The
+        # event/scheduler/router inputs above replace Pusher delivery, not this branch.
+        parent = self.vm.run(self.functions['JoinHostDialog'], [self.module], pc=0x24b, registers={
+            9: self.event, 3: None, 7: self.parent_cache, 8: self.redirect, 12: self.clear,
+            6: self.module, 1: U,
+        })
+        if parent is None:
+            if self.hooks: self.hooks.unmount()
+            self.hooks, self.tree = None, None
+            return
+        assert parent['type'] == 'JoinHostDialogContent'
+        if self.hooks is None: self.hooks = Hooks()
+        self.hooks.cursor = 0
+        self.tree = self.vm.run(self.functions['JoinHostDialogContent'], [self.module], (parent['props'],))
+        self.hooks.commit()
+
+    def host(self, name):
+        self.event = {'hosted': {'username': name}}
+        self.render()
+
+    def button(self, kind):
+        def find(node):
+            if isinstance(node, list):
+                for child in node:
+                    result = find(child)
+                    if result: return result
+            elif isinstance(node, dict) and 'type' in node:
+                if node['type'] == kind: return node['props']['onPress']
+                return find(node['props'].get('children'))
+        found = find(self.tree)
+        assert found, f'Actual JSX has no {kind} callback'
+        return found
+
+    def advance(self, seconds):
+        for _ in range(seconds):
+            for handle, callback in list(self.vm.intervals.items()):
+                if handle in self.vm.intervals: callback(U)
+            self.render()
+
+
+def waiting(reader, data):
+    s = Scenario(reader, data)
+    s.host('A')
+    assert s.options['startOnMount'] is False and not s.vm.intervals, 'on must wait for Watch now'
+    s.advance(30)
+    assert not s.redirects and s.tree is not None, 'waiting host redirected'
+    assert s.hooks.values[2][0] == 3, 'waiting countdown decremented'
+    return s
+
+
+def manual(reader, data):
+    s = waiting(reader, data)
+    cache = s.hooks.caches[57]
+    s.render()
+    s.button('Confirm')(U)
+    assert not s.redirects and len(s.toasts) == 1, 'Watch now must toast before redirect'
+    s.render()
+    assert s.hooks.caches[57] is cache and s.options['startOnMount'] is True, 'Watch now must invalidate cached waiting options'
+    assert s.tree is None and len(s.vm.intervals) == 1, 'Watch now hides dialog and starts one countdown'
+    s.advance(3)
+    assert s.redirects == ['A'] and s.hooks is None, 'actual onEnd must redirect and parent unmount'
+    s.advance(10)
+    assert s.redirects == ['A'], 'countdown redirected twice'
+    s.host('B')
+    assert s.options['startOnMount'] is False and not s.vm.intervals, 'second host must wait anew'
+    s.button('Confirm')(U); s.render(); s.advance(3)
+    assert s.redirects == ['A', 'B'], 'second event must target B'
+    return s
+
+
+def verify(stock, embedded, manifest):
+    structural(stock, embedded, manifest)
+    reader = HBCReader(); reader.read_whole_file(BytesIO(stock))
+    edits = [e for e in manifest['edits'] if e['key'] == 'stay_on_host']
+    assert len(edits) == 1
+    edit = edits[0]
+    offset, replacement = edit['offset'], bytes.fromhex(edit['replacement'])
+    selected = bytearray(stock); selected[offset:offset+len(replacement)] = replacement
+    off = bytearray(selected); off[offset:offset+len(replacement)] = bytes.fromhex(edit['original'])
+    assert off == stock, 'off must restore exact stock bytes'
+    manual(reader, selected)
+    for button in ('Cancel', 'Close'):
+        for after_start in (False, True):
+            s = waiting(reader, selected)
+            cancel = s.button(button)
+            if after_start: s.button('Confirm')(U); s.render(); s.advance(1)
+            cancel(U); s.render(); s.advance(30)
+            assert not s.redirects and not s.vm.intervals and s.hooks is None, f'{button} must clear and stop'
+    for press in (False, True):
+        s = Scenario(reader, off); s.host('stock')
+        assert s.options['startOnMount'] is True and len(s.vm.intervals) == 1
+        if press: s.button('Confirm')(U); s.render()
+        s.advance(30)
+        assert s.redirects == ['stock'], 'off must redirect once automatically'
+    for path, count in (('/stream/a', 1), ('/clip/a', 1), ('/vod/a', 1), ('/browse', 0)):
+        s = waiting(reader, selected); s.path = path
+        s.button('Confirm')(U); s.render(); s.advance(3)
+        assert len(s.redirects) == count, f'actual onEnd route guard: {path}'
+    # Mutation controls are executable failures, not comparisons against literals.
+    def rejected(name, data, test):
+        try: test(reader, data)
+        except AssertionError as e:
+            assert 'Unsupported' not in str(e), str(e)
+            print(f'CONTROL rejected {name}: {e}')
+        else: raise AssertionError(f'Mutation survived: {name}')
+    rejected('stock edit while switch on', off, waiting)
+    # Preserve old cache dependency while setting pressed on options: a prior naive
+    # implementation would reuse false on the next render. Replace the onEnd
+    # assignment with the start flag, retaining the original dependency write.
+    # The assertion fails on the rerender, before this mutation's missing onEnd
+    # could affect expiry.
+    broken = bytearray(selected)
+    broken[offset:offset+len(replacement)] = bytes.fromhex(edit['original'])
+    broken[offset+4:offset+8] = replacement[8:12]
+    rejected('start flag without memo invalidation', broken, manual)
+    blocked = bytearray(selected)
+    # The onEnd callback (t1) is the closure JoinHostDialogContent creates at 0xdd.
+    header = reader.function_headers[closure_at(reader, stock, function_named(reader, 'JoinHostDialogContent'), 0xdd)]
+    # Real opcodes from existing LoadConstUndefined r0; Ret r0 at callback end.
+    blocked[header.offset:header.offset+7] = stock[header.offset+0x5c:header.offset+0x60] + replacement[12:15]
+    rejected('obsolete onEnd return-at-entry', blocked, manual)
+    print('PASS: emitted host wait/Watch now/Cancel/Close/off/consecutive event, real countdown effects, route guards; three mutation controls')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('stock', type=Path); parser.add_argument('patched', type=Path)
+    parser.add_argument('manifest', nargs='?', type=Path)
+    args = parser.parse_args()
+    if is_zipfile(args.patched):
+        with ZipFile(args.patched) as apk:
+            embedded = apk.read('assets/index.android.bundle')
+            manifest = json.loads(apk.read('assets/lurk-hermes.json'))
+    else:
+        if args.manifest is None: parser.error('manifest required for raw bundle')
+        embedded = args.patched.read_bytes(); manifest = json.loads(args.manifest.read_text())
+    verify(args.stock.read_bytes(), embedded, manifest)

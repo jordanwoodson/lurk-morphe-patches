@@ -17,16 +17,13 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.lang.ref.WeakReference;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -62,13 +59,50 @@ public final class TwitchVod {
         }
     }
 
-    private static final class Attached {
+    private static final class Attached implements View.OnAttachStateChangeListener {
         final WeakReference<View> view;
+        final WeakReference<Object> presenter;
         final long order;
+        volatile boolean detached;
 
-        Attached(View view, long order) {
+        Attached(Object presenter, View view, long order) {
             this.view = new WeakReference<>(view);
+            this.presenter = new WeakReference<>(presenter);
             this.order = order;
+        }
+
+        @Override public void onViewAttachedToWindow(View view) {
+            Object owner = presenter.get();
+            synchronized (PLAYER_VIEWS) {
+                if (owner == null || PLAYER_VIEWS.get(owner) != this) return;
+                detached = false;
+            }
+            String id = vodOf(owner);
+            if (id != null) request(new Pending(owner, null, id));
+            MAIN.post(TwitchVod::refreshButtons);
+        }
+
+        @Override public void onViewDetachedFromWindow(View view) {
+            Object owner = presenter.get();
+            synchronized (PLAYER_VIEWS) {
+                if (owner == null || PLAYER_VIEWS.get(owner) != this) return;
+                detached = true;
+            }
+            // Lifecycle callbacks run on main. Permanently retire this attachment's old demand;
+            // a reattach may request afresh, while another owner can keep a shared load alive.
+            synchronized (REQUESTS) {
+                for (Load load : new ArrayList<>(LOADS.values())) {
+                    for (Pending pending : load.waiters) {
+                        if (pending.presenter.get() == owner) pending.valid = false;
+                    }
+                    if (!load.active()) { LOADS.remove(load.id); FETCHES.remove(load); }
+                }
+                for (Pending pending : WAITING.values()) {
+                    if (pending.presenter.get() == owner) pending.valid = false;
+                }
+                postDelivery();
+            }
+            MAIN.post(TwitchVod::refreshButtons);
         }
     }
 
@@ -81,7 +115,26 @@ public final class TwitchVod {
     private static long attachOrder;
 
     /** Chapters per VOD id, so the dialog opens instantly and taps don't refetch. */
-    private static final Map<String, List<Chapter>> CACHE = Collections.synchronizedMap(new HashMap<>());
+    private static final Object REQUESTS = new Object();
+    private static final Map<String, List<Chapter>> CACHE = bounded(32);
+    private static final Map<String, Long> FAILURES = bounded(32);
+    private static final Map<String, Load> LOADS = new HashMap<>();
+    /** Weak UI ownership; at most one pending open per button, 32 overall. */
+    private static final Map<View, Pending> WAITING = new WeakHashMap<>();
+    private static boolean deliveryPosted;
+    private static final long REQUEST_MS = 6000, RETRY_MS = 15000;
+    private static final ThreadPoolExecutor FETCHES = new ThreadPoolExecutor(2, 2, 30, TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(8), runnable -> {
+                Thread thread = new Thread(runnable, "lurk-chapters");
+                thread.setDaemon(true);
+                return thread;
+            }, new ThreadPoolExecutor.AbortPolicy());
+
+    private static <V> Map<String, V> bounded(int limit) {
+        return new LinkedHashMap<String, V>(16, .75f, true) {
+            @Override protected boolean removeEldestEntry(Map.Entry<String, V> entry) { return size() > limit; }
+        };
+    }
     /** The Chapters buttons Lurk added, each with the overlay root it sits in. */
     private static final Map<View, WeakReference<View>> BUTTONS = new WeakHashMap<>();
     private static int chaptersDrawable;
@@ -92,9 +145,17 @@ public final class TwitchVod {
      */
     public static void playerView(Object presenter, View view) {
         if (presenter == null || view == null || !Settings.isEnabled("vod_chapters")) return;
+        Attached previous;
+        Attached attached;
         synchronized (PLAYER_VIEWS) {
-            PLAYER_VIEWS.put(presenter, new Attached(view, ++attachOrder));
+            attached = new Attached(presenter, view, ++attachOrder);
+            previous = PLAYER_VIEWS.put(presenter, attached);
         }
+        if (previous != null) {
+            View oldView = previous.view.get();
+            if (oldView != null) oldView.removeOnAttachStateChangeListener(previous);
+        }
+        view.addOnAttachStateChangeListener(attached);
         MAIN.post(TwitchVod::refreshButtons);
     }
 
@@ -106,12 +167,19 @@ public final class TwitchVod {
         if (vodPresenter == null || vodModel == null || !Settings.isEnabled("vod_chapters")) return;
         try {
             String id = videoId((String) vodModel.getClass().getMethod("getId").invoke(vodModel));
-            if (id == null) return;
+            if (id == null) {
+                synchronized (PLAYER_VIEWS) {
+                    VODS.remove(vodPresenter);
+                    if (latest.get() == vodPresenter) latest = new WeakReference<>(null);
+                }
+                MAIN.post(TwitchVod::refreshButtons);
+                return;
+            }
             synchronized (PLAYER_VIEWS) {
                 VODS.put(vodPresenter, id);
                 latest = new WeakReference<>(vodPresenter);
             }
-            fetchAsync(id);
+            request(new Pending(vodPresenter, null, id));
             MAIN.post(TwitchVod::refreshButtons);
         } catch (Throwable t) {
             Logger.d("vod chapters: " + t);
@@ -155,6 +223,10 @@ public final class TwitchVod {
 
                 @Override
                 public void onViewDetachedFromWindow(View view) {
+                    synchronized (REQUESTS) {
+                        Pending pending = WAITING.remove(view);
+                        if (pending != null) pending.valid = false;
+                    }
                 }
             });
         } catch (Throwable t) {
@@ -240,6 +312,11 @@ public final class TwitchVod {
     }
 
     private static void refreshButtons() {
+        synchronized (REQUESTS) {
+            for (Load load : LOADS.values()) for (Pending pending : load.waiters) {
+                if (!pending.current()) pending.valid = false;
+            }
+        }
         List<View> buttons;
         synchronized (BUTTONS) {
             buttons = new ArrayList<>(BUTTONS.keySet());
@@ -252,7 +329,7 @@ public final class TwitchVod {
         if (button == null) return;
         boolean[] resolved = new boolean[1];
         Object presenter = targetFor(button, resolved);
-        button.setVisibility(vodOf(presenter) != null ? View.VISIBLE : View.GONE);
+        button.setVisibility(Settings.isEnabled("vod_chapters") && vodOf(presenter) != null ? View.VISIBLE : View.GONE);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -268,28 +345,160 @@ public final class TwitchVod {
             return;
         }
         Logger.d("vod chapters: open " + id + (resolved[0] ? " (overlay)" : " (most recent)"));
-        final Context context = button.getContext();
-        List<Chapter> cached = CACHE.get(id);
-        if (cached != null) {
-            show(context, presenter, id, cached);
-            return;
+        Pending pending = new Pending(presenter, button, id);
+        synchronized (REQUESTS) {
+            Pending previous = WAITING.remove(button);
+            if (previous != null) previous.valid = false;
+            if (WAITING.size() >= 32) {
+                View oldest = WAITING.keySet().iterator().next();
+                WAITING.remove(oldest).valid = false;
+            }
+            WAITING.put(button, pending);
         }
-        toast(context, "Loading chapters…");
-        new Thread(() -> {
-            List<Chapter> chapters = fetch(id);
-            MAIN.post(() -> {
-                if (chapters == null) {
-                    toast(context, "Couldn't load chapters");
-                } else {
-                    show(context, presenter, id, chapters);
+        request(pending);
+    }
+
+    /** An interested presenter, or an open dialog request. Neither keeps a player or Activity alive. */
+    private static final class Pending {
+        final WeakReference<Object> presenter;
+        final WeakReference<View> button;
+        final boolean open;
+        final String id;
+        volatile boolean valid = true;
+        boolean ready;
+        List<Chapter> result;
+
+        Pending(Object presenter, View button, String id) {
+            this.presenter = new WeakReference<>(presenter);
+            this.button = new WeakReference<>(button);
+            this.open = button != null;
+            this.id = id;
+        }
+
+        // Safe on I/O workers; view inspection happens only on the main thread below.
+        boolean active() {
+            Object owner = presenter.get();
+            if (!valid || !Settings.isEnabled("vod_chapters") || !id.equals(vodOf(owner))
+                    || open && button.get() == null) return false;
+            synchronized (PLAYER_VIEWS) {
+                Attached attached = PLAYER_VIEWS.get(owner);
+                return attached == null || !attached.detached;
+            }
+        }
+
+        boolean current() {
+            if (!active()) return false;
+            View view = button.get();
+            if (open) return view != null && view.isAttachedToWindow() && view.isShown()
+                    && targetFor(view, new boolean[1]) == presenter.get();
+            synchronized (PLAYER_VIEWS) {
+                Attached attached = PLAYER_VIEWS.get(presenter.get());
+                if (attached == null) return true; // prefetch can precede the player-view hook
+                View player = attached.view.get();
+                return player != null && player.isAttachedToWindow() && player.isShown()
+                        && presenterFor(player) == presenter.get();
+            }
+        }
+    }
+
+    private static final class Load implements Runnable {
+        final String id;
+        final long deadline = TwitchRequest.now() + REQUEST_MS;
+        final List<Pending> waiters = new ArrayList<>();
+        Load(String id) { this.id = id; }
+
+        boolean active() {
+            synchronized (REQUESTS) {
+                if (LOADS.get(id) != this) return false;
+                for (Pending pending : waiters) if (pending.active()) return true;
+                return false;
+            }
+        }
+
+        @Override public void run() {
+            List<Chapter> chapters = TwitchRequest.run(deadline, this::active, () -> fetch(id, deadline));
+            synchronized (REQUESTS) {
+                if (LOADS.get(id) != this) return;
+                boolean wanted = active();
+                LOADS.remove(id);
+                if (!wanted) return;
+                if (chapters == null) FAILURES.put(id, TwitchRequest.now() + RETRY_MS);
+                else { CACHE.put(id, chapters); FAILURES.remove(id); }
+                for (Pending pending : waiters) if (pending.open && pending.active()) {
+                    pending.result = chapters;
+                    pending.ready = true;
                 }
-            });
-        }, "lurk-chapters").start();
+                postDelivery();
+            }
+        }
+    }
+
+    /** One load per VOD, two running/eight queued, eight weak owners per load. */
+    private static void request(Pending pending) {
+        synchronized (REQUESTS) {
+            if (!pending.active()) return;
+            // Retired queued jobs must not occupy slots or start a provider request later.
+            for (Load load : new ArrayList<>(LOADS.values())) if (!load.active()) {
+                LOADS.remove(load.id);
+                FETCHES.remove(load);
+            }
+            List<Chapter> cached = CACHE.get(pending.id);
+            Long retry = FAILURES.get(pending.id);
+            if (cached != null || retry != null && TwitchRequest.now() < retry) {
+                pending.result = cached;
+                pending.ready = true;
+                postDelivery();
+                return;
+            }
+            Load load = LOADS.get(pending.id);
+            boolean start = load == null;
+            if (start) {
+                if (LOADS.size() >= 10) { pending.ready = true; postDelivery(); return; }
+                load = new Load(pending.id);
+                LOADS.put(pending.id, load);
+            }
+            load.waiters.removeIf(old -> !old.active() || old.presenter.get() == pending.presenter.get()
+                    && old.open == pending.open && old.button.get() == pending.button.get());
+            if (load.waiters.size() >= 8) { pending.ready = true; postDelivery(); return; }
+            load.waiters.add(pending);
+            if (start) try { FETCHES.execute(load); }
+            catch (RuntimeException e) { LOADS.remove(load.id); pending.ready = true; postDelivery(); }
+        }
+    }
+
+    /** Coalesced main-thread delivery; completed jobs cannot build an unbounded UI message queue. */
+    private static void postDelivery() {
+        if (!deliveryPosted) {
+            deliveryPosted = true;
+            MAIN.post(TwitchVod::deliverChapters);
+        }
+    }
+
+    private static void deliverChapters() {
+        List<Pending> ready = new ArrayList<>();
+        synchronized (REQUESTS) {
+            deliveryPosted = false;
+            java.util.Iterator<Pending> iterator = WAITING.values().iterator();
+            while (iterator.hasNext()) {
+                Pending pending = iterator.next();
+                if (!pending.active() || pending.ready) {
+                    iterator.remove();
+                    if (pending.ready) ready.add(pending);
+                }
+            }
+        }
+        for (Pending pending : ready) if (pending.current()) {
+            View button = pending.button.get();
+            if (button == null) continue;
+            if (pending.result == null) toast(button.getContext(), "Couldn't load chapters");
+            else show(button.getContext(), pending.presenter.get(), pending.id, pending.result);
+        }
     }
 
     private static void show(Context context, Object presenter, String id, List<Chapter> chapters) {
         Activity activity = activity(context);
-        if (activity == null || activity.isFinishing()) return;
+        if (!Settings.isEnabled("vod_chapters") || !id.equals(vodOf(presenter))
+                || activity == null || activity.isFinishing() || activity.isDestroyed()) return;
         if (chapters.isEmpty()) {
             toast(context, "This video has no chapters");
             return;
@@ -312,7 +521,7 @@ public final class TwitchVod {
 
     private static void seekTo(Object presenter, String id, int positionMs) {
         // The presenter must still play the video the list came from.
-        if (presenter == null || !id.equals(vodOf(presenter))) {
+        if (!Settings.isEnabled("vod_chapters") || presenter == null || !id.equals(vodOf(presenter))) {
             Logger.d("vod chapters: the player moved on, not seeking");
             return;
         }
@@ -331,46 +540,20 @@ public final class TwitchVod {
     // ---------------------------------------------------------------------------------------------
     // Network
 
-    private static void fetchAsync(String id) {
-        if (CACHE.containsKey(id)) return;
-        new Thread(() -> fetch(id), "lurk-chapters-prefetch").start();
-    }
-
-    /** Fetches and parses a VOD's chapter moments, or null on failure. Caches on success. */
-    private static List<Chapter> fetch(String id) {
-        List<Chapter> cached = CACHE.get(id);
-        if (cached != null) return cached;
-        HttpURLConnection connection = null;
+    /** Fetches and parses one VOD; the request coordinator alone owns caching and delivery. */
+    private static List<Chapter> fetch(String id, long deadline) {
         try {
             JSONObject payload = new JSONObject()
                     .put("query", "query($id: ID!) { video(id: $id) { moments(first: 100, "
                             + "momentRequestType: VIDEO_CHAPTER_MARKERS) { edges { node { "
                             + "positionMilliseconds description type } } } } }")
                     .put("variables", new JSONObject().put("id", id));
-            byte[] body = payload.toString().getBytes(StandardCharsets.UTF_8);
-
-            connection = (HttpURLConnection) new URL(GQL).openConnection();
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(10000);
-            connection.setRequestMethod("POST");
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Client-ID", CLIENT_ID);
-            connection.setRequestProperty("Content-Type", "application/json");
-            try (OutputStream out = connection.getOutputStream()) {
-                out.write(body);
-            }
-            if (connection.getResponseCode() != 200) {
-                Logger.d("vod chapters: HTTP " + connection.getResponseCode());
-                return null;
-            }
-            List<Chapter> chapters = parse(read(connection.getInputStream()));
-            if (chapters != null) CACHE.put(id, chapters);
-            return chapters;
-        } catch (Throwable t) {
-            Logger.d("vod chapters: fetch " + t);
+            String response = TwitchRequest.http(GQL, payload.toString(), CLIENT_ID, deadline,
+                    () -> Settings.isEnabled("vod_chapters"));
+            return response == null ? null : parse(response);
+        } catch (Exception e) {
+            Logger.d("vod chapters: fetch " + e);
             return null;
-        } finally {
-            if (connection != null) connection.disconnect();
         }
     }
 
@@ -394,14 +577,6 @@ public final class TwitchVod {
             Logger.d("vod chapters: parse " + t);
             return null;
         }
-    }
-
-    private static String read(InputStream in) throws Exception {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        byte[] chunk = new byte[8192];
-        int read;
-        while ((read = in.read(chunk)) != -1) buffer.write(chunk, 0, read);
-        return buffer.toString("UTF-8");
     }
 
     // ---------------------------------------------------------------------------------------------

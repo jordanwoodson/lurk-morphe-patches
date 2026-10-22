@@ -73,6 +73,8 @@ def main():
     assert len(keys) == len(set(keys)), "Duplicate setting keys"
     for s in settings:
         assert s["section"] in SECTIONS, f"{s['key']}: unknown section {s['section']}"
+        if s["key"] == "block_cookie_notice":
+            assert s["restart"] is True, "cookie blocking must offer restart after either toggle"
         if s["type"] == "choice":
             assert s["default"] in [v for _, v in s["choices"]], f"{s['key']}: default is not a choice"
         if s["parent"] is not None:

@@ -22,7 +22,7 @@ from zipfile import is_zipfile, ZipFile
 from hermes_dec.parsers.hbc_file_parser import HBCReader
 from hermes_dec.parsers.hbc_opcodes import hbc99
 
-STOCK_SHA256 = "a9d911b3f8b640d8e56b7527929a093c2356d97992409c453d167fdf39538d9a"
+STOCK_SHA256 = "dd5e4d45bffa1a7befbf943985eb3f0d0d1896d303d28abf0a5748b1d5f124dc"
 LENGTHS = {instruction.opcode: instruction.binary_size for instruction in hbc99._instructions}
 # Opcode: (kind, operand offsets of shape-or-count and value-buffer index, operand sizes).
 LITERALS = {

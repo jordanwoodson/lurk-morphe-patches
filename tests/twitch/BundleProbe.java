@@ -16,7 +16,7 @@ import org.json.JSONObject;
 
 /** Executes the injected loader on Android. All-off must reconstruct the independent stock SHA-256. */
 public final class BundleProbe {
-    private static final String STOCK = "50e73cce33e67272f9eb9a38b8d8e6f1ecd06ceccf4b88cc9dbc091743493fc9";
+    private static final String STOCK = "928f89c5766562e9cb266485282e90c058dd7947f73c9bcafa1d0fc626debf5e";
     private static final Map<String, Boolean> switches = new HashMap<>();
 
     private static void check(boolean value, String message) {
@@ -51,6 +51,7 @@ public final class BundleProbe {
         JSONObject manifest = new JSONObject(new String(read(assets, "lurk-hermes.json"), "UTF-8"));
         check(STOCK.equals(manifest.getString("sourceSha256")), "Unexpected source hash");
         JSONArray edits = manifest.getJSONArray("edits");
+        JSONObject append = manifest.optJSONObject("append");
         check(edits.length() > 0, "No selected Hermes patches");
         SharedPreferences preferences = (SharedPreferences) Proxy.newProxyInstance(
             SharedPreferences.class.getClassLoader(), new Class<?>[]{SharedPreferences.class},
@@ -85,6 +86,7 @@ public final class BundleProbe {
         check(prepare.invoke(null, assets, "assets://index.android.bundle") == null, "Defaults made a private copy");
         check(!stale.exists(), "Defaults left a stale private copy");
         for (int i = 0; i < edits.length(); i++) switches.put(edits.getJSONObject(i).getString("key"), false);
+        if (append != null) switches.put(append.getString("key"), false);
         check(prepare.invoke(null, assets, "assets://index.android.bundle") == null, "Settings changed without restart");
 
         // Simulate process restart; every edit off must reconstruct the independently hashed stock bundle.
@@ -94,7 +96,8 @@ public final class BundleProbe {
             switches.put(key, true);
             byte[] selected = load(prepare, prepared, defaults, assets, embedded);
             check(!Arrays.equals(selected, restored), "Switch had no effect: " + key);
-            check(selected.length == restored.length, "Bundle layout changed");
+            check(selected.length == (append != null && key.equals(append.getString("key"))
+                ? embedded.length : restored.length), "Unexpected predicate/layout selection");
             byte[] content = Arrays.copyOf(selected, selected.length - 20);
             check(Arrays.equals(MessageDigest.getInstance("SHA-1").digest(content),
                 Arrays.copyOfRange(selected, content.length, selected.length)), "Invalid Hermes footer: " + key);

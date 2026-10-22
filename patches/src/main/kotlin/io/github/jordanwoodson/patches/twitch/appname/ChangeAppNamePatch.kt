@@ -30,7 +30,7 @@ val changeAppNamePatch = resourcePatch(
             val appNameString = (0 until nodes.length).map { nodes.item(it) as Element }
                 .singleOrNull { it.getAttribute("name") == "app_name" }
                 ?: throw PatchException("Twitch: app_name string not found. " +
-                    "This patch targets 31.6.0; recheck the resources before updating compatibility.")
+                    "This patch targets 31.7.0; recheck the resources before updating compatibility.")
             // Android string resources treat quotes and backslashes, and a leading @ or ?, specially.
             appNameString.textContent = appName!!.trim()
                 .replace("\\", "\\\\").replace("'", "\\'").replace("\"", "\\\"")

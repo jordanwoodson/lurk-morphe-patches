@@ -1,5 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.emotes
 
+import io.github.jordanwoodson.patches.twitch.chat.twitchRNChatPatch
+
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
 import app.morphe.patcher.patch.BytecodePatchContext
@@ -35,7 +37,7 @@ val thirdPartyEmotesPatch = bytecodePatch(
         "and loads the emote images from its CDN. Not in the emote picker or autocomplete.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
-    dependsOn(twitchSettingsPatch, chatImageSizePatch)
+    dependsOn(twitchRNChatPatch, twitchSettingsPatch, chatImageSizePatch)
     execute {
         hookLiveMatcher()
         hookReplayTokens()

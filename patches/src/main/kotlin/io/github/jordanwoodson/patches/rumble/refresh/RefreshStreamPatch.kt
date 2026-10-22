@@ -83,8 +83,16 @@ val refreshStreamPatch = bytecodePatch(
                         iput-object v1, p0, $callback
                         :done
                         return-void
+                        move-exception v2
+                        iput-object v1, p0, $callback
+                        throw v2
                     """,
                 )
+                // addInstructions copies instruction bytes, not smali try-block metadata.
+                // Protect only the stock switch call and restore on every escaping Throwable.
+                implementation!!.apply {
+                    addCatch(newLabelForIndex(8), newLabelForIndex(9), newLabelForIndex(11))
+                }
             },
         )
         bridge(RUMBLE_PLAYER, "reloadPlayer", "invoke-static { p0 }, ${player.type}->$RELOAD(Ljava/lang/Object;)V\nreturn-void")

@@ -12,7 +12,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.WeakHashMap;
+import java.lang.ref.WeakReference;
+import java.util.UUID;
 
 import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
@@ -35,8 +39,24 @@ public final class KickChat {
             {"hide_reward_redemptions", ".reward-redeem-container"},
     };
     /** Kick channel ID -> its slug, and its owner's Kick user ID when the response had it, from KickHttp. */
-    private static final ConcurrentHashMap<String, String> SLUGS = new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<String, String> OWNERS = new ConcurrentHashMap<>();
+    private static final Map<String, String> SLUGS = boundedMap();
+    private static final Map<String, String> OWNERS = boundedMap();
+    private static final Map<WebView, Page> PAGES = new WeakHashMap<>();
+    private static WeakReference<WebView> active = new WeakReference<>(null);
+
+    private static Map<String, String> boundedMap() {
+        return java.util.Collections.synchronizedMap(new LinkedHashMap<String, String>(256, .75f, true) {
+            protected boolean removeEldestEntry(Map.Entry<String, String> entry) { return size() > 256; }
+        });
+    }
+
+    private static final class Page {
+        final String url, generation = UUID.randomUUID().toString();
+        final Object channel, slug;
+        Page(String url, JSONObject options) {
+            this.url = url; channel = options.opt("channelId"); slug = options.opt("sevenTvChannel");
+        }
+    }
     private static String script;
 
     private KickChat() {
@@ -47,7 +67,21 @@ public final class KickChat {
      * call. At page start the WebView can still be showing the previous document, so the script runs at both and
      * applies itself once per page.
      */
-    public static void onPage(WebView view, String url) {
+    public static synchronized void onPageStarted(WebView view, String url) {
+        onPageDisposed(view);
+        onPage(view, url);
+    }
+
+    /** End only this WebView's authority, even when no replacement page starts. */
+    public static synchronized void onPageDisposed(WebView view) {
+        PAGES.remove(view);
+        if (active.get() == view) {
+            active.clear();
+            KickComposer.send("channel", "{\"enabled\":false}");
+        }
+    }
+
+    public static synchronized void onPage(WebView view, String url) {
         try {
             if (view == null || url == null) return;
             Uri uri = Uri.parse(url);
@@ -55,12 +89,55 @@ public final class KickChat {
             if (!HOST.equals(uri.getHost()) || uri.getQueryParameter("preview") != null) return;
             JSONObject options = options(uri);
             if (options.length() == 0) return;
+            if (options.optBoolean("sevenTv")) {
+                Page page = PAGES.get(view);
+                if (page == null || !page.url.equals(url)) {
+                    page = new Page(url, options); PAGES.put(view, page); active = new WeakReference<>(view);
+                    JSONObject context = new JSONObject().put("enabled", true).put("generation", page.generation)
+                            .put("channelId", page.channel == null ? JSONObject.NULL : page.channel);
+                    KickComposer.send("channel", context.toString());
+                }
+                options.put("generation", page.generation);
+            }
             String source = script(view.getContext());
             if (source == null) return;
             view.evaluateJavascript(source + "(" + options + ");", result -> Logger.d("chat page: " + result));
         } catch (RuntimeException | JSONException e) {
             Logger.d("chat page: " + e);
         }
+    }
+
+    /** Consume only our catalog message; every ordinary stock bridge message keeps its original path. */
+    public static synchronized boolean onMessage(WebView view, String message, String sourceUrl) {
+        if (message == null || message.length() > 1024 * 1024 || !message.startsWith("{")) return false;
+        JSONObject data;
+        try { data = new JSONObject(message); }
+        catch (JSONException e) { return false; }
+        String type = data.optString("type");
+        if (!"lurk7tvCatalog".equals(type) && !"lurk7tvDispose".equals(type)) return false;
+        try {
+            Page page = PAGES.get(view);
+            if (!on(SEVEN_TV) || page == null || active.get() != view || !chatOrigin(sourceUrl) ||
+                    !chatOrigin(view.getUrl()) || !page.generation.equals(data.optString("generation")) ||
+                    !java.util.Objects.equals(page.channel, data.opt("channelId")) ||
+                    !java.util.Objects.equals(page.slug, data.opt("slug"))) return true;
+            if ("lurk7tvDispose".equals(type)) {
+                onPageDisposed(view);
+                return true;
+            }
+            JSONObject clean = KickCatalog.sanitize(data, page.generation, page.channel, page.slug);
+            if (clean == null) return true;
+            KickComposer.send("catalog", clean.toString());
+        } catch (RuntimeException e) {
+            Logger.d("Kick composer: rejected catalog");
+        }
+        return true;
+    }
+
+    private static boolean chatOrigin(String url) {
+        if (url == null) return false;
+        Uri uri = Uri.parse(url);
+        return "https".equals(uri.getScheme()) && HOST.equals(uri.getHost()) && uri.getPort() == -1 && uri.getUserInfo() == null;
     }
 
     static boolean on(String key) {
@@ -94,11 +171,18 @@ public final class KickChat {
         if (on(SEVEN_TV)) {
             // The app passes the page a JSON config with the channel ID; 7TV knows channels by their owner.
             String config = uri.getQueryParameter("config");
-            String channelId = config == null ? null : id(new JSONObject(config).opt("channelId"));
+            String channelId = null;
+            try {
+                channelId = config == null ? null : id(new JSONObject(config).opt("channelId"));
+            } catch (JSONException e) {
+                // A malformed channel config must not disable independent chat controls.
+                Logger.d("7tv: unreadable chat config, global emotes only");
+            }
             String slug = channelId == null ? null : SLUGS.get(channelId);
             String owner = channelId == null ? null : OWNERS.get(channelId);
             if (slug == null) Logger.d("7tv: channel " + channelId + " unknown, global emotes only");
             options.put("sevenTv", true);
+            options.put("channelId", channelId == null ? JSONObject.NULL : channelId);
             options.put("sevenTvChannel", slug == null ? JSONObject.NULL : slug);
             options.put("sevenTvUser", owner == null ? JSONObject.NULL : owner);
         }

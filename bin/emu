@@ -1,52 +1,176 @@
 #!/usr/bin/env bash
-# Throwaway test emulator for patched apps (headless, Android 36, x86_64).
-# The AVD lives in $WORK/avd and is recreated when missing.
-# Usage: bin/emu start | stop | status | shot [name]
+# Test emulator for patched apps: headless Android 16 (API 36) x86_64 under KVM.
+# One AVD per port in $WORK/avd ("morphe" on the default port 5580, "morphe-<port>" on others), so
+# parallel worktrees can each run their own. Snapshots make restarts cheap: a named snapshot keeps a
+# prepared state (apps installed, signed in, on a channel); quickboot keeps whatever was on screen.
+# Usage: bin/emu [--port N] start [SNAPSHOT] | stop | restart [SNAPSHOT] | status | serial | shot [name]
+#                           | save NAME | load NAME | snapshots | delete NAME | wipe
+#   start            boot; restores the quickboot state saved by the last stop, else cold-boots
+#   start NAME       boot into snapshot NAME; changes are thrown away at stop (NAME stays pristine)
+#   save NAME        snapshot the running state (overwrites NAME)
+#   load NAME        jump the running emulator back to NAME without restarting it
+#   restart          stop + start: releases the host renderer's memory, keeps the state
+#   wipe             delete the AVD (apps, data, snapshots) and create it again
 source "$(dirname "$0")/lib/common.sh"
 
 export ANDROID_AVD_HOME="$WORK/avd"
-AVD=morphe
-PORT=5580
-export ANDROID_SERIAL="emulator-$PORT"
 IMAGE="system-images;android-36;google_apis;x86_64"
+PORT="${EMU_PORT:-5580}"
+case "${1:-}" in
+    --port=*) PORT="${1#--port=}"; shift ;;
+    --port) PORT="${2:?--port needs a number}"; shift 2 ;;
+esac
+[[ "$PORT" =~ ^[0-9]+$ ]] && (( PORT >= 5554 && PORT <= 5682 && PORT % 2 == 0 )) ||
+    die "port must be an even number from 5554 to 5682 (got '$PORT')"
+AVD=morphe
+(( PORT != 5580 )) && AVD="morphe-$PORT"
+export ANDROID_SERIAL="emulator-$PORT"
+EMULATOR="$ANDROID_HOME/emulator/emulator"
+AVD_DIR="$ANDROID_AVD_HOME/$AVD.avd"
+LOG="$ANDROID_AVD_HOME/$AVD.log"
 
-case "${1:-status}" in
+# Hardware profile. Rendering is SwiftShader on the CPU (the host has no X server, which the
+# emulator needs to use the GPU), so every pixel costs CPU time: 720x1600 at 280 dpi is a third of the
+# Pixel 7's 1080x2400 and still a normal phone layout. The host has cores and memory to spare.
+# Changing a value here makes the AVD's snapshots unloadable; start deletes them and cold-boots.
+PROFILE=(hw.lcd.width=720 hw.lcd.height=1600 hw.lcd.density=280 hw.cpu.ncore=8 hw.ramSize=6144 hw.keyboard=yes)
+
+running() { adb devices 2>/dev/null | grep -q "^$ANDROID_SERIAL[[:space:]]"; }
+# The QEMU process behind this port (the newest one that bin/emu started: never a -read-only one).
+qemu_pid() {
+    local pid
+    for pid in $(pgrep -f "^[^ ]*/qemu-system[^ ]* .*-port $PORT( |$)" 2>/dev/null); do
+        tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q -- ' -read-only ' || echo "$pid"
+    done | tail -1
+}
+has_snapshot() { [[ -f "$AVD_DIR/snapshots/$1/snapshot.pb" ]]; }
+need_running() { running || die "$ANDROID_SERIAL is not running (bin/emu start)"; }
+emu() { adb -s "$ANDROID_SERIAL" emu "$@"; }
+
+create_avd() {
+    mkdir -p "$ANDROID_AVD_HOME"
+    note "creating AVD $AVD in $ANDROID_AVD_HOME"
+    echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" -s create avd -n "$AVD" -k "$IMAGE" -d pixel_7 >/dev/null
+}
+
+# Apply PROFILE to config.ini; drop snapshots when it changed (they only load into the same hardware).
+configure_avd() {
+    local ini="$AVD_DIR/config.ini" kv key changed=""
+    for kv in "${PROFILE[@]}"; do
+        key="${kv%%=*}"
+        grep -q "^$key=${kv#*=}\$" "$ini" && continue
+        if grep -q "^$key=" "$ini"; then sed -i "s|^$key=.*|$kv|" "$ini"; else echo "$kv" >>"$ini"; fi
+        changed=1
+    done
+    if [[ -n "$changed" && -d "$AVD_DIR/snapshots" ]]; then
+        note "hardware profile changed: removing the AVD's snapshots (they would not load); save them again after this boot"
+        rm -rf "$AVD_DIR/snapshots"
+    fi
+}
+
+wait_boot() {
+    local pid="$1" t0=$SECONDS
+    until [[ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]]; do
+        kill -0 "$pid" 2>/dev/null || die "emulator exited; see $LOG"
+        (( SECONDS - t0 < 300 )) || die "no boot after 300 s; see $LOG"
+        sleep 1
+    done
+    adb -s "$ANDROID_SERIAL" shell wm dismiss-keyguard >/dev/null 2>&1 || true
+    note "booted in $(( SECONDS - t0 )) s as $ANDROID_SERIAL"
+}
+
+cmd="${1:-status}"
+shift || true
+case "$cmd" in
     start)
-        mkdir -p "$ANDROID_AVD_HOME"
-        if [[ ! -d "$ANDROID_AVD_HOME/$AVD.avd" ]]; then
-            note "creating AVD $AVD in $ANDROID_AVD_HOME"
-            echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" -s create avd -n "$AVD" -k "$IMAGE" -d pixel_7 >/dev/null
+        snapshot="${1:-}"
+        [[ -d "$AVD_DIR" ]] || create_avd
+        configure_avd
+        if running; then note "already running as $ANDROID_SERIAL"; exit; fi
+        args=(-avd "$AVD" -port "$PORT" -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect)
+        if [[ -n "$snapshot" ]]; then
+            has_snapshot "$snapshot" || die "no snapshot '$snapshot' for $AVD (bin/emu snapshots)"
+            args+=(-snapshot "$snapshot" -no-snapshot-save)
         fi
-        if adb devices | grep -q "^$ANDROID_SERIAL"; then
-            note "already running as $ANDROID_SERIAL"
-            exit
-        fi
-        # The host renderer keeps graphics memory for every app process that is killed: each force-stop and
-        # relaunch of a video app adds ~400 MB to QEMU (41 GB after a day of patch testing, for a 2 GB guest).
-        # A memory cap (Linux) ends the emulator instead of the server running out; `status` shows the size,
-        # and stop + start releases it.
+        # The host renderer keeps graphics memory for every app process that is killed (~400 MB per
+        # force-stop and relaunch of a video app). The cap ends the emulator instead of the server
+        # running out of memory; `status` shows the size, `restart` releases it without losing state.
         cap=()
-        if command -v systemd-run >/dev/null; then
-            cap=(systemd-run --user --scope --quiet -p MemoryMax=12G -p MemorySwapMax=0)
-        fi
-        nohup "${cap[@]}" "$ANDROID_HOME/emulator/emulator" -avd "$AVD" -port "$PORT" -no-window -no-audio \
-            -no-boot-anim -gpu swiftshader_indirect >"$ANDROID_AVD_HOME/emulator.log" 2>&1 &
-        note "booting $ANDROID_SERIAL (log: $ANDROID_AVD_HOME/emulator.log)"
-        adb wait-for-device
-        until [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]]; do sleep 2; done
-        note "booted. Install with: bin/patch <app> --install=$ANDROID_SERIAL"
+        command -v systemd-run >/dev/null && cap=(systemd-run --user --scope --quiet -p MemoryMax=16G -p MemorySwapMax=0)
+        nohup "${cap[@]}" "$EMULATOR" "${args[@]}" >"$LOG" 2>&1 &
+        note "booting $ANDROID_SERIAL${snapshot:+ from snapshot $snapshot} (log: $LOG)"
+        wait_boot $!
+        (( PORT != 5580 )) && note "point the test scripts at it: export ANDROID_SERIAL=$ANDROID_SERIAL"
+        [[ -z "$snapshot" ]] && note "install with: bin/patch <app> --install=$ANDROID_SERIAL"
         ;;
-    stop) adb emu kill ;;
+    stop)
+        running || { echo "not running"; exit; }
+        pid="$(qemu_pid)"
+        emu kill >/dev/null
+        t0=$SECONDS
+        while [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; do
+            (( SECONDS - t0 < 120 )) || die "emulator did not exit in 120 s"
+            sleep 1
+        done
+        note "stopped (state saved for the next start) in $(( SECONDS - t0 )) s"
+        ;;
+    restart)
+        "$0" --port "$PORT" stop
+        exec "$0" --port "$PORT" start "$@"
+        ;;
     status)
-        adb devices | grep "^$ANDROID_SERIAL" || { echo "not running"; exit; }
-        qemu="$(pgrep -f "qemu-system.*-port $PORT" | head -1 || true)"
-        [[ -n "$qemu" ]] && note "QEMU uses $(( $(ps -o rss= -p "$qemu") / 1024 )) MB; restart it (stop, start) above ~8 GB"
+        running || { echo "$ANDROID_SERIAL not running"; exit; }
+        pid="$(qemu_pid)"
+        [[ -n "$pid" ]] && note "$ANDROID_SERIAL: QEMU uses $(( $(ps -o rss= -p "$pid") / 1024 )) MB; restart it above ~10 GB"
+        emu avd snapshot list 2>/dev/null | sed '/^OK$/d'
+        ;;
+    serial) echo "$ANDROID_SERIAL" ;;
+    save)
+        name="${1:?usage: bin/emu save NAME}"
+        need_running
+        t0=$SECONDS
+        emu avd snapshot save "$name" | grep -v '^OK$' || true
+        has_snapshot "$name" || die "snapshot '$name' was not written; see bin/emu status"
+        note "saved snapshot $name in $(( SECONDS - t0 )) s; boot into it with: bin/emu start $name"
+        ;;
+    load)
+        name="${1:?usage: bin/emu load NAME}"
+        need_running
+        has_snapshot "$name" || die "no snapshot '$name' (bin/emu snapshots)"
+        t0=$SECONDS
+        emu avd snapshot load "$name" | grep -v '^OK$' || true
+        adb -s "$ANDROID_SERIAL" wait-for-device
+        note "loaded snapshot $name in $(( SECONDS - t0 )) s"
+        ;;
+    snapshots)
+        if running; then
+            emu avd snapshot list | sed '/^OK$/d'
+        elif [[ -d "$AVD_DIR/snapshots" ]]; then
+            du -sh "$AVD_DIR"/snapshots/*/ 2>/dev/null | sed 's|/$||; s|.*/| |' | awk '{print $2 "  " $1}'
+        else
+            echo "no snapshots"
+        fi
+        ;;
+    delete)
+        name="${1:?usage: bin/emu delete NAME}"
+        has_snapshot "$name" || die "no snapshot '$name'"
+        if running; then emu avd snapshot delete "$name" >/dev/null; else rm -rf "$AVD_DIR/snapshots/$name"; fi
+        note "deleted snapshot $name"
+        ;;
+    wipe)
+        running && die "stop it first: bin/emu --port $PORT stop"
+        [[ -d "$AVD_DIR" ]] || die "no AVD $AVD to wipe"
+        note "deleting $AVD_DIR ($(du -sh "$AVD_DIR" | cut -f1)) and its snapshots"
+        rm -rf "$AVD_DIR" "$ANDROID_AVD_HOME/$AVD.ini"
+        create_avd
+        note "fresh AVD $AVD; bin/emu --port $PORT start cold-boots it"
         ;;
     shot)
+        need_running
         mkdir -p "$WORK/shots"
-        f="$WORK/shots/${2:-$(date +%Y%m%d-%H%M%S)}.png"
-        adb exec-out screencap -p >"$f"
+        f="$WORK/shots/${1:-$(date +%Y%m%d-%H%M%S)}.png"
+        adb -s "$ANDROID_SERIAL" exec-out screencap -p >"$f"
         echo "$f"
         ;;
-    *) die "usage: bin/emu start | stop | status | shot [name]" ;;
+    *) die "usage: bin/emu [--port N] start [SNAPSHOT] | stop | restart [SNAPSHOT] | status | serial | shot [name] | save NAME | load NAME | snapshots | delete NAME | wipe" ;;
 esac

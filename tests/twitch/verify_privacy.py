@@ -69,7 +69,8 @@ def after_prefix(parsed, prefix):
 
 
 def verify(stock, patched):
-    core = ("dn0", "d(Ljava/lang/String;Ljava/util/LinkedHashMap;Lur50;Z)V")
+    # Class and method names are Twitch 31.7.0's R8 output; each one is a method a privacy hook patches.
+    core = ("jn0", "d(Ljava/lang/String;Ljava/util/LinkedHashMap;Lkx50;Z)V")
     before, _ = method(stock, *core)
     assert any('"branch_campaign"' in i for i in before)
     assert any('"x_untrusted_minute-watched_spade"' in i for i in before)
@@ -82,35 +83,35 @@ def verify(stock, patched):
     assert off
     end = labels[off[1]]
     assert code[4:end] == ["move-object/from16 v1, p3", code[5], "const/4 v0, 0x0",
-                           "invoke-virtual {v1, v0}, Lur50;->C(Ljava/lang/Object;)V", "return-void"]
+                           "invoke-virtual {v1, v0}, Lkx50;->K(Ljava/lang/Object;)V", "return-void"]
     nullable = re.fullmatch(r"if-eqz v1, (:\w+)", code[5])
     assert nullable and labels[nullable[1]] == end - 1
     assert normalized(code[end:], labels, end) == normalized(before, method(stock, *core)[1])
-    callback, _ = method(stock, "cn0", "C(Ljava/lang/Object;)V")
+    callback, _ = method(stock, "in0", "K(Ljava/lang/Object;)V")
     assert any("Ljava/lang/Boolean;->TRUE" in i for i in callback)
     assert any("->resumeWith(Ljava/lang/Object;)V" in i for i in callback)
-    for cls, signature in (("fk00", "a(Ljava/util/ArrayList;)V"), ("dn0", "c(Ljava/lang/String;)V")):
+    for cls, signature in (("dn00", "a(Ljava/util/ArrayList;)V"), ("jn0", "c(Ljava/lang/String;)V")):
         guarded(method(stock, cls, signature), method(patched, cls, signature),
                 "disable_analytics", ["return-void"])
-    branch = ("hc3", "<init>(Landroid/content/Context;)V")
+    branch = ("pc3", "<init>(Landroid/content/Context;)V")
     original, old_labels = method(stock, *branch)
     code, labels = method(patched, *branch)
     injection, = [i for i, line in enumerate(code) if "->disableBranchTracking(Z)Z" in line]
     assert code[injection:injection + 2] == [f"invoke-static/range {{v1 .. v1}}, {PRIVACY}->disableBranchTracking(Z)Z", "move-result v1"]
-    assert code[injection - 1] == "move-result v1" and code[injection + 2].startswith("iput-boolean v1, v0, Ld2e;")
+    assert code[injection - 1] == "move-result v1" and code[injection + 2].startswith("iput-boolean v1, v0, Lu2e;")
     kept = code[:injection] + code[injection + 2:]
     shifted = {label: pos if pos < injection else pos - 2 for label, pos in labels.items()}
     assert normalized(kept, shifted) == normalized(original, old_labels)
-    branch_setter = ("d2e", "b(Landroid/content/Context;Z)V")
+    branch_setter = ("u2e", "b(Landroid/content/Context;Z)V")
     code, labels = after_prefix(method(patched, *branch_setter), [
         f"invoke-static/range {{p2 .. p2}}, {PRIVACY}->disableBranchTracking(Z)Z", "move-result p2"])
     original, old_labels = method(stock, *branch_setter)
     assert normalized(code, labels) == normalized(original, old_labels)
-    guarded(method(stock, "ot60", "a()Z"), method(patched, "ot60", "a()Z"),
+    guarded(method(stock, "wy60", "a()Z"), method(patched, "wy60", "a()Z"),
             "disable_analytics", ["const/4 v0, 0x0", "return v0"])
-    guarded(method(stock, "aax", "m(Lot60;Lox40;)Lgt60;"),
-            method(patched, "aax", "m(Lot60;Lox40;)Lgt60;"), "disable_analytics",
-            ["sget-object v0, Lgt60;->Denied:Lgt60;", "return-object v0"])
+    guarded(method(stock, "pf50", "o(Lwy60;Lw050;)Loy60;"),
+            method(patched, "pf50", "o(Lwy60;Lw050;)Loy60;"), "disable_analytics",
+            ["sget-object v0, Loy60;->Denied:Loy60;", "return-object v0"])
     sentry = ("io/sentry/android/core/SentryAndroid", "init(Landroid/content/Context;Lio/sentry/ILogger;Lio/sentry/Sentry$OptionsConfiguration;)V")
     gated = after_prefix(method(patched, *sentry), [
         f"invoke-static/range {{p0 .. p0}}, {PRIVACY}->initSettingsOnce(Landroid/content/Context;)V"])
@@ -122,13 +123,13 @@ def verify(stock, patched):
             "move-result-object v0", f"invoke-static {{v0}}, {PRIVACY}->initSettingsOnce(Landroid/content/Context;)V"])
         guarded(method(stock, provider, "onCreate()Z"), gated, "disable_analytics", ["const/4 v0, 0x1", "return v0"])
     # The app's manifest provider inherits onCreate from R8's Firebase provider base.
-    firebase = "loh"
+    firebase = "lph"
     code, labels = after_prefix(method(patched, firebase, "onCreate()Z"), [
         "invoke-virtual/range {p0 .. p0}, Landroid/content/ContentProvider;->getContext()Landroid/content/Context;",
         "move-result-object v0", f"invoke-static {{v0}}, {PRIVACY}->initSettingsOnce(Landroid/content/Context;)V"])
     original, old_labels = method(stock, firebase, "onCreate()Z")
     assert normalized(code, labels) == normalized(original, old_labels), "Firebase/Messaging initialization changed"
-    guarded(method(stock, "goc", "b()Z"), method(patched, "goc", "b()Z"),
+    guarded(method(stock, "apc", "b()Z"), method(patched, "apc", "b()Z"),
             "disable_analytics", ["const/4 v0, 0x0", "return v0"])
     crashlytics = "com/google/firebase/crashlytics/FirebaseCrashlytics"
     for signature, prefix in (
@@ -153,11 +154,11 @@ def verify(stock, patched):
     signature = f"{store[2]}(Ljava/lang/String;Ljava/lang/String;)V"
     guarded(method(stock, store[1], signature), method(patched, store[1], signature), "disable_analytics", ["return-void"])
 
-    original, original_labels = method(stock, "ls", "g(Lio/reactivex/internal/operators/single/c;)V")
-    code, labels = method(patched, "ls", "g(Lio/reactivex/internal/operators/single/c;)V")
+    original, original_labels = method(stock, "ms", "h(Lio/reactivex/internal/operators/single/c;)V")
+    code, labels = method(patched, "ms", "h(Lio/reactivex/internal/operators/single/c;)V")
     start = code.index('const-string v0, "block_client_ads"')
     # The guard belongs to only the ad eligibility case, after its check-cast; auth/image cases survive.
-    assert code[start - 2:start] == ["check-cast p0, Lns;", "check-cast v1, Le00;"]
+    assert code[start - 2:start] == ["check-cast p0, Los;", "check-cast v1, Lg00;"]
     end = labels[re.fullmatch(r"if-eqz v0, (:\w+)", code[start + 3])[1]]
     assert code[start + 4:end] == ["sget-object v0, Ljava/lang/Boolean;->FALSE:Ljava/lang/Boolean;",
         "new-instance v2, Ltv/twitch/android/util/Optional;",
@@ -169,7 +170,7 @@ def verify(stock, patched):
                 if pos < start or pos >= end}
     assert normalized(kept, adjusted) == normalized(original, original_labels)
 
-    consent = ("k7a", "<init>(ZLt3v;ZZZZ)V")
+    consent = ("u7a", "<init>(ZLi5v;ZZZZ)V")
     original, orig_labels = method(stock, *consent)
     code, labels = method(patched, *consent)
     assert code[:2] == ["invoke-static/range {p3 .. p3}, Lio/github/jordanwoodson/extension/shared/twitch/TwitchPrivacy;->showCookieNotice(Z)Z",

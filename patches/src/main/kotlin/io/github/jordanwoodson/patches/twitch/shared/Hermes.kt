@@ -8,9 +8,10 @@ import java.security.MessageDigest
  * The small part of Hermes Static v98 needed for bounded edits. Format reference:
  * https://github.com/facebook/hermes/blob/static_h/include/hermes/BCGen/HBC/BytecodeFileFormat.h
  * Opcode reference: the same branch's BytecodeList.def. Older Hermes main has a different layout.
- * No disassembled JavaScript is compiled, and no table, function or branch is relocated.
+ * Existing edits preserve their byte lengths. The separately compiled delayed-moderation predicate
+ * uses one bounded append with explicit header/branch/exception relocation and exact off restoration.
  */
-internal class HermesBundle(input: ByteArray) {
+internal class HermesBundle(input: ByteArray, compiledPredicate: Boolean = false) {
     private val bytes = input.copyOf()
     internal val strings: List<String>
     internal val functions: List<HermesFunction>
@@ -18,6 +19,8 @@ internal class HermesBundle(input: ByteArray) {
     private val literalSize: Int
     private val changes = mutableListOf<HermesEdit>()
     val edits: List<HermesEdit> get() = changes.toList()
+    internal var delayedAppend: DelayedAppend? = null
+        private set
 
     init {
         ensure(bytes.size >= 148, "truncated header")
@@ -26,7 +29,8 @@ internal class HermesBundle(input: ByteArray) {
         ensure(u32(32) == bytes.size, "file length does not match header")
         ensure(digest("SHA-1", bytes.copyOfRange(0, bytes.size - 20))
             .contentEquals(bytes.copyOfRange(bytes.size - 20, bytes.size)), "invalid SHA-1 footer")
-        ensure(bytes.sha256() == SOURCE_SHA256, "unrecognized Twitch 31.6.0 bundle")
+        if (compiledPredicate) ensure(bytes.size <= 65536, "oversized compiled predicate")
+        else ensure(bytes.sha256() == SOURCE_SHA256, "unrecognized Twitch 31.7.0 bundle")
         val functionCount = u32(40)
         val stringCount = u32(52)
         val overflowCount = u32(56)
@@ -69,22 +73,78 @@ internal class HermesBundle(input: ByteArray) {
             val header = if (large) {
                 ((first and 0x1ffffff) or (((second ushr 14) and 0xff) shl 24)).toInt()
             } else position
-            if (large) checkedEnd(header, 36, 1)
+            if (large) checkedEnd(header, 37, 1)
             val offset = if (large) u32(header) else (first and 0x1ffffff).toInt()
             val size = if (large) u32(header + 12) else (second and 0x3fff).toInt()
             val name = if (large) u32(header + 16) else ((second ushr 14) and 0xff).toInt()
             val numbers = if (large) u32(header + 20) else ((second ushr 22) and 31).toInt()
             val nonPointers = if (large) u32(header + 24) else ((second ushr 27) and 31).toInt()
             val frame = if (large) u32(header + 28) else u8(header + 8)
-            val actualFlags = if (large) u8(header + 35) else flags
+            val actualFlags = if (large) u8(header + 36) else flags
             ensure(name < stringCount, "invalid function name index")
             checkedEnd(offset, size, 1)
             HermesFunction(id, strings[name], offset, bytes.copyOfRange(offset, offset + size),
-                frame, numbers, nonPointers, actualFlags)
+                frame, numbers, nonPointers, actualFlags, header, large)
         }
     }
 
+    internal fun predicateHeader(function: HermesFunction): ByteArray {
+        ensure(function.largeHeader, "compiled predicate needs an exception header")
+        return bytes.copyOfRange(function.headerOffset, function.headerOffset + 37)
+    }
+
+    internal fun predicateExceptions(function: HermesFunction): List<IntArray> {
+        ensure(function.largeHeader && function.flags and 8 != 0, "compiled predicate has no catch table")
+        val offset = align(function.headerOffset + 37)
+        val count = u32(offset)
+        ensure(count in 1..4, "unexpected predicate catch count")
+        checkedEnd(offset + 4, count, 12)
+        return List(count) { i -> IntArray(3) { j -> u32(offset + 4 + i * 12 + j * 4) } }
+    }
+
+    /** The only supported append: the guarded delayed-moderation predicate, preserving its function ID. */
+    internal fun appendDelayed(function: HermesFunction, body: ByteArray, header: ByteArray, exceptions: List<IntArray>) {
+        ensure(delayedAppend == null && body.size in 1..1024 && header.size == 37, "invalid/duplicate predicate append")
+        val start = align(bytes.size - 20)
+        val fullHeader = align(start + body.size)
+        val table = align(fullHeader + 37)
+        val end = table + 4 + exceptions.size * 12
+        val tail = ByteArray(end - (bytes.size - 20))
+        body.copyInto(tail, start - (bytes.size - 20))
+        val actualHeader = header.copyOf()
+        actualHeader.put32(0,start)
+        actualHeader.put32(12,body.size)
+        actualHeader.put32(16,stringId(function.name))
+        actualHeader[36] = (actualHeader[36].toInt() and 0x10.inv()).toByte() // No donor debug-table references.
+        actualHeader.copyInto(tail,fullHeader - (bytes.size - 20))
+        tail.put32(table - (bytes.size - 20),exceptions.size)
+        exceptions.forEachIndexed { i, entry -> entry.forEachIndexed { j, value ->
+            tail.put32(table - (bytes.size - 20) + 4 + i * 12 + j * 4,value)
+        } }
+        val compact = ByteArray(12)
+        compact.put32(0,fullHeader and 0xffffff)
+        compact.put32(4,((fullHeader ushr 24) and 255) shl 14)
+        compact[11] = 0x20
+        val at = 128 + function.id * 12
+        delayedAppend = DelayedAppend(at,bytes.copyOfRange(at,at+12),compact,tail,bytes.size)
+    }
+
     fun stringId(value: String): Int = strings.indexOf(value).also { ensure(it >= 0, "missing string $value") }
+
+    /**
+     * A string's ID as the operand bytes of an instruction pattern, so patterns survive the string
+     * table being renumbered between app versions: one byte for the short forms (GetByIdShort),
+     * two little-endian bytes for the 16-bit forms (GetById, TryGetById, LoadConstString).
+     */
+    fun id8(value: String): String = stringId(value).let { id ->
+        ensure(id < 256, "$value has no 8-bit string ID")
+        "%02x".format(id)
+    }
+
+    fun id16(value: String): String = stringId(value).let { id ->
+        ensure(id < 65536, "$value has no 16-bit string ID")
+        "%02x %02x".format(id and 255, id ushr 8)
+    }
 
     fun function(name: String): HermesFunction = functions.filter { it.name == name }.singleOrNull()
         ?: fail("expected one function named $name")
@@ -220,7 +280,17 @@ internal class HermesBundle(input: ByteArray) {
         function.body.toHex() to replacement.toHex()
     }.toSet()
 
-    fun preview(): ByteArray = bytes.copyOf().also { result ->
+    fun preview(): ByteArray = previewEqualLength().let { equal ->
+        val append = delayedAppend ?: return@let equal
+        val result = equal.copyOf(append.originalLength + append.tail.size)
+        append.tail.copyInto(result,append.originalLength - 20)
+        append.replacementHeader.copyInto(result,append.headerOffset)
+        result.put32(32,result.size)
+        digest("SHA-1", result.copyOfRange(0,result.size-20)).copyInto(result,result.size-20)
+        result
+    }
+
+    fun previewEqualLength(): ByteArray = bytes.copyOf().also { result ->
         changes.filter { it.defaultEnabled }.forEach { it.replacement.copyInto(result, it.offset) }
         digest("SHA-1", result.copyOfRange(0, result.size - 20)).copyInto(result, result.size - 20)
     }
@@ -230,8 +300,13 @@ internal class HermesBundle(input: ByteArray) {
             "{\"key\":\"${it.key}\",\"offset\":${it.offset},\"original\":\"${it.original.toHex()}\"," +
                 "\"replacement\":\"${it.replacement.toHex()}\",\"default\":${it.defaultEnabled}}"
         }
+        val append = delayedAppend?.let {
+            ",\"append\":{\"key\":\"chat_show_deleted\",\"default\":true,\"originalLength\":${it.originalLength}," +
+                "\"headerOffset\":${it.headerOffset},\"originalHeader\":\"${it.originalHeader.toHex()}\"," +
+                "\"replacementHeader\":\"${it.replacementHeader.toHex()}\",\"tail\":\"${it.tail.toHex()}\"}"
+        } ?: ""
         return "{\"format\":1,\"version\":98,\"sourceSha256\":\"$SOURCE_SHA256\"," +
-            "\"embeddedSha256\":\"${preview().sha256()}\",\"edits\":[$entries]}"
+            "\"embeddedSha256\":\"${preview().sha256()}\",\"edits\":[$entries]$append}"
     }
 
     private fun u8(offset: Int): Int = bytes[offset].toInt() and 255
@@ -250,7 +325,7 @@ internal class HermesBundle(input: ByteArray) {
     private fun align(offset: Int) = (offset + 3) and -4
 
     companion object {
-        const val SOURCE_SHA256 = "50e73cce33e67272f9eb9a38b8d8e6f1ecd06ceccf4b88cc9dbc091743493fc9"
+        const val SOURCE_SHA256 = "928f89c5766562e9cb266485282e90c058dd7947f73c9bcafa1d0fc626debf5e"
 
         /** Byte lengths of the v98 instructions accepted in a replaced prologue (BytecodeList.def). */
         private val PROLOGUE_LENGTHS = mapOf(
@@ -267,7 +342,15 @@ internal class HermesBundle(input: ByteArray) {
 }
 
 internal data class HermesFunction(val id: Int, val name: String, val offset: Int, val body: ByteArray,
-    val frameSize: Int, val numberRegisters: Int, val nonPointerRegisters: Int, val flags: Int)
+    val frameSize: Int, val numberRegisters: Int, val nonPointerRegisters: Int, val flags: Int,
+    val headerOffset: Int = 0, val largeHeader: Boolean = false)
+
+internal data class DelayedAppend(val headerOffset: Int, val originalHeader: ByteArray,
+    val replacementHeader: ByteArray, val tail: ByteArray, val originalLength: Int)
+
+internal fun ByteArray.put32(offset: Int, value: Int) {
+    for (i in 0..3) this[offset+i] = (value ushr (8*i)).toByte()
+}
 
 internal data class HermesEdit(val key: String, val offset: Int, val original: ByteArray,
     val replacement: ByteArray, val defaultEnabled: Boolean, val functionId: Int)

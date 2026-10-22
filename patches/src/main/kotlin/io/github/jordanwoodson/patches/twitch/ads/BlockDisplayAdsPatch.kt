@@ -72,8 +72,10 @@ val blockDisplayAdsPatch = bytecodePatch(
         // The FeedAd branch (`!adFailures.has(node.id)`, entered only by its jump) returns false.
         // Nothing jumps into the replaced instructions; the next one is the FeedRecap branch.
         val visible = twitchHermes.function("isEdgeVisible")
+        val has = twitchHermes.id8("has")
+        val id = twitchHermes.id8("id")
         twitchHermes.replace(visible, KEY,
-            hex("89 05 04 44 04 05 02 96 44 03 03 05 9c 6e 03 04 05 03 13 00 03 76 00"),
+            hex("89 05 04 44 04 05 02 $has 44 03 03 05 $id 6e 03 04 05 03 13 00 03 76 00"),
             hex("96 00 76 00") + ByteArray(19))
 
         twitchSettings.add(SwitchSetting(KEY, "Block display ads",

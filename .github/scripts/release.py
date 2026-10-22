@@ -11,7 +11,7 @@ A release sets the version, writes CHANGELOG.md, patches-bundle.json, patches-li
 patch list, builds the bundle, pushes the release commit and its tag together (both or neither), then
 creates the GitHub release with the .mpp. If that last step fails, the next run (or "Run workflow" on the
 Release workflow) publishes the missing release from its own commit before anything else. A stable
-release is then merged back into dev.
+release is then merged back into dev; reruns finish that merge even if publication already succeeded.
 
     python3 .github/scripts/release.py [--dry-run] [--branch dev]
 
@@ -22,6 +22,7 @@ branch as origin/<branch>, so fetch first.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager, nullcontext
 import datetime
 import json
 import os
@@ -117,6 +118,21 @@ class Plan(NamedTuple):
     commits: list[Commit]
 
 
+class Progress:
+    """Keep published assets even if a later build or stable finalization fails."""
+    def __init__(self) -> None:
+        self.assets: list[Path] = []
+        self.built = False
+
+    def write_output(self) -> None:
+        output(published=str(bool(self.assets)).lower(), built=str(self.built).lower(),
+               assets="\n".join(str(path) for path in self.assets))
+
+
+class HostVerificationError(SystemExit):
+    """A source failed its required gate; do not publish any further release this run."""
+
+
 # -------------------------------------------------------------------------------------------------
 # Git and commands
 
@@ -131,6 +147,17 @@ def git(*args: str, check: bool = True) -> str:
 
 def git_ok(*args: str) -> bool:
     return subprocess.run(["git", *args], cwd=ROOT, capture_output=True).returncode == 0
+
+
+@contextmanager
+def restore_checkout():
+    """Restore a branch or detached HEAD, including when a build, merge or push fails."""
+    branch = git("symbolic-ref", "--quiet", "--short", "HEAD", check=False)
+    original = branch or git("rev-parse", "HEAD")
+    try:
+        yield
+    finally:
+        git("checkout", "--quiet", *([] if branch else ["--detach"]), original)
 
 
 def run(*command: str) -> None:
@@ -248,8 +275,8 @@ def release_exists(repo: str, tag: str) -> bool:
     sys.exit(f"Couldn't check for the {tag} release: {result.stderr.strip()}")
 
 
-def unpublished(pre: str | None, head: str, repo: str) -> tuple[str, Version, str] | None:
-    """The newest release commit on the branch if its GitHub release is missing: its sha, version and notes."""
+def latest_release(pre: str | None, head: str) -> tuple[str, Version, str] | None:
+    """The newest matching release commit, including one still needing stable finalization."""
     for line in git("log", "--format=%H%x1f%s", "-E", "--grep=^chore: Release v", head).splitlines():
         sha, subject = line.split("\x1f", 1)
         match = RELEASE_SUBJECT.fullmatch(subject)
@@ -257,7 +284,7 @@ def unpublished(pre: str | None, head: str, repo: str) -> tuple[str, Version, st
         if version is None:
             continue
         # The newest release commit may come from the other branch (a stable release merged into dev).
-        if version.pre != pre or release_exists(repo, version.tag):
+        if version.pre != pre:
             return None
         text = git("log", "-1", "--format=%b", sha)
         if not text:
@@ -269,6 +296,18 @@ def unpublished(pre: str | None, head: str, repo: str) -> tuple[str, Version, st
 
 # -------------------------------------------------------------------------------------------------
 # Releasing
+
+
+def verify_source() -> None:
+    """Run the selected source's mandatory gate, including older recovery checkouts."""
+    sha = git("rev-parse", "HEAD")
+    if not (ROOT / "bin/test-host").is_file():
+        raise HostVerificationError(f"{sha[:7]} has no bin/test-host; cannot verify or publish this source")
+    print(f"Verifying release source {sha}", flush=True)
+    try:
+        run("bash", "bin/test-host")
+    except SystemExit as error:
+        raise HostVerificationError(f"Host verification failed for {sha[:7]}: {error}") from error
 
 
 def build(version: Version, *tasks: str) -> Path:
@@ -297,12 +336,27 @@ def publish(repo: str, version: Version, text: str, mpp: Path) -> None:
     sys.exit(f"Couldn't create the {version.tag} release; the next run publishes it")
 
 
-def finish_unpublished(repo: str, branch: str, pre: str | None, head: str, dry_run: bool) -> Path | None:
-    """Publishes the branch's newest release commit if an earlier run didn't get to its GitHub release."""
-    missing = unpublished(pre, head, repo)
-    if not missing:
+def finalize(repo: str, sha: str, version: Version, text: str, mpp: Path | None,
+             progress: Progress) -> None:
+    """Publish once, then complete the retryable stable backmerge."""
+    if mpp is not None:
+        publish(repo, version, text, mpp)
+        progress.assets.append(mpp)
+    if version.pre is None:
+        backmerge(sha, text)
+
+
+def finish_unpublished(repo: str, branch: str, pre: str | None, head: str, dry_run: bool,
+                       progress: Progress) -> Path | None:
+    """Recover publication and stable finalization independently, even without new commits."""
+    pending = latest_release(pre, head)
+    if not pending:
         return None
-    sha, version, text = missing
+    sha, version, text = pending
+    if release_exists(repo, version.tag):
+        if not dry_run:
+            finalize(repo, sha, version, text, None, progress)
+        return None
     print(f"{version.tag}: release commit {sha[:7]} has no GitHub release yet, publishing it", flush=True)
     if dry_run:
         print(f"\n{text}\n")
@@ -310,15 +364,14 @@ def finish_unpublished(repo: str, branch: str, pre: str | None, head: str, dry_r
     tagged = git("rev-list", "-n", "1", version.tag, "--", check=False)
     if tagged and tagged != sha:
         sys.exit(f"{version.tag} points at {tagged[:7]}, not at its release commit {sha[:7]}")
-    git("checkout", "--quiet", "--detach", sha)
-    try:
+    with restore_checkout():
+        git("checkout", "--quiet", "--detach", sha)
+        verify_source()
         mpp = build(version)
-    finally:
-        git("checkout", "--quiet", branch)
     if not tagged:
         git("tag", version.tag, sha)
         git("push", "origin", f"refs/tags/{version.tag}")
-    publish(repo, version, text, mpp)
+    finalize(repo, sha, version, text, mpp, progress)
     return mpp
 
 
@@ -353,31 +406,36 @@ def backmerge(release: str, text: str) -> None:
     to dev's changelog.
     """
     target = BACKMERGE_BRANCH
-    if not git_ok("fetch", "--quiet", "origin", f"+refs/heads/{target}:refs/remotes/origin/{target}"):
-        print(f"::warning::Couldn't fetch {target}; merge {STABLE_BRANCH} into it by hand")
-        return
-    if git_ok("merge-base", "--is-ancestor", f"origin/{target}", release):
-        git("push", "origin", f"{release}:refs/heads/{target}")
-        return
-    git("checkout", "--quiet", "-B", target, f"origin/{target}")
-    git_ok(*AS_BOT, "merge", "--no-ff", "--no-commit", release)  # conflicts are sorted out below
-    conflicted = git("diff", "--name-only", "--diff-filter=U").split()
-    if not git_ok("rev-parse", "-q", "--verify", "MERGE_HEAD") or set(conflicted) - set(GENERATED):
-        git("merge", "--abort", check=False)
-        print(f"::warning::{STABLE_BRANCH} doesn't merge cleanly into {target}; merge it by hand")
-        return
-    for path in conflicted:
-        git("checkout", "--ours", "--", path)
-    if "CHANGELOG.md" in conflicted:
-        changelog = ROOT / "CHANGELOG.md"
-        changelog.write_text(f"{text}\n\n{changelog.read_text(encoding='utf-8')}", encoding="utf-8")
-    if conflicted:
-        git("add", "--", *conflicted)
-    git(*AS_BOT, "commit", "--quiet", "--no-edit", "-m", f"chore: merge {STABLE_BRANCH} into {target} [skip ci]")
-    git("push", "origin", f"HEAD:refs/heads/{target}")
+    with restore_checkout():
+        if not git_ok("fetch", "--quiet", "origin", f"+refs/heads/{target}:refs/remotes/origin/{target}"):
+            sys.exit(f"Couldn't fetch {target}; rerun to finish the stable backmerge")
+        # Already merged (including an earlier successful retry): no new merge commit or push.
+        if git_ok("merge-base", "--is-ancestor", release, f"origin/{target}"):
+            return
+        if git_ok("merge-base", "--is-ancestor", f"origin/{target}", release):
+            git("push", "origin", f"{release}:refs/heads/{target}")
+            return
+        git("checkout", "--quiet", "-B", target, f"origin/{target}")
+        try:
+            git_ok(*AS_BOT, "merge", "--no-ff", "--no-commit", release)
+            conflicted = git("diff", "--name-only", "--diff-filter=U").split()
+            if not git_ok("rev-parse", "-q", "--verify", "MERGE_HEAD") or set(conflicted) - set(GENERATED):
+                sys.exit(f"{STABLE_BRANCH} doesn't merge cleanly into {target}; merge it by hand, then rerun")
+            # A generated path can merge cleanly when dev advanced only in source. Always
+            # restore dev's complete generated state, then combine the changelog explicitly.
+            git("restore", "--source=HEAD", "--staged", "--worktree", "--", *GENERATED)
+            changelog = ROOT / "CHANGELOG.md"
+            changelog.write_text(f"{text}\n\n{changelog.read_text(encoding='utf-8')}", encoding="utf-8")
+            git("add", "--", *GENERATED)
+            git(*AS_BOT, "commit", "--quiet", "--no-edit", "-m", f"chore: merge {STABLE_BRANCH} into {target} [skip ci]")
+            git("push", "origin", f"HEAD:refs/heads/{target}")
+        finally:
+            if git_ok("rev-parse", "-q", "--verify", "MERGE_HEAD"):
+                git("merge", "--abort")
 
 
-def release(repo: str, branch: str, pre: str | None, head: str, dry_run: bool) -> Path | None:
+def release(repo: str, branch: str, pre: str | None, head: str, dry_run: bool,
+            progress: Progress) -> Path | None:
     """Publishes a new release when the commits since the last one call for it."""
     next_release = plan(pre, head)
     if next_release is None:
@@ -391,20 +449,29 @@ def release(repo: str, branch: str, pre: str | None, head: str, dry_run: bool) -
     if dry_run:
         return None
 
-    write_files(repo, version, text)
-    mpp = build(version, "generatePatchesList")
-    patch_list = ROOT / "patches-list.json"
-    write_json(patch_list, {**json.loads(patch_list.read_text(encoding="utf-8")), "version": str(version)})
-    run(sys.executable, ".github/scripts/generate_patches_readme.py", repo, branch, "patches-list.json", "README.md")
+    if git("status", "--porcelain", "--untracked-files=all", "--", *GENERATED):
+        sys.exit("Generated release files have local changes; commit or stash them before releasing")
+    original = git("rev-parse", "HEAD")
+    verify_source()
+    try:
+        write_files(repo, version, text)
+        mpp = build(version, "generatePatchesList")
+        progress.built = True
+        patch_list = ROOT / "patches-list.json"
+        write_json(patch_list, {**json.loads(patch_list.read_text(encoding="utf-8")), "version": str(version)})
+        run(sys.executable, ".github/scripts/generate_patches_readme.py", repo, branch, "patches-list.json", "README.md")
 
-    git("add", *GENERATED)
-    git(*AS_BOT, "commit", "--quiet", "-m", f"chore: Release {version.tag} [skip ci]", "-m", text)
+        git("add", *GENERATED)
+        git(*AS_BOT, "commit", "--quiet", "-m", f"chore: Release {version.tag} [skip ci]", "-m", text)
+    except BaseException:
+        # Only clean paths owned by this release were changed above. Keep unrelated work and
+        # staging intact, and allow the caller to restore a checkout with a different version.
+        git("restore", f"--source={original}", "--staged", "--worktree", "--", *GENERATED)
+        raise
     git("tag", version.tag)
     # Atomic: the branch never gets a release commit without its tag, or the other way round.
     git("push", "--atomic", "origin", f"HEAD:refs/heads/{branch}", f"refs/tags/{version.tag}")
-    publish(repo, version, text, mpp)
-    if pre is None:
-        backmerge(git("rev-parse", "HEAD"), text)
+    finalize(repo, git("rev-parse", "HEAD"), version, text, mpp, progress)
     return mpp
 
 
@@ -430,25 +497,35 @@ def main() -> None:
     pre = PRERELEASE_BRANCHES.get(branch)
     repo = repository()
 
-    if args.dry_run:
-        head = f"origin/{branch}"
-    else:
-        # Release the branch as it is now: a run that waited for another starts after its release commit.
-        git("fetch", "--quiet", "--tags", "--force", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}")
-        git("checkout", "--quiet", "-B", branch, f"origin/{branch}")
-        head = "HEAD"
-
-    # A release that can't be finished mustn't hold up new ones: report it and go on.
+    progress = Progress()
     try:
-        finished, unfinished = finish_unpublished(repo, branch, pre, head, args.dry_run), None
-    except SystemExit as error:
-        finished, unfinished = None, error
-        print(f"::error::{error}", flush=True)
-    released = release(repo, branch, pre, head, args.dry_run)
-    assets = [str(mpp) for mpp in (finished, released) if mpp]
-    output(published=str(bool(assets)).lower(), built=str(released is not None).lower(), assets="\n".join(assets))
-    if unfinished:
-        sys.exit(1)
+        # Both release and recovery/backmerge commits consume the index. Refuse
+        # staged local work before any checkout or mutation can include it.
+        if not args.dry_run and not git_ok("diff", "--cached", "--quiet"):
+            sys.exit("The index has local changes; commit or stash them before releasing")
+        with restore_checkout() if not args.dry_run else nullcontext():
+            if args.dry_run:
+                head = f"origin/{branch}"
+            else:
+                # A waiting run releases the latest branch, including a prior release commit.
+                git("fetch", "--quiet", "--tags", "--force", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}")
+                git("checkout", "--quiet", "-B", branch, f"origin/{branch}")
+                head = "HEAD"
+
+            # A recovery failure mustn't hold up a newer release, but the run still fails.
+            unfinished = None
+            try:
+                finish_unpublished(repo, branch, pre, head, args.dry_run, progress)
+            except HostVerificationError:
+                raise
+            except SystemExit as error:
+                unfinished = error
+                print(f"::error::{error}", flush=True)
+            release(repo, branch, pre, head, args.dry_run, progress)
+            if unfinished:
+                sys.exit(1)
+    finally:
+        progress.write_output()
 
 
 if __name__ == "__main__":

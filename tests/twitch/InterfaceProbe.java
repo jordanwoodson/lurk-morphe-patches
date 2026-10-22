@@ -4,9 +4,19 @@ import java.util.Arrays;
 import java.util.AbstractList;
 import kotlin.enums.EnumEntries;
 import android.os.Bundle;
+import tv.twitch.android.models.feed.DiscoveryFeedPage;
+import tv.twitch.android.models.feed.DiscoveryFeedPage.FeedLocationPage;
+import tv.twitch.android.models.feed.FeedLocation;
 
 public final class InterfaceProbe {
     enum Tab { HOME, CLIPS, VIDEOS, CHAT }
+    enum Destination { Default, Browse, Following, NotificationCenter, Channel, Clip }
+    enum MissingDestination { Default, Clip }
+    public static final class Fragment {
+        private final Bundle arguments = new Bundle();
+        Fragment(DiscoveryFeedPage page) { arguments.putSerializable("DiscoveryFeedPage", page); }
+        public Bundle getArguments() { return arguments; }
+    }
     static final class Tabs extends AbstractList<Tab> implements EnumEntries<Tab> {
         public Tab get(int index) { return Tab.values()[index]; }
         public int size() { return Tab.values().length; }
@@ -14,9 +24,55 @@ public final class InterfaceProbe {
     static void check(boolean value, String message) {
         if (!value) throw new AssertionError(message);
     }
+    static void startup() {
+        Destination[] expected = {Destination.Default, Destination.Default, Destination.Browse,
+                Destination.Following, Destination.NotificationCenter, Destination.Default};
+        for (int setting = -1; setting <= 4; setting++) {
+            Settings.defaultTab = setting;
+            check(TwitchInterface.startDestination(Destination.Default) == expected[setting + 1],
+                    "Plain startup follows default_tab " + setting);
+            check(TwitchInterface.startDestination(null) == null, "Missing startup stays missing");
+            for (Destination destination : Destination.values()) {
+                if (destination != Destination.Default)
+                    check(TwitchInterface.startDestination(destination) == destination,
+                            "Explicit startup destination stays unchanged: " + destination);
+            }
+            check(TwitchInterface.startDestination(MissingDestination.Default) == MissingDestination.Default,
+                    "Missing chosen enum value falls back to stock");
+        }
+    }
+    static void home(boolean enabled) {
+        FeedLocationPage live = new FeedLocationPage(new FeedLocation.Live());
+        FeedLocationPage clips = new FeedLocationPage(new FeedLocation.Clips());
+        FeedLocationPage category = new FeedLocationPage(new FeedLocation.ClipsCategory());
+        java.util.List<?> tabs = Arrays.asList(live, clips, category);
+        for (Object context : new Object[]{null, live, new Fragment(live), new Object(), Arrays.asList(live)}) {
+            java.util.List<?> result = TwitchInterface.homeTabs(tabs, context);
+            check(result.size() == (enabled ? 1 : 3), "Ordinary Home hides both Clips page kinds");
+            check(result.get(0) == live && tabs.size() == 3, "Home order and source preserved");
+            check(enabled || result == tabs, "Disabled Home preserves identity");
+            if (enabled) {
+                try { result.clear(); throw new AssertionError("Mutable Home tabs"); }
+                catch (UnsupportedOperationException expected) { }
+            }
+        }
+        for (DiscoveryFeedPage page : new DiscoveryFeedPage[]{clips, category}) {
+            for (Object context : new Object[]{page, new Fragment(page), Arrays.asList(live, page)}) {
+                check(TwitchInterface.homeTabs(tabs, context) == tabs,
+                        "Explicit Home Clips routing retains selected tab");
+            }
+        }
+        check(TwitchInterface.homeTabs(null, null) == null, "Missing Home tabs stay missing");
+        java.util.List<?> allClips = Arrays.asList(clips, category);
+        check(TwitchInterface.homeTabs(allClips, null) == allClips, "Never empty the Home pager");
+        java.util.List<?> unrelated = Arrays.asList("Clips", Tab.CLIPS);
+        check(TwitchInterface.homeTabs(unrelated, null) == unrelated, "Only real Home page types are filtered");
+    }
     public static void main(String[] args) {
+        startup();
         for (boolean enabled : new boolean[] {false, true}) {
             Settings.enabled = enabled;
+            home(enabled);
             check(!TwitchInterface.bitsVisible(false), "Stock hidden Bits stays hidden");
             check(TwitchInterface.bitsVisible(true) == !enabled, "Bits setting applies");
             check(TwitchInterface.clipTabs(null) == null, "Missing UI data stays missing");

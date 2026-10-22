@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Run production provider parsing/completion on Android; controlled HTTP and isolated preferences.
+source "$(dirname "$0")/lib/common.sh"
+[[ $# == 1 && -f "$1" ]] || die "usage: bash bin/test-twitch-providers <patched.apk>"
+serial=${ANDROID_SERIAL:-emulator-5580}
+out="$WORK/tests/twitch-providers"
+remote=/data/local/tmp/morphe-twitch-providers-test
+mkdir -p "$out/classes" "$out/dex" "$WORK/tmp"
+export TMPDIR="$WORK/tmp"
+javac --release 17 -classpath "$ANDROID_HOME/platforms/android-36/android.jar" \
+    -d "$out/classes" "$ROOT/tests/twitch/ProvidersAndroidProbe.java" \
+    "$ROOT/tests/twitch/PronounCompletionProbe.java" "$ROOT/tests/twitch/PronounAndroidProbe.java"
+"$(build_tool d8)" --min-api 29 --lib "$ANDROID_HOME/platforms/android-36/android.jar" \
+    --output "$out/dex" "$out/classes/"*.class
+(cd "$out/dex" && jar cf "$out/probe.jar" classes.dex)
+adb -s "$serial" shell mkdir -p "$remote"
+trap 'adb -s "$serial" shell rm -rf "$remote" >/dev/null 2>&1 || true' EXIT
+adb -s "$serial" push "$1" "$remote/app.apk" >/dev/null
+adb -s "$serial" push "$out/probe.jar" "$remote/probe.jar" >/dev/null
+adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin ProvidersAndroidProbe $remote/app.apk $remote/cache"
+
+for scenario in user-live names-live user-retired names-retired user-off names-off user-native; do
+    adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin PronounAndroidProbe $scenario"
+done

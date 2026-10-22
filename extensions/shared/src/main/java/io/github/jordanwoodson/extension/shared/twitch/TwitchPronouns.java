@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.github.jordanwoodson.extension.shared.Logger;
+import io.github.jordanwoodson.extension.shared.settings.Settings;
 
 /**
  * pronouns.alejo.io pronouns for chatters, shown as a small text badge. This needs one request per chatter
@@ -60,6 +61,9 @@ final class TwitchPronouns {
                 return thread;
             });
     private static volatile long lastRequest;
+    private static final Map<String,TwitchThirdParty.Demand> DEMAND = new HashMap<>();
+    private static TwitchThirdParty.Demand namesDemand;
+    private static final Map<String,TwitchThirdParty.Demand> IMAGE_DEMAND = new HashMap<>();
 
     /** Pronoun ID -> { subject, object, "singular" or "" }, loaded once from /v1/pronouns. */
     private static volatile Map<String, String[]> names;
@@ -80,30 +84,61 @@ final class TwitchPronouns {
      * The pronoun badge of {@code login} as { label, image URI }, or null when it isn't known (yet). Never
      * waits: an unknown or expired user is queued for a lookup.
      */
-    static String[] badge(String login) {
-        if (!isLogin(login)) return null;
-        String key = login.toLowerCase(Locale.ROOT);
-        Map<String, String[]> list = names();
+    static String[] badge(String login) { return badge(login,null); }
+
+    static void requestRn(String login, java.util.function.BooleanSupplier wanted) {
+        if (wanted != null && wanted.getAsBoolean() && Settings.isRegistered(TwitchBadges.KEY_PRONOUNS)) badge(login,wanted);
+    }
+
+    /** Passive: rendering a cached snapshot must never enqueue work. */
+    static String[] cachedRn(String login) {
+        if (!Settings.isEnabled(TwitchBadges.KEY_PRONOUNS) || !isLogin(login)) return null;
         Lookup entry;
-        boolean lookup = false;
+        synchronized (LOCK) { entry = USERS.get(login.toLowerCase(Locale.ROOT)); }
+        Map<String,String[]> list = names;
+        if (entry == null || entry.primary == null || list == null) return null;
+        String label = label(list,entry.primary,entry.alt);
+        String image = label == null ? null : IMAGES.get(label);
+        return image == null ? null : new String[]{label,image};
+    }
+
+    private static String[] badge(String login, java.util.function.BooleanSupplier wanted) {
+        if (!Settings.isEnabled(TwitchBadges.KEY_PRONOUNS) || !isLogin(login)) return null;
+        String key = login.toLowerCase(Locale.ROOT);
+        Map<String, String[]> list = names(wanted);
+        Lookup entry;
+        TwitchThirdParty.Demand scheduled = null;
         synchronized (LOCK) {
             entry = USERS.get(key);
-            if ((entry == null || entry.expires < SystemClock.elapsedRealtime()) && PENDING.add(key)) lookup = true;
+            if (entry == null || entry.expires < SystemClock.elapsedRealtime()) {
+                TwitchThirdParty.Demand demand = DEMAND.get(key);
+                if (demand == null) {
+                    demand = new TwitchThirdParty.Demand(); DEMAND.put(key,demand); PENDING.add(key); scheduled = demand;
+                }
+                demand.add(wanted);
+            }
+            // A cached user may precede the names response. Retain only bounded cache-entry demand.
+            if (entry != null && entry.primary != null && names == null) {
+                if (entry.waitingForNames == null) entry.waitingForNames = new TwitchThirdParty.Demand();
+                entry.waitingForNames.add(wanted);
+            }
         }
-        if (lookup) schedule(key);
+        list = names;
+        if (scheduled != null) schedule(key,scheduled);
         if (entry == null || entry.primary == null || list == null) return null;
         String label = label(list, entry.primary, entry.alt);
         if (label == null) return null;
         String image = IMAGES.get(label);
         if (image == null) {
-            if (IMAGES_PENDING.add(label)) {
-                TwitchThirdParty.run("pronoun badge", () -> {
-                    try {
-                        image(label);
-                    } finally {
-                        IMAGES_PENDING.remove(label);
-                    }
-                });
+            synchronized (IMAGE_DEMAND) {
+                TwitchThirdParty.Demand pending = IMAGE_DEMAND.get(label);
+                if (pending != null) pending.add(wanted);
+                else {
+                    TwitchThirdParty.Demand demand = new TwitchThirdParty.Demand(); demand.add(wanted);
+                    IMAGE_DEMAND.put(label,demand); IMAGES_PENDING.add(label);
+                    TwitchThirdParty.run("pronoun badge", () -> Settings.isEnabled(TwitchBadges.KEY_PRONOUNS) && demand.getAsBoolean(),
+                        () -> image(label), () -> { synchronized (IMAGE_DEMAND) { IMAGE_DEMAND.remove(label);IMAGES_PENDING.remove(label); } });
+                }
             }
             return null;
         }
@@ -119,23 +154,27 @@ final class TwitchPronouns {
         return true;
     }
 
-    private static void schedule(String login) {
+    private static void schedule(String login, TwitchThirdParty.Demand demand) {
         try {
-            LOOKUPS.execute(() -> lookup(login));
+            LOOKUPS.execute(() -> lookup(login,demand));
         } catch (RejectedExecutionException e) {
             // Too many waiting: drop it. The chatter's next line asks again.
             synchronized (LOCK) {
-                PENDING.remove(login);
+                PENDING.remove(login); DEMAND.remove(login);
             }
         }
     }
 
     /** On the lookup thread: one user, spaced at least MIN_GAP_MS from the previous request. */
-    private static void lookup(String login) {
+    private static void lookup(String login, TwitchThirdParty.Demand demand) {
         Lookup entry;
         try {
             long wait = lastRequest + MIN_GAP_MS - SystemClock.elapsedRealtime();
             if (wait > 0) Thread.sleep(wait);
+            if (!Settings.isEnabled(TwitchBadges.KEY_PRONOUNS) || !demand.getAsBoolean()) {
+                synchronized (LOCK) { PENDING.remove(login); DEMAND.remove(login); }
+                return;
+            }
             lastRequest = SystemClock.elapsedRealtime();
             String[] ids = TwitchThirdParty.getJson(API + "users/" + login, TwitchPronouns::parseUser, new String[2],
                     READ_TIMEOUT_MS);
@@ -147,11 +186,13 @@ final class TwitchPronouns {
             entry = new Lookup(null, null, SystemClock.elapsedRealtime() + ERROR_TTL_MS);
         }
         synchronized (LOCK) {
+            if (entry.primary != null && names == null) entry.waitingForNames = demand;
             USERS.put(login, entry);
-            PENDING.remove(login);
+            TwitchThirdParty.catalogChanged();
+            PENDING.remove(login); DEMAND.remove(login);
         }
         Map<String, String[]> list = names;
-        if (entry.primary != null && list != null) {
+        if (Settings.isEnabled(TwitchBadges.KEY_PRONOUNS) && demand.getAsBoolean() && entry.primary != null && list != null) {
             String label = label(list, entry.primary, entry.alt);
             if (label != null && !IMAGES.containsKey(label)) image(label);
         }
@@ -172,24 +213,48 @@ final class TwitchPronouns {
     }
 
     /** The pronoun names, loading them once in the background; null until loaded. */
-    private static Map<String, String[]> names() {
+    private static synchronized Map<String, String[]> names(java.util.function.BooleanSupplier wanted) {
         Map<String, String[]> list = names;
-        if (list != null || SystemClock.elapsedRealtime() < namesRetryAt || !NAMES_LOADING.compareAndSet(false, true)) {
-            return list;
-        }
-        TwitchThirdParty.run("pronoun list", () -> {
+        if (list != null || SystemClock.elapsedRealtime() < namesRetryAt) return list;
+        if (namesDemand != null) { namesDemand.add(wanted); return null; }
+        namesDemand = new TwitchThirdParty.Demand(); namesDemand.add(wanted);
+        TwitchThirdParty.Demand demand = namesDemand;
+        NAMES_LOADING.set(true);
+        TwitchThirdParty.run("pronoun list", () -> Settings.isEnabled(TwitchBadges.KEY_PRONOUNS) && demand.getAsBoolean(), () -> {
             try {
                 names = TwitchThirdParty.getJson(API + "pronouns", TwitchPronouns::parseNames, null);
+                TwitchThirdParty.catalogChanged();
                 if (names == null) namesRetryAt = SystemClock.elapsedRealtime() + LIST_RETRY_MS;
-                else Logger.d("badges: pronouns: " + names.size());
+                else {
+                    completeWaitingImages(names);
+                    Logger.d("badges: pronouns: " + names.size());
+                }
             } catch (IOException | RuntimeException e) {
                 namesRetryAt = SystemClock.elapsedRealtime() + LIST_RETRY_MS;
                 Logger.d("badges: pronoun list unavailable: " + e);
-            } finally {
-                NAMES_LOADING.set(false);
             }
-        });
+        }, () -> { synchronized (TwitchPronouns.class) { namesDemand = null; NAMES_LOADING.set(false); } });
         return null;
+    }
+
+    /** Names completion resumes already requested image work, without involving passive catalog reads. */
+    private static void completeWaitingImages(Map<String,String[]> list) {
+        Map<Lookup,TwitchThirdParty.Demand> waiting = new LinkedHashMap<>();
+        synchronized (LOCK) {
+            for (Lookup entry : USERS.values()) {
+                if (entry.waitingForNames != null) {
+                    waiting.put(entry,entry.waitingForNames);
+                    entry.waitingForNames = null;
+                }
+            }
+        }
+        // USERS bounds this batch. Recheck each owner/setting and draw each distinct label at most once.
+        for (Map.Entry<Lookup,TwitchThirdParty.Demand> item : waiting.entrySet()) {
+            if (!Settings.isEnabled(TwitchBadges.KEY_PRONOUNS) || !item.getValue().getAsBoolean()) continue;
+            Lookup entry = item.getKey();
+            String label = label(list,entry.primary,entry.alt);
+            if (label != null && !IMAGES.containsKey(label)) image(label);
+        }
     }
 
     /** /v1/pronouns: { "hehim": { "name", "subject": "He", "object": "Him", "singular": false }, ... }. */
@@ -258,6 +323,7 @@ final class TwitchPronouns {
             String uri = "data:image/png;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP);
             TwitchEmotes.registerWide(uri, (float) width / BADGE_HEIGHT);
             IMAGES.put(label, uri);
+            TwitchThirdParty.catalogChanged();
         } catch (RuntimeException e) {
             Logger.d("badges: pronoun badge failed: " + e);
         }
@@ -267,6 +333,8 @@ final class TwitchPronouns {
         final String primary;
         final String alt;
         final long expires;
+        /** Guarded by LOCK; discarded when names complete or this bounded cache entry is evicted. */
+        TwitchThirdParty.Demand waitingForNames;
 
         Lookup(String primary, String alt, long expires) {
             this.primary = primary;

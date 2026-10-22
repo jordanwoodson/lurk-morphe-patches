@@ -6,23 +6,34 @@ Apply the same workflow used for Rumble and Kick: inspect the original app, impl
 the viable equivalents of the existing patches, verify the resulting APK and runtime
 settings, and publish a tested stable Lurk release through the repository workflow.
 
-The supported target is `tv.twitch.android.app` **31.6.0**, version code **3106006**.
-The original APKMirror bundle was added on 2026-10-14 with `bin/apk-add --copy`, which
-verified its signature and stored it in `apks/twitch/31.6.0/`. The universal variant supports Android 12L+ (API 32), with arm64-v8a,
-armeabi-v7a, x86 and x86_64 splits. The base APK SHA-256 is
-`9e540dc16e8c6bb2c10ff06600f11576afe671b6f4cc7ba3ee80985b523d45b8`.
+The supported target is `tv.twitch.android.app` **31.7.0**, version code **3107006**.
+The patches were written against 31.6.0 (3106006) and moved to 31.7.0 on 2026-10-21. Two APKMirror
+bundles of 31.7.0 were added that day with `bin/apk-add`, which verified their signature and stored
+them in `apks/twitch/31.7.0/`: the arm64-v8a 480-640 dpi bundle for phones (Android 10+, the default
+input) and the arm64-v8a, x86 and x86_64 480 dpi bundle (Android 8.0+) that emulator installs pick.
+The phone bundle's base APK SHA-256 is
+`4c1e1bb8e75b52d964310cb74ec7c10587ae8eb7fed1efa4959a5e88098c9c56`.
 
 Allowed sources are APKMirror, Google Play and Uptodown (see [CONTRIBUTING.md](../CONTRIBUTING.md)).
-The variant used is listed here:
+The variants used are listed here:
 
-- [APKMirror release and variants](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-31-6-0-release/)
-- [APKMirror universal bundle](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-31-6-0-release/twitch-live-streaming-31-6-0-android-apk-download/)
+- [APKMirror release and variants](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-31-7-0-release/)
+- [APKMirror arm64-v8a bundle](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-31-7-0-release/twitch-live-streaming-31-7-0-4-android-apk-download/)
+- [APKMirror arm64-v8a + x86 + x86_64 bundle](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-31-7-0-release/twitch-live-streaming-31-7-0-2-android-apk-download/)
+
+What changed from 31.6.0 for the patches: the React Native bundle (still Hermes v98) renumbered its
+strings, functions, literals and registers, and the React Native player moved its player, metadata,
+stream URL and release handling from `TwitchIVSPlayerView` into a new `PlaybackSession`. Patterns
+that carry string IDs now resolve them from the bundle (`HermesBundle.id8`/`id16`). The edits whose
+registers, offsets or memo-cache slots are the compiler's (Hide Clips in `DiscoveryFeedContent`,
+the player's Share button) were re-derived from 31.7.0's disassembly, and the version-pinned tests
+that name R8-renamed classes were moved to 31.7.0's names.
 
 APKMirror reports the signing certificate SHA-256 as
 `1338f9b049893cc70b78432a177582f90bd4bc6296ea4ed35bcc7df59687ac53`.
 The supplied APK's verified signature matches this certificate, which is now pinned
 in `twitch/shared/Constants.kt`. Decompiled Java, smali and resources are under
-`~/scratch/morphe/twitch/31.6.0/`. Twitch also embeds a Hermes v98 React Native bundle
+`~/build/lurk-morphe-patches/twitch/31.7.0/` (`bin/decompile twitch`). Twitch also embeds a Hermes v98 React Native bundle
 and web-view JavaScript; native screens alone do not cover every feature.
 
 ## Coverage
@@ -207,7 +218,7 @@ fired twice.
 Implementing this exposed a patcher pitfall. A non-range `invoke-static { p0, v0 }` in a method whose
 `p0` maps above v15 (here v30) is dropped from the output without an error or warning. Injected
 calls therefore use `/range` or low registers, and a scan of the patched DEX lists every extension
-method that app code calls (`~/scratch/morphe/twitch-gap/scripts/ext_calls.py`).
+method that app code calls (`~/build/lurk-morphe-patches/twitch-gap/scripts/ext_calls.py`).
 
 ### Player: sleep timer, refresh, gestures and latency
 
@@ -251,8 +262,10 @@ Native:
 Brand surveys, which replace unfilled feed ads, are dropped. Sponsorship and paid-promotion labels
 are untouched.
 
-*Mute stitched ads* watches each player's EXT-X-DATERANGE cues: the native `sna.h(JSONObject)` handler
-and RN `TwitchIVSPlayerView.handleMetadata`. From `twitch-stitched-ad` until `twitch-stream-source`
+*Mute stitched ads* watches each player's EXT-X-DATERANGE cues: the native player's `h(JSONObject)`
+handler and the RN player's `PlaybackSession.handleMetadata`. Each RN player view owns one session and
+is its display; the patch adds two public static helpers to the session, because its display and
+player getter are private and `handleMetadata` has one free register. From `twitch-stitched-ad` until `twitch-stream-source`
 = `live`, it mutes the IVS player through `setMuted` and covers the video in black. Twitch itself mutes
 with the volume, so the user's own mute is untouched. A break also ends on a new stream, a release, or
 a timer set from the ad's duration (capped at 240 s). The ad still plays for its full length.
@@ -274,6 +287,21 @@ for the body), which every Twitch player uses. When a media playlist's next segm
   without the old ad cues;
 - a break past 4 minutes, an unreadable playlist or a backup that stops answering ends the switch;
 - without a backup, Mute stitched ads applies.
+
+Playlist reads and backup discovery share a six-second monotonic budget, including queued work,
+headers and continually progressing bodies. Compressed and expanded bodies are limited to 1 MiB.
+Three I/O workers and eight pending operations bound stalled providers; cancellation releases the
+caller even if a provider ignores interruption. Workers check cancellation before further reads and
+chained requests. An expired discovery retains the already-read ad playlist so the existing mute
+fallback still applies. Delayed responses cannot restore a retired source or regress the media
+sequence; when a newer source cannot be fetched, the last accepted window is reused. If that rendition
+has no accepted window yet, the consumer reports an error without delivering a retired or manufactured
+empty playlist. Native IVS probes found repeated synthetic empty windows cause rapid polling.
+Provider I/O runs outside the short stream state monitor; source generations prevent late workers
+from overwriting a newer transition, and request hooks stay usable while old I/O remains blocked.
+`tests/twitch/test_async.py` verifies these paths with local delayed/trickling HTTP and controlled
+IVS providers. A permanently blocked platform provider can retain one worker until it returns;
+the worker count stays bounded and saturated callers fail promptly or use the existing body.
 
 `bin/test-twitch-ad-backup` runs the hooked consumer on ART against live Twitch playlists. A test
 build with a faked break went 1080p → 360p → 1080p without a reload. No real commercial was caught
@@ -320,7 +348,11 @@ login. The input shows Twitch's log-in restriction relabelled "read only", and t
 mutation returns Twitch's own failure result, so nothing posts under the account.
 
 *Show deleted messages* keeps the text of deleted or timed-out messages, struck through. It covers
-lines already shown and messages that arrive deleted. *Ignore chat clears* treats a `CLEARCHAT`
+native lines already shown and messages that arrive deleted. React Native retention is limited to
+verified received, ordinary chat bodies, including lines still waiting in the original chat-delay queue.
+It preserves deleted flags and timing, suppresses content actions on newly retained rows, and leaves
+hidden, unpublished, masked, AutoMod and low-trust content protected. Missing or invalid runtime helpers
+use the original delayed-drop predicate. The setting requires restart. *Ignore chat clears* treats a `CLEARCHAT`
 without a target user as a no-op, in native and React Native chat; timeouts and bans still apply.
 
 *Chat timestamps* turns on Twitch's own history timestamp for live channel chat, not whispers, with a
@@ -330,7 +362,7 @@ chest's own claim action once per claim ID.
 `bin/test-twitch-chat <apk>` runs the real classes with each switch on and off. Signed-in IRC login
 and bonus claims are verified only through bytecode and the probe.
 
-*Chat keywords* highlights native chat lines that mention you (your signed-in login) or contain one
+*Chat keywords* highlights native and React Native chat lines that mention you (your signed-in login) or contain one
 of your highlight words, with a tinted row and an optional vibration. It hides lines with blocked
 words or from blocked users. The word and user lists are Lurk's first text settings: a `TextSetting`
 in the registry JSON, edited in a dialog on the settings screen. Words match as whole words in any
@@ -344,8 +376,50 @@ collapsed by the row binders.
 - plain /me messages;
 - the landscape chat column's width (the theatre guideline) and background opacity.
 
-React Native chat is not covered. `bin/test-twitch-chat-style` checks both patches on ART, including
-mentions with a fake signed-in account.
+React Native wrappers use the actual row, body, timestamp, text-metrics, selector and landscape-column
+exports. History filtering preserves the original store and stable snapshots. Live keyword vibration
+subscribes only while its store is mounted; history, deleted lines and rerenders do not notify.
+All-off restores the original exports. `bin/test-twitch-chat-style` checks native styling on ART,
+including mentions with a fixture account; `bin/test-twitch-rn` checks native RN bridge ownership.
+
+The original floating one-chat overlay projects away the message type and omits store/channel props.
+Its original host now publishes its genuine store and exact numeric destination/login through
+tree-local React context after commit. Projected rows must match the canonical original line's
+id/body/user/userId/source-room/deleted/hidden/unpublished fields before using provider or received
+deletion privileges. Immutable authority rejects a changed destination before effects run; cleanup
+retires only its own publisher. The original store hook runs once and returns unchanged, and the
+host component type/key stays stable so drag/collapse/scroll state survives. There is no extra
+network request, timer or global render provenance.
+
+The column width/opacity settings target `landscape-column-chat`, reached through the original
+video double-tap cycle; floating one-chat retains its stock opacity. Nondefault column opacity
+uses the existing empty background as black and existing foreground as theme color with alpha,
+then clears only the two measured covering fills in ClassicChatColumn/ChatArea. Header/composer,
+text/emote colors, player, gutters and actions keep their original styles. A stable React Provider
+carries primitive opacity or neutral null without adding a native View or remounting chat when
+opacity changes. While wrappers are installed, neutral paths preserve original native styles and
+child objects, rather than literal outer React object identity; full configure-off restores the
+original exports. Unknown shapes keep stock handling. The
+[dated verification record](verification-2026-10-17.md) distinguishes actual visible opacity
+controls from the earlier style-only readback, and real provider images from controlled cached
+badge/pronoun metadata.
+
+The original RN live store is keyed by channel login. Keyword notification ownership preserves that
+bounded login exactly; provider row acquisition independently uses the numeric channel/source-room ID.
+
+The pinned live RN owners are discovered by unique exports in Hermes98, with an additional compiled
+bundle installed before consumers render. Both embedded and prepared main bundles retain
+`assets://index.android.bundle`; ReactInstance and native-module teardown retire their own state.
+The source/deleted-predicate bundles use the pinned official compiler. The original122-byte delayed
+callback cannot hold the guarded fallback, so a verified241-byte compiled body is appended with its
+full37-byte header and exception metadata. Off restores the original header, length and checksum.
+
+VOD navigation is positively native: `TwitchRNHostNavigationModule.openVodInternal` constructs a
+`PartialVodModel` and invokes the native theatre router. Native replay token/binder hooks apply there;
+no separate RN replay renderer was established. Signed-out RN smoke uses an isolated final rollout
+routing override, preserving earlier route/auth gates, followed by exact production restoration.
+Actual guest Fabric rows and actual-store local moderation fixtures establish consumer integration;
+these fixtures do not establish authenticated server moderation, sending, or physical-phone rendering.
 
 ### Third-party emotes and badges
 
@@ -356,8 +430,15 @@ those IDs to each provider's CDN. Animated emotes use GIF; static ones, or all o
 animated-emotes setting is off, use PNG.
 
 VOD replay splits its named message tokens. React Native chat gets `emotes=` ranges added to incoming
-IRC frames, and its `ImageSource` maps the same URLs, with no Hermes edit. Lists are fetched per
-channel in the background and cached in memory; if a fetch fails, codes stay as text.
+IRC frames, and its `ImageSource` maps the same URLs. Compiled RN row wrappers additionally enrich
+history with cached emote/badge/pronoun snapshots. Offsets use Unicode code points, matching Twitch's
+segmenter, and native emotes retain precedence. Provider effects explicitly acquire/release demand;
+reading a catalog or IRC frame never schedules requests. One runtime timer polls a small native
+revision token every two seconds while committed provider rows exist; unchanged tokens do not refresh
+rows or fetch catalogs. Cache publication, badge/pronoun image availability and switch changes invalidate
+mounted rows. Last release, all-off and module disposal stop polling. Lists are fetched in background workers;
+failed/missing data leaves codes as text. Queues, per-room caches and snapshots are bounded. Queued
+work rechecks switches and surviving owners before each new request, preserving shared native demand.
 
 Badges download FrankerFaceZ's and Chatterino's public lists of badge holders and match them on the
 device, so no chatter is looked up. The exception is *pronouns* (`badges_pronouns`, off by default):
@@ -373,7 +454,11 @@ danmaku. It's fed from the native chat list feeder, found through the `LiveChatM
 toString. The overlay is a plain view on `android.R.id.content` that ignores all touches. It attaches
 only in landscape outside picture-in-picture while a video surface covers at least half the width,
 and detaches in portrait, in picture-in-picture, when the video goes away, or after 15 s without
-chat. React Native chat, VODs and chat replay don't pass through that feeder.
+chat. The exact viewer feeder owns posted messages. Its stream-model observer retires the former
+destination without waiting for another message, and onDestroyView retires that feeder without removing
+a newer viewer's overlay. A recreated view can reuse the feeder with fresh state. This takes effect at
+the measured model emission or teardown, not before a navigation intent reaches either boundary.
+React Native chat, VODs and chat replay don't pass through that feeder.
 
 Twitch already loads recent chat history on join (native
 `ChatHistory`, RN preload) and replays VOD chat, so a third-party history service isn't used.
@@ -383,13 +468,22 @@ Twitch already loads recent chat history on join (native
 *VOD chapters* (on by default) adds a Chapters button next to the rotate button in the native VOD
 player's overlay. It reads the video's `moments(momentRequestType: VIDEO_CHAPTER_MARKERS)` (position,
 duration, game) from gql.twitch.tv with the app's Client-ID only, since chapters are public. This
-runs on a background thread, results are cached per video, and they're shown in a list. Tapping a row
-seeks through Twitch's own VOD seek.
+shares one background request per video between prefetches and open overlays. Two chapter jobs run
+at once with eight queued; successful results and failure backoff each retain at most 32 videos.
+Failures retry after 15 seconds. Each load keeps at most eight weak owners, and at most 32 pending
+buttons can wait for a dialog. Requests use the same six-second monotonic budget and 1 MiB body
+limit as playlist I/O. Tapping a row seeks through Twitch's own VOD seek.
 
 Feed previews also load VOD presenters, so the button finds its video through its own overlay: the
 presenter whose visible player view lies under it (captured in the base presenter's view binding),
 mapped to the video it loaded. `VodModel.getId()` carries a `v` prefix that GQL rejects, so the
-prefix is stripped. Verified on the emulator: the dialog listed a VOD's three chapters, and tapping
+prefix is stripped. Pending dialogs check the original presenter, video, overlay attachment and
+current setting before appearing. Player-view detach callbacks retire both prefetch and open demand on the main thread; an old
+attachment cannot retire its replacement. Navigation and disabling chapters retire queued/provider work;
+results remain shared when another owner still needs that video. `tests/twitch/test_vod_requests.py`
+covers sharing, retry, eviction, queue/waiter bounds and stale delivery using platform HTTPS, JSON
+and UI doubles; it does not verify Twitch's live GraphQL schema or actual Android rendering.
+Verified on the emulator: the dialog listed a VOD's three chapters, and tapping
 the second seeked to 26:29.
 
 ### Tablet layout, navigation bar position and Force ExoPlayer
@@ -593,7 +687,10 @@ functions and switch targets using the production interface probe's manifest.
 with boundary fixtures. The existing Rumble and Kick Android probes also pass on
 APKs made with the expanded patch bundle.
 
-**Signed-in playback and chat, sending messages, actual server ad delivery, purchases,
+The [dated verification record](verification-2026-10-17.md) adds current guest native
+VOD/replay/chapters/PiP and qualified RN consumer/provider/reload observations, with
+artifact-specific provenance. The following account limits remain:
+**signed-in playback and chat, sending messages, actual server ad delivery, purchases,
 subscription/member screens and Amazon sign-in remain unverified.** Stock Twitch
 requires Log In or Sign Up, including for a direct channel URL, and no test account
 was available. Since "Watch without signing in" opens Twitch's own signed-out mode,
@@ -603,7 +700,7 @@ specific local behavior, not complete authenticated end-to-end coverage. The
 app also contains WebView code outside the covered native/RN presentation hooks.
 
 Analysis, decoded APKs, build logs and emulator captures remain under
-`~/scratch/morphe/twitch/31.6.0/`, `build-twitch/`, `twitch-privacy/` and
+`~/build/lurk-morphe-patches/twitch/31.6.0/`, `build-twitch/`, `twitch-privacy/` and
 `twitch-interface/`. The original upload is untouched.
 
 ## Implementation and release requirements

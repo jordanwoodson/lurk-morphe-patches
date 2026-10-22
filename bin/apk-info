@@ -7,8 +7,11 @@ arg="${1:?usage: bin/apk-info <file|app>}"
 if [[ ! -f "$arg" ]]; then
     app_constants "$arg" >/dev/null
     echo "$arg ($(app_package "$arg")):"
-    for v in $(ls "$ROOT/apks/$arg" 2>/dev/null | sort -V); do
-        echo "  $v  $(basename "$(app_input "$arg" "$v")")"
+    for v in $(ls "$APKS/$arg" 2>/dev/null | sort -V); do
+        while IFS= read -r f; do
+            echo "  $v  $(basename "$f")"
+            echo "         $(apk_py variant "$f")"
+        done < <(app_inputs "$arg" "$v")
     done
     exit
 fi

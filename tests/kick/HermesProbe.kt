@@ -11,7 +11,7 @@ import java.security.MessageDigest
 fun main(args: Array<String>) {
     val original = File(args[0]).readBytes()
     val bundle = HermesBundle(original)
-    check(bundle.function("KicksShopButton").offset == 0x8d20c0)
+    check(bundle.function("KicksShopButton").offset == 0x8d3ff3)
     check(bundle.function("preferencesSettingsSlice").body.size == 97)
     fun rejects(block: () -> Unit) = check(runCatching(block).isFailure)
     rejects { HermesBundle(original.copyOf().also { it[8] = 98 }) }
@@ -39,7 +39,7 @@ fun main(args: Array<String>) {
         loads = listOf("https://chat.mobile.kick.com"))
     val literals = bundle.instructions(chatConfig).filter { it.opcode == 2 } // NewObjectWithBufferLong
     check(bundle.objectKeys(literals[0]).take(3) == listOf("chatroomId", "subscriberBadges", "userCanModerate"))
-    check(bundle.objectKeys(literals[0]).size == 11)
+    check(bundle.objectKeys(literals[0]).size == 12) // 40.32.3 added channelLanguage.
     check(bundle.objectKeys(literals[1]) == listOf("id", "slug", "username"))
     check(bundle.objectKeys(literals[2]) == listOf("uri"))
     rejects { bundle.objectKeys(bundle.instructions(chatConfig).first()) }
@@ -77,27 +77,73 @@ fun main(args: Array<String>) {
         loads = listOf("/stream", "/clip", "/vod"))
     rejects { bundle.skipGuard(hostEnd, "invalid") } // Its first JmpTrue isn't a return guard.
     bundle.returnAtEntry(hostEnd, "host_end", Constant.UNDEFINED, defaultEnabled = false)
-    // Stay on channel edits the host dialog's countdown options instead: Watch now relies on hostEnd too.
+    // This is decoder/helper coverage only, not a Stay on channel execution test.
+    // verify_hosting.py executes the APK manifest's real countdown edit, retained React caches,
+    // actual JSX handlers/countdown callbacks and stock/off/mutated bytecode controls.
     check(bundle.instructions(bundle.function("JoinHostDialogContent")).count {
         (it.opcode == 1 || it.opcode == 2) && bundle.objectKeys(it) == listOf("duration", "startOnMount", "onEnd")
     } == 1)
 
-    // Literal edits: exact original bytes, unique replacement windows, choices with their own bytes.
-    val skip = 201721
+    // Structural matches: GetById with this bundle's string ID, and one instruction run with register flow.
+    check(bundle.getById(4, 9, 22, "subscription").contentEquals(hex("45 04 09 16") +
+        byteArrayOf(bundle.stringId("subscription").toByte(), (bundle.stringId("subscription") ushr 8).toByte())))
+    rejects { bundle.getById(4, 9, 22, "missing-property") }
+    check(bundle.functionsNamed("?anon_0_getVodSession").size == 2) // Generator wrapper and body.
+    val home = bundle.functionsNamed("ChannelHomeContent")
+    val (_, row) = bundle.sequence("PopularClipsRow element", home,
+        listOf(bundle.reads("PopularClipsRow"), bundle.creates("channelSlug"), { it.opcode == HermesOp.PUT_OWN_BY_SLOT_IDX },
+            { it.opcode == HermesOp.CALL3 })) { (component, props, _, call) ->
+        call.u8(4) == component.u8(1) && call.u8(5) == props.u8(1)
+    }
+    check(row.size == 4)
+    rejects { bundle.sequence("ambiguous", home, listOf(bundle.reads("jsx"))) } // Many jsx reads.
+    rejects { bundle.sequence("missing", home, listOf(bundle.reads("PopularClipsRow"), bundle.creates("missing-key"))) }
+    rejects { bundle.sequence("wrong flow", home, listOf(bundle.reads("PopularClipsRow"), bundle.creates("channelSlug"))) {
+        (component, props) -> component.u8(1) == props.u8(1)
+    } }
+
+    // Literal readers: every array/object literal instruction with the bytes its values occupy.
+    check(bundle.literals.size > 50000)
+    val skipScale = bundle.literals.single { it.keys == listOf("livestream", "vod", "live-vod", "clip") }
+    val slots = bundle.slotArrays(skipScale)
+    check(slots.keys == setOf(0, 1, 2, 3))
+    val (vod, liveVod) = slots.getValue(1) to slots.getValue(2)
+    check(vod.start == liveVod.start && vod.end - vod.start == 13)
+    val skipReaders = listOf(vod, liveVod)
+    check(bundle.literalsReading(vod.start, vod.end).size == 2)
+    // The live edge array [60] shares its value with an unrelated object: editing it is refused.
+    val live = slots.getValue(0)
+    check(bundle.literalsReading(live.start, live.end).size > 1)
+    rejects { bundle.dataEdit(live.start, "invalid", bundle.literal(live.start, 5), hex("71 3d000000"), listOf(live)) }
+
+    // Literal edits: exact original bytes, only their own readers, unique windows, choices with their own bytes.
+    val skip = vod.start
     check(bundle.literal(skip, 13).contentEquals(hex("73 0a000000 0a000000 0a000000")))
-    rejects { bundle.dataEdit(skip, "invalid", hex("73 0b000000"), hex("73 0c000000")) }
-    rejects { bundle.dataEdit(-1, "invalid", hex("00"), hex("01")) }
+    rejects { bundle.dataEdit(skip, "invalid", hex("73 0b000000"), hex("73 0c000000"), skipReaders) }
+    rejects { bundle.dataEdit(-1, "invalid", hex("00"), hex("01"), skipReaders) }
+    rejects { bundle.dataChoice(skip, "vod_skip_seconds", hex("73 0a000000 0a000000 0a000000"),
+        mapOf("5" to hex("73 05000000 05000000 05000000")), readers = listOf(vod)) } // A reader left out.
     val choice = bundle.dataChoice(skip, "vod_skip_seconds", hex("73 0a000000 0a000000 0a000000"),
-        mapOf("5" to hex("73 05000000 05000000 05000000"), "30" to hex("73 1e000000 1e000000 1e000000")))
+        mapOf("5" to hex("73 05000000 05000000 05000000"), "30" to hex("73 1e000000 1e000000 1e000000")),
+        readers = skipReaders)
     check(choice.embedded.contentEquals(choice.original))
-    rejects { bundle.dataChoice(skip, "vod_skip_seconds", hex("73"), mapOf("x" to hex("74"))) }
-    rejects { bundle.dataEdit(142621, "vod_skip_seconds", hex("a8 02"), hex("a4 02")) } // Mixed kinds on one key.
-    bundle.dataChoice(142621, "amoled_black", hex("a8 02"), mapOf("1" to hex("a4 02"), "2" to hex("a4 02")))
-    bundle.dataChoice(142619, "amoled_black", hex("ba 02"), mapOf("2" to hex("ad 02")))
-    rejects { bundle.dataChoice(142620, "amoled_black", hex("02 a8"), mapOf("1" to hex("02 a4"))) }
+    rejects { bundle.dataChoice(skip, "vod_skip_seconds", hex("73"), mapOf("x" to hex("74")), skipReaders) }
+    fun id(colour: String) = bundle.stringId(colour).let { byteArrayOf(it.toByte(), (it ushr 8).toByte()) }
+    val surfaceValues = byteArrayOf(0x58) + id("#1C1E20") + id("#141517") + id("#090A0B")
+    val surface = bundle.literals.single {
+        it.keys?.take(3) == listOf("highest", "base", "lowest") && bundle.literal(it.start, 7).contentEquals(surfaceValues)
+    }
+    val lowest = surface.start + 5
+    val base = surface.start + 3
+    rejects { bundle.dataEdit(lowest, "vod_skip_seconds", id("#090A0B"), id("#000000"), listOf(surface)) } // Mixed kinds.
+    bundle.dataChoice(lowest, "amoled_black", id("#090A0B"), mapOf("1" to id("#000000"), "2" to id("#000000")),
+        readers = listOf(surface))
+    bundle.dataChoice(base, "amoled_black", id("#141517"), mapOf("2" to id("#0B0B0C")), readers = listOf(surface))
+    rejects { bundle.dataChoice(lowest - 1, "amoled_black", bundle.literal(lowest - 1, 2),
+        mapOf("1" to bundle.literal(lowest - 1, 2).also { it[1] = (it[1] + 1).toByte() }), readers = listOf(surface)) }
     val shipped = HermesBundle(original)
     shipped.dataChoice(skip, "vod_skip_seconds", hex("73 0a000000 0a000000 0a000000"),
-        mapOf("5" to hex("73 05000000 05000000 05000000")), defaultValue = "5")
+        mapOf("5" to hex("73 05000000 05000000 05000000")), readers = skipReaders, defaultValue = "5")
     check(shipped.replacements().single().let { (from, to) -> from != to && from.length == to.length })
 
     val patched = bundle.preview()
@@ -120,7 +166,8 @@ fun main(args: Array<String>) {
     }
     val manifest = bundle.manifest()
     check(manifest.contains("\"format\":2") && manifest.contains("\"embeddedSha256\""))
-    check(manifest.contains("\"values\":{\"1\":\"a402\",\"2\":\"a402\"},\"default\":\"0\""))
+    val black = id("#000000").joinToString("") { "%02x".format(it.toInt() and 255) }
+    check(manifest.contains("\"values\":{\"1\":\"$black\",\"2\":\"$black\"},\"default\":\"0\""))
     File(args[1]).writeBytes(patched)
     File(args[2]).writeText(manifest)
     println("PASS: actual v99 headers, fail-closed checks, ${bundle.edits.size} edits (entry returns, property " +

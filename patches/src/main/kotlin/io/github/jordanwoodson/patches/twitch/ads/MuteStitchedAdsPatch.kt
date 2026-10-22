@@ -1,13 +1,18 @@
 package io.github.jordanwoodson.patches.twitch.ads
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
+import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod.Companion.toMutable
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.builder.MutableMethodImplementation
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.iface.reference.TypeReference
+import com.android.tools.smali.dexlib2.immutable.ImmutableMethod
+import com.android.tools.smali.dexlib2.immutable.ImmutableMethodParameter
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.shared.settings.requireLocals
@@ -70,28 +75,80 @@ val muteStitchedAdsPatch = bytecodePatch(
             invoke-static { v0, v1 }, $ADS->coverNativeAd(Landroid/view/View;Z)V
         """)
 
-        // React Native player view: every player's metadata, before the view drops what it doesn't
-        // route to its ad state. A new stream URL or a release (the player may return to a pool)
-        // ends the break.
-        val view = classDefBy(RN_PLAYER_VIEW)
-        if (view.methods.none { it.name == "getPlayer" && it.parameterTypes.isEmpty() && it.returnType == IVS_MEDIA_PLAYER }) {
-            throw PatchException("Twitch: React Native player view has no player getter")
-        }
-        RnPlayerMetadataFingerprint.twitchMatch("React Native player metadata").method.apply {
-            requireLocals(1)
-            addInstructions(0, """
-                invoke-direct { p0 }, $RN_PLAYER_VIEW->getPlayer()$IVS_MEDIA_PLAYER
-                move-result-object v0
-                invoke-static { p0, v0, p1, p2 }, $ADS->onRnCue(Landroid/view/View;Ljava/lang/Object;Ljava/lang/String;Ljava/nio/ByteBuffer;)V
-            """)
-        }
-        RnPlayerStreamUrlFingerprint.twitchMatch("React Native player stream URL").method.addInstructions(0,
-            "invoke-static { p0, p1 }, $ADS->onRnStreamUrl(Landroid/view/View;Ljava/lang/String;)V")
-        RnPlayerReleaseFingerprint.twitchMatch("React Native player release").method.addInstructions(0,
-            "invoke-static { p0 }, $ADS->onRnRelease(Landroid/view/View;)V")
+        // React Native player: each player view owns one playback session, which holds the player
+        // and gets every player's metadata, before it drops what it doesn't route to its ad state.
+        // A new stream URL or a release (the player may return to a pool) ends the break. The
+        // extension keys a break by the view, the session's display.
+        hookRnPlaybackSession()
 
         twitchSettings.add(SwitchSetting(KEY, "Mute stitched ads",
             "Mute and black out ad breaks stitched into streams. The ad still plays for its full length.",
             Section.PLAYBACK))
+    }
+}
+
+private const val DISPLAY_VIEW = "lurkDisplayView"
+private const val ON_METADATA = "lurkOnMetadata"
+
+/**
+ * The session's private display and player getter are only reachable from its own class, and
+ * handleMetadata has one free register, so two public static helpers go into the session:
+ * its display as a View (null otherwise) and the metadata hook.
+ */
+private fun BytecodePatchContext.hookRnPlaybackSession() {
+    val session = mutableClassDefBy(RN_PLAYBACK_SESSION)
+    val display = session.fields.singleOrNull { it.type == RN_PLAYBACK_DISPLAY && !AccessFlags.STATIC.isSet(it.accessFlags) }
+        ?: throw PatchException("Twitch: React Native playback session has no unique display")
+    if (session.methods.none { it.name == "getPlayer" && it.parameterTypes.isEmpty() && it.returnType == IVS_MEDIA_PLAYER }) {
+        throw PatchException("Twitch: React Native playback session has no player getter")
+    }
+    if (classDefBy(RN_PLAYER_VIEW).interfaces.none { it == RN_PLAYBACK_DISPLAY }) {
+        throw PatchException("Twitch: React Native player view is no longer its session's display")
+    }
+    fun helper(name: String, parameters: List<String>, returnType: String, registers: Int, smali: String) =
+        session.methods.add(ImmutableMethod(RN_PLAYBACK_SESSION, name,
+            parameters.map { ImmutableMethodParameter(it, null, null) }, returnType,
+            AccessFlags.PUBLIC.value or AccessFlags.STATIC.value, null, null,
+            MutableMethodImplementation(registers)).toMutable().apply { addInstructions(0, smali) })
+    val view = "$RN_PLAYBACK_SESSION->$DISPLAY_VIEW($RN_PLAYBACK_SESSION)Landroid/view/View;"
+    // p0 = v1.
+    helper(DISPLAY_VIEW, listOf(RN_PLAYBACK_SESSION), "Landroid/view/View;", 2, """
+        iget-object v0, p0, $RN_PLAYBACK_SESSION->${display.name}:$RN_PLAYBACK_DISPLAY
+        instance-of v1, v0, Landroid/view/View;
+        if-eqz v1, :none
+        check-cast v0, Landroid/view/View;
+        return-object v0
+        :none
+        const/4 v0, 0x0
+        return-object v0
+    """)
+    // p0..p2 = v2..v4.
+    helper(ON_METADATA, listOf(RN_PLAYBACK_SESSION, "Ljava/lang/String;", "Ljava/nio/ByteBuffer;"), "V", 5, """
+        invoke-static { p0 }, $view
+        move-result-object v0
+        invoke-direct { p0 }, $RN_PLAYBACK_SESSION->getPlayer()$IVS_MEDIA_PLAYER
+        move-result-object v1
+        invoke-static { v0, v1, p1, p2 }, $ADS->onRnCue(Landroid/view/View;Ljava/lang/Object;Ljava/lang/String;Ljava/nio/ByteBuffer;)V
+        return-void
+    """)
+
+    RnPlayerMetadataFingerprint.twitchMatch("React Native player metadata").method.addInstructions(0,
+        "invoke-static { p0, p1, p2 }, $RN_PLAYBACK_SESSION->$ON_METADATA($RN_PLAYBACK_SESSION" +
+            "Ljava/lang/String;Ljava/nio/ByteBuffer;)V")
+    RnPlayerStreamUrlFingerprint.twitchMatch("React Native player stream URL").method.apply {
+        requireLocals(1)
+        addInstructions(0, """
+            invoke-static { p0 }, $view
+            move-result-object v0
+            invoke-static { v0, p1 }, $ADS->onRnStreamUrl(Landroid/view/View;Ljava/lang/String;)V
+        """)
+    }
+    RnPlayerReleaseFingerprint.twitchMatch("React Native player release").method.apply {
+        requireLocals(1)
+        addInstructions(0, """
+            invoke-static { p0 }, $view
+            move-result-object v0
+            invoke-static { v0 }, $ADS->onRnRelease(Landroid/view/View;)V
+        """)
     }
 }

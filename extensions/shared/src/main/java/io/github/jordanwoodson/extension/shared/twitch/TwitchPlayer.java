@@ -58,10 +58,9 @@ public final class TwitchPlayer {
 
     /** Twitch's own set of players to pause, the one it pauses before a Guest Star call. */
     private static volatile WeakReference<Set<?>> pauseRegistry = new WeakReference<>(null);
-    private static final Runnable SLEEP_LEFTOVERS = TwitchPlayer::pauseLeftovers;
 
     static {
-        SleepTimer.setPauseAction(TwitchPlayer::pauseAll);
+        SleepTimer.setExpiryAction(TwitchPlayer::pauseAll);
     }
 
     /**
@@ -83,7 +82,7 @@ public final class TwitchPlayer {
     }
 
     /** The sleep timer's pause action: Twitch's own pause paths, then any player they missed. */
-    private static void pauseAll() {
+    private static void pauseAll(SleepTimer.Expiry expiry) {
         int registered = 0;
         Set<?> registry = pauseRegistry.get();
         if (registry != null) {
@@ -104,20 +103,7 @@ public final class TwitchPlayer {
         boolean feed = callRn("com.twitchrn.player.FeedPlayerRegistry", "pauseActiveFeedPlayer", true);
         Logger.d("sleep timer: paused " + registered + " native players, React Native session " + session
                 + ", feed " + feed);
-        MAIN.removeCallbacks(SLEEP_LEFTOVERS);
-        MAIN.postDelayed(SLEEP_LEFTOVERS, 3000);
-    }
-
-    /** A player none of Twitch's paths reached, such as a native feed preview: pause it directly. */
-    private static void pauseLeftovers() {
-        for (Object player : SleepTimer.started()) {
-            try {
-                player.getClass().getMethod("pause").invoke(player);
-                Logger.d("sleep timer: paused a player Twitch's paths missed");
-            } catch (Throwable t) {
-                Logger.d("sleep timer: " + t);
-            }
-        }
+        MAIN.postDelayed(() -> expiry.pauseLeftovers("Twitch's paths"), 3000);
     }
 
     /** {@code TwitchMediaSessionModule.getInstance().pausePlayer()} or {@code FeedPlayerRegistry.INSTANCE...}. */
@@ -408,6 +394,16 @@ public final class TwitchPlayer {
                 return false;
             }
             if (swipe != CLAIMED) return false;
+            if (!Settings.isEnabled("swipe_controls") || event.getPointerCount() != 1 ||
+                    event.findPointerIndex(swipePointer) < 0 || action == MotionEvent.ACTION_POINTER_UP ||
+                    action == MotionEvent.ACTION_POINTER_DOWN) {
+                swipe = IDLE;
+                ViewParent parent = container.getParent();
+                if (parent != null) parent.requestDisallowInterceptTouchEvent(false);
+                MAIN.removeCallbacks(HIDE_INDICATOR);
+                hideIndicator();
+                return false;
+            }
             if (action == MotionEvent.ACTION_MOVE) {
                 int index = event.findPointerIndex(swipePointer);
                 if (index >= 0) apply(container, (swipeDownY - event.getY(index)) / swipeHeight);
@@ -427,7 +423,7 @@ public final class TwitchPlayer {
     private static boolean moveCandidate(ViewGroup container, MotionEvent event) {
         if (swipe != CANDIDATE || container != swipeContainer.get()) return false;
         int index = event.findPointerIndex(swipePointer);
-        if (index < 0 || event.getPointerCount() > 1) {
+        if (index < 0 || event.getPointerCount() > 1 || !Settings.isEnabled("swipe_controls")) {
             swipe = IDLE;
             return false;
         }

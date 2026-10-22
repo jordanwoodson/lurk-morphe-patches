@@ -64,14 +64,14 @@ Lurk. Kick's and Twitch's JavaScript settings apply after a restart, which the s
 ## Patches
 
 <!-- PATCHES_START EXPANDED -->
-> **[v1.11.1](https://github.com/jordanwoodson/lurk-morphe-patches/releases/tag/v1.11.1)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;103 patches total
+> **[v1.12.0-dev.2](https://github.com/jordanwoodson/lurk-morphe-patches/releases/tag/v1.12.0-dev.2)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;103 patches total
 <details open>
 <summary><img src="assets/kick-icon-round.webp" width="28" height="28" align="center" alt="">&nbsp;&nbsp;<b>Kick</b>&nbsp;&nbsp;•&nbsp;&nbsp;26 patches</summary>
 <br>
 
 **🎯 Supported versions:**
 
-| 40.32.1 |
+| 40.32.3 |
 | :---: |
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
@@ -101,7 +101,7 @@ Lurk. Kick's and Twitch's JavaScript settings apply after a restart, which the s
 | Show deleted messages | Keeps chat messages that moderators delete, or remove with a timeout or ban, struck through with a (Deleted), (Timed out) or (Banned) label, the way Kick's chat shows them to moderators, along with its ban, timeout and unban lines. Large KICKs gifts in chat also get the moderators' menu, whose Delete is meant for the channel's moderators. A second switch keeps the chat when a moderator clears it. Both on by default, as on Twitch. Turn them off in Lurk settings > Chat. |  |
 | Sleep timer | Pauses playback a chosen time after it last started or resumed, including background audio. Starts off. Choose a time in Lurk settings > Playback. |  |
 | Stay on channel when it hosts | When the channel you're watching hosts another one, Kick's host dialog waits for you instead of switching when its countdown ends: Watch now still switches, Cancel stays. Starts off. Turn it on in Lurk settings > Interface. |  |
-| Third-party emotes | Adds a switch that shows the channel's 7TV emotes, and 7TV's global emotes, in live chat. When on, it sends the channel owner's Kick user ID to 7tv.io and loads emote images from cdn.7tv.app. Not in the emote picker or autocomplete. Starts off. Turn it on in Lurk settings > Chat. |  |
+| Third-party emotes | Adds optional 7TV emotes to chat, the native picker and autocomplete, with zero-width layers and live set updates. Sends the channel owner's Kick user ID to 7tv.io, subscribes to set IDs at events.7tv.io and loads images from cdn.7tv.app. Starts off. Turn it on in Lurk settings > Chat. |  |
 
 </details>
 
@@ -111,7 +111,7 @@ Lurk. Kick's and Twitch's JavaScript settings apply after a restart, which the s
 
 **🎯 Supported versions:**
 
-| 31.6.0 |
+| 31.7.0 |
 | :---: |
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
@@ -124,8 +124,8 @@ Lurk. Kick's and Twitch's JavaScript settings apply after a restart, which the s
 | Block cookie notice | Hides Twitch's automatic cookie consent notice without accepting it or changing saved vendor consent. Manual consent settings stay available. Use Disable analytics to block tracking. |  |
 | Block display ads | Blocks the ad requests that Block client ads doesn't cover: stream display ads (squeezeback and lower third), audio ads, multi-format ad pods, the Following headliner, feed display and video ads and brand surveys, in both the native and React Native parts of the app. Each request gets the failure or no-ad answer Twitch already handles. Sponsorship and paid-promotion labels are kept. Ads stitched into the stream by the server still play. |  |
 | Change app name | Changes the name shown under Twitch's launcher icon and in Android's settings. | • App name |
-| Chat appearance | Adds chat look settings: text size, alternating row backgrounds, plain /me messages, and the width and background opacity of the landscape chat panel. Each keeps Twitch's look until changed in Lurk settings. Native live chat, chat history and VOD chat replay; not React Native chat. |  |
-| Chat keywords | Highlights chat messages that mention you or contain your highlight words with a tinted background, optionally with a vibration, and hides messages with blocked words or from blocked users. Mentions are on by default; the word and user lists start empty and are set in Lurk settings. Native live chat, chat history and VOD chat replay; not React Native chat. |  |
+| Chat appearance | Adds chat look settings: text size, alternating row backgrounds, plain /me messages, and the width and background opacity of the landscape chat panel. Each keeps Twitch's look until changed in Lurk settings. Native and React Native live chat and history, plus native VOD chat replay. |  |
+| Chat keywords | Highlights chat messages that mention you or contain your highlight words with a tinted background, optionally with a vibration, and hides messages with blocked words or from blocked users. Mentions are on by default; the word and user lists start empty and are set in Lurk settings. Native and React Native live chat and history, plus native VOD chat replay. |  |
 | Chat overlay | Adds a switch that scrolls live chat messages right to left across the top of the video in landscape (danmaku), as plain white text with the sender's name. Off until turned on in Lurk settings, with choices for speed and number of lines. Native live channels only: not React Native chat, VODs or chat replay. The overlay never takes touches. |  |
 | Chat timestamps | Shows the time each live chat message was sent in front of it, the way Twitch already shows it on chat history, in 24-hour or 12-hour format. Whispers are unchanged. |  |
 | Clean share links | Removes known Twitch attribution and campaign parameters from shared links and copied share text. Keeps timestamps, clip IDs, unknown parameters and fragments. Covers native and React Native sharing. |  |
@@ -156,7 +156,7 @@ Lurk. Kick's and Twitch's JavaScript settings apply after a restart, which the s
 | Show video stats | Adds the video stats button Twitch shows only to its staff to the native player: latency to the broadcaster, bitrate, buffer, dropped frames, codecs and server. Everything shown is local to the player. |  |
 | Sleep timer | Pauses playback a chosen time after it last started or resumed, through Twitch's own pause for native, portal and React Native players, and says so in a short notice. Choose the time in Lurk settings; it is off until then. |  |
 | Tablet layout | Adds a switch that makes Twitch treat the phone as a tablet: Home and the player rotate, the player shows chat beside the video in landscape, and a navigation rail on the left replaces the bottom bar in landscape (and in portrait too with a second switch). Off until turned on in Lurk settings; applies after a restart. |  |
-| Third-party badges | Adds switches that show FrankerFaceZ and Chatterino badges and pronouns.alejo.io pronouns next to chatters' names in native chat. Each switch is off until turned on in Lurk settings. The badge switches download that service's public list of all badge holders (api.frankerfacez.com, api.chatterino.com) about once an hour and check it on the phone. The pronouns switch sends the username of each chatter whose message you see to pronouns.alejo.io. 7TV badges are not included. |  |
+| Third-party badges | Adds switches that show FrankerFaceZ and Chatterino badges and pronouns.alejo.io pronouns next to chatters' names in native and React Native chat. Each switch is off until turned on in Lurk settings. The badge switches download that service's public list of all badge holders (api.frankerfacez.com, api.chatterino.com) about once an hour and check it on the phone. The pronouns switch sends the username of each chatter whose message you see to pronouns.alejo.io. 7TV badges are not included. |  |
 | Third-party emotes | Adds switches that show 7TV, BetterTTV and FrankerFaceZ emotes in chat, Twitch's chat history and VOD chat replay. Each switch is off until turned on in Lurk settings; when on, it sends the ID of the channel you watch to that service (7tv.io, api.betterttv.net, api.frankerfacez.com) for its emote lists and loads the emote images from its CDN. Not in the emote picker or autocomplete. |  |
 | Use native player | Always opens live channels in Twitch's native player, never the React Native "Ultralight" player a server experiment can switch some users to. Most Lurk playback, chat and ad patches hook the native player. |  |
 | VOD chapters | Adds a Chapters button to the native video (VOD) player that lists the stream's game and category changes and jumps to one through Twitch's own seek. The list comes from Twitch's public data, fetched with the app's client ID. On by default. |  |
@@ -176,7 +176,7 @@ Lurk. Kick's and Twitch's JavaScript settings apply after a restart, which the s
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
 | Block ads | Removes video ads (before and during videos and live streams) and the ads in feeds and under videos, signed in or not. The app never requests them, so it never sends the ad server your advertising ID, and no ad or Boosted video impressions or clicks are reported. |  |
-| Block cookie notice | Stops Rumble's Ketch consent SDK from loading, so the cookie notice never appears and no consent is recorded, and ignores consent recorded earlier. Rumble then keeps the analytics and ad tracking it gates on consent switched off. Push notifications stop too, since Rumble only starts its push service (Airship) with consent. Settings > Data Consent no longer opens. |  |
+| Block cookie notice | Stops Rumble's Ketch consent SDK from loading, so the cookie notice never appears and no consent is recorded, and ignores consent recorded earlier. Rumble then keeps the analytics and ad tracking it gates on consent switched off. After restarting, Airship does not start; this may affect push notifications. Settings > Data Consent no longer opens. |  |
 | Block update prompts | Stops the "update required" screen and the "new version available" dialog that Rumble turns on remotely, so a patched version keeps working when Rumble raises its minimum version. Update by patching a newer version. On by default. Turn it off in Lurk settings > Interface. |  |
 | Change app name | Changes the name shown under Rumble's launcher icon and in Android's settings. | • App name |
 | Chat keywords | Highlights live chat messages that mention you or contain your highlight words with a tinted background, optionally with a vibration, and hides messages with blocked words or from blocked users. Mentions are on by default; the word and user lists start empty. On by default. Turn it off in Lurk settings > Chat. |  |
