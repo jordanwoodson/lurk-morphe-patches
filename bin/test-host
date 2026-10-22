@@ -24,7 +24,7 @@ checks=(
 )
 
 # Source rules for the whole bundle.
-checks+=(tests/verify_version_literals.py)
+checks+=("tests/verify_version_literals.py --strict")
 
 failed=0
 for check in "${checks[@]}"; do

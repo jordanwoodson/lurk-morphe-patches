@@ -313,7 +313,7 @@ How it works:
   shows none. The settings patch writes them as JSON into `Settings.registryJson()` in `finalize`.
 - Injected code calls `Settings.isEnabled(key)` (or `getInt(key)`) and runs Rumble's original code
   when it returns false. Values live in the `lurk_settings` SharedPreferences, written only when
-  changed on the screen; unknown keys count as on.
+  changed on the screen; unknown keys count as off.
 - Restart Rumble (shown after changing a switch that needs it) relaunches the launcher activity and
   exits the process.
 

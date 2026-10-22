@@ -36,6 +36,7 @@ need it rather than skipping them.
 | `tests/twitch/test_privacy_consent.py` | Twitch's privacy and consent helper. |
 | `tests/twitch/test_providers.py` | Third-party emote, badge and pronoun providers: scheduling, ownership, both response orders. |
 | `tests/twitch/test_rn_chat.py` | The compiled React Native chat helpers, the chat overlay's context and the landscape chat column's opacity. |
+| `tests/shared/test_settings.py` | The real `Settings`, `Registry` and settings screen helpers against each app's registered settings (`tests/shared/registry/`): JSON round trip, parent ordering, defaults, restart flags, stored and wrongly typed values, the unreadable-registry fallback. |
 | `tests/shared/test_sleep_timer.py` | *Sleep timer* in Kick and Twitch on a virtual clock: expiry, resuming, stop and release, races at dispatch. |
 | `tests/rumble/test_state_transitions.py` | Rumble's chat keywords across sign-in changes, and *Remember playback speed* switched on, off and on. |
 | `tests/kick/verify_player.py` | Kick's player decisions: mobile-data quality ceiling, normal latency, background audio. |
@@ -121,18 +122,36 @@ Full/info responses, numeric/string IDs, malformed JSON/config, unknown channels
 switches and unchanged response bodies are covered. It writes capture logs under `$MORPHE_WORK/tests/kick-chat`.
 The APK-free page scenarios remain registered in `bin/test-host`; native captures require this separate command.
 
-## Rumble: Refresh stream
+## Rumble
 
-`bin/test-rumble <patched.apk> RefreshProbe` runs the *Refresh stream* hooks on ART: the video-load
-registration, the error panel's tap handler, the reload bridge and the stock player's reload, with
-ExoPlayer, Compose and the player state supplied by the probe. It checks that a reload keeps the
-source and the position (0, 123456 and 4294967400 ms) without saving a quality, per video and on
-repeated taps, uses null sources, the switch off, a missing player and stock quality changes as
-controls, and checks that the callback is restored after a caught exception, an escaping logger
-exception and an `Error`. These are constructed boundaries, not observed playback failures.
-`tests/rumble/verify_refresh.py <apktool-dir>` checks the emitted fatal-state and mobile-panel branch.
-The error panel, the tap and the recovery were also seen on the emulator on 2026-10-18. Playback while
-signed in is untested.
+`bin/test-rumble <patched.apk>` compiles every `tests/rumble/*Probe.java`, pushes them with the APK and runs
+them with `app_process`, so each probe calls the app's real, patched methods on ART. Name probes to run a
+subset. The probes read the obfuscated names they need from the APK's `assets/lurk/locators.json`:
+
+- `AdsProbe`: Block ads, with the real ad repository, the server video lists (Boosted cards dropped) and
+  the Home section parser (`ad_block` sections hidden).
+- `PrivacyProbe`: Disable analytics with and without Keep watch progress (only watch-progress events
+  pass), Block cookie notice (the start loop starts only Airship, with essential services) and Don't save
+  searches.
+- `HideProbe`: Hide Shorts, Hide Premium upsells, Hide tipping and Rants, Hide comments and related videos
+  and Hide premium-only videos: the DTO getters, parsers and emptied composables, with the switches off as
+  controls.
+- `PlaybackProbe`: Fill screen on Media3's real `AspectRatioFrameLayout`, Seek interval, Sleep timer's direct
+  player pause, Default playback speed and Background audio by default.
+- `ChatProbe`, `KeywordsProbe`, `CountProbe`, `InterfaceProbe`, `PlayerProbe`, `PremiumProbe`, `QualityProbe`,
+  `SearchProbe`, `UpdateProbe`: the chat hooks, keyword filter, exact counts, home sections and bottom bar,
+  player settings, Unlock Premium's getter, Default video quality, search history and Block update prompts.
+- `RefreshProbe`: the *Refresh stream* hooks: video-load registration, the error panel's tap handler, the
+  reload bridge and the stock player's reload, with ExoPlayer, Compose and the player state supplied.
+  Reloads keep the source and position without saving a quality; null sources, the switch off, a missing
+  player and stock quality changes are controls, and the callback is restored after exceptions.
+
+After the probes, `bin/test-rumble` runs `tests/rumble/verify_compose.py` (every Compose trace label the
+patches match must exist in the APK, and App Info must have exactly three rows, which the hidden settings
+patch relies on), `tests/rumble/verify_switch_reads.py` (code must read every registered setting key) and
+the hook check against `tests/rumble/expected-hooks.txt`. `tests/rumble/verify_refresh.py <apktool-dir>`
+checks the emitted fatal-state branch, and `tests/rumble/verify_settings.py` the registered defaults.
+Playback while signed in is untested.
 
 ## Twitch: React Native and providers
 

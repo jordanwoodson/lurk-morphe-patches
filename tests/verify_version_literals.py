@@ -20,22 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / "patches/src"
 VERSION = re.compile(r"(?<![\w.])\d+\.\d+\.\d+(?![\w.])")
 _P = "patches/src/main/kotlin/io/github/jordanwoodson/patches/"
-PENDING = {_P + path for path in (
-    "kick/settings/SettingsPatch.kt",
-    "kick/shared/Hermes.kt",
-    "rumble/ads/BlockAdsPatch.kt",
-    "rumble/analytics/DisableAnalyticsPatch.kt",
-    "rumble/appname/ChangeAppNamePatch.kt",
-    "rumble/consent/BlockCookieNoticePatch.kt",
-    "rumble/icon/LurkIconPatch.kt",
-    "rumble/links/CleanShareLinksPatch.kt",
-    "rumble/permissions/RemoveTrackingPermissionsPatch.kt",
-    "rumble/premium/UnlockPremiumPatch.kt",
-    "rumble/shared/Bytecode.kt",
-    "twitch/appname/ChangeAppNamePatch.kt",
-    "twitch/shared/Bytecode.kt",
-    "twitch/shared/Hermes.kt",
-)}
+PENDING: set[str] = set()  # every file is clean since the 2026-10-22 review; add a path here only while moving a new one over
 
 
 class Literals:
