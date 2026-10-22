@@ -37,3 +37,11 @@ def compile_kotlin(work, probes):
     subprocess.run(['java', '-cp', kotlin, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler', '-no-stdlib', '-no-reflect',
                     '-nowarn', '-classpath', classpath, '-d', str(output), *map(str, sources)], check=True)
     return str(output) + os.pathsep + classpath
+
+
+if __name__ == '__main__':
+    # kotlin_probe.py <work dir> <Probe.kt> <main class> [probe arguments...]
+    import sys
+    work, probe, main_class, *arguments = sys.argv[1:]
+    runtime = compile_kotlin(Path(work), [Path(probe)])
+    raise SystemExit(subprocess.run(['java', '-cp', runtime, main_class, *arguments]).returncode)

@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Kick's structural checks, no device needed: the Hermes edits of a patched APK decoded independently (hermes-dec),
+# executed where they matter (Stay on channel, Default video quality), the literal-buffer edits, the JVM Hermes helper
+# probe on the stock bundle, the emitted smali hooks, the player and privacy helpers, and the patch sources.
+# Usage: bin/test-kick-hermes <patched.apk> [stock index.android.bundle]
+# The stock bundle defaults to $MORPHE_WORK/kick/<version>/hermes/index.android.bundle (bin/decompile kick).
+# HERMES_PYTHON names a Python with hermes-dec; by default the mise-installed one (bin/bootstrap) is used.
+source "$(dirname "$0")/lib/common.sh"
+[[ $# -ge 1 && $# -le 2 && -f "$1" ]] || die "usage: bin/test-kick-hermes <patched.apk> [stock index.android.bundle]"
+apk="$1"
+version=$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from pins import kick_version; print(kick_version())' \
+    "$ROOT/tests/kick")
+stock="${2:-$WORK/kick/$version/hermes/index.android.bundle}"
+[[ -f "$stock" ]] || die "no stock bundle at $stock: run bin/decompile kick $version, or pass one"
+hermes_python="${HERMES_PYTHON:-$(cd "$ROOT" && mise where pipx:hermes-dec 2>/dev/null)/hermes-dec/bin/python3}"
+[[ -x "$hermes_python" ]] || hermes_python=python3
+"$hermes_python" -c 'import hermes_dec' 2>/dev/null ||
+    die "hermes-dec isn't importable: run bin/bootstrap (mise installs it) or set HERMES_PYTHON"
+out="$WORK/tests/kick-hermes"
+mkdir -p "$out" "$WORK/tmp"
+export MORPHE_WORK="$WORK" TMPDIR="$WORK/tmp" PYTHONDONTWRITEBYTECODE=1
+
+failed=0 ran=0
+run() {
+    note "Kick check: ${*##*/}"
+    ran=$((ran + 1))
+    if ! "$@"; then
+        note "FAILED: $*"
+        failed=$((failed + 1))
+    fi
+}
+# Settings whose Hermes edits this APK carries; a check for a patch that wasn't selected is skipped.
+keys=" $(unzip -p "$apk" assets/lurk-hermes.json | python3 -I -c \
+    'import json, sys; print(" ".join(sorted({edit["key"] for edit in json.load(sys.stdin)["edits"]})))') "
+
+run python3 -I "$ROOT/tests/kick/verify_sources.py"
+run "$hermes_python" -I "$ROOT/tests/kick/test_hermes.py" "$stock" "$apk"
+run "$hermes_python" -I "$ROOT/tests/kick/verify_literals.py" "$stock" "$apk"
+if [[ "$keys" == *" stay_on_host "* ]]; then
+    run "$hermes_python" -I "$ROOT/tests/kick/verify_hosting.py" "$stock" "$apk"
+else
+    note "skipped verify_hosting.py: the APK has no Stay on channel when it hosts"
+fi
+if [[ "$keys" == *" default_video_quality "* ]]; then
+    run "$hermes_python" -I "$ROOT/tests/kick/verify_quality.py" "$stock" "$apk" --height "${KICK_QUALITY:-1080}"
+else
+    note "skipped verify_quality.py: the APK has no Default video quality (patch with -e \"Default video quality\")"
+fi
+run python3 -I "$ROOT/tests/kick/kotlin_probe.py" "$out/hermes-probe" "$ROOT/tests/kick/HermesProbe.kt" \
+    io.github.jordanwoodson.patches.kick.shared.HermesProbeKt "$stock" "$out/probe.bundle" "$out/probe-manifest.json"
+run python3 -I "$ROOT/tests/kick/verify_player.py"
+run python3 -I "$ROOT/tests/kick/verify_privacy.py"
+
+# The emitted smali: decode the patched APK's code (no resources) and compare with the stock decode.
+note "decoding $(basename "$apk") with apktool"
+java -jar "$APKTOOL_JAR" d -f -r -p "$WORK/apktool-framework" -o "$out/apktool" "$apk" >/dev/null
+if grep -qs 'SleepTimer;->guardPauseOperation' "$out"/apktool/smali*/com/kick/mobile/kickivsplayerv2/KickIvsPlayerV2View.smali; then
+    run python3 -I "$ROOT/tests/kick/verify_sleep_queue.py" "$out/apktool"
+else
+    note "skipped verify_sleep_queue.py: the APK has no Sleep timer"
+fi
+# bin/decompile keeps the stock decode next to the stock bundle: kick/<version>/{hermes,apktool}.
+stock_decoded="$(dirname "$(dirname "$stock")")/apktool"
+if [[ -d "$stock_decoded" ]] &&
+    grep -qs 'disable_analytics' "$out"/apktool/smali*/com/useinsider/insider/SessionPayloadJobService.smali; then
+    run python3 -I "$ROOT/tests/kick/verify_analytics_jobs.py" "$stock_decoded" "$out/apktool"
+else
+    note "skipped verify_analytics_jobs.py: needs Disable analytics and a stock decode (bin/decompile kick $version)"
+fi
+
+(( failed == 0 )) || die "$failed of $ran Kick checks failed"
+note "All $ran Kick checks passed"

@@ -763,7 +763,21 @@ The edit helpers, all equal-length and fail-closed:
   string ID. Shape numbers, literal offsets and string IDs change in every Kick release;
   these keep the registers and code shape exact without pinning those numbers.
 
-Verification tools retained in this repository:
+Verification tools retained in this repository. The ones that need no device run together:
+
+```sh
+bin/decompile kick                       # once per Kick version: the stock bundle and decode
+bin/test-kick-hermes "$MORPHE_WORK/out/kick-<version>-patched.apk"
+ANDROID_SERIAL=emulator-5580 bin/test-kick "$MORPHE_WORK/out/kick-<version>-patched.apk"
+ANDROID_SERIAL=emulator-5580 bin/test-kick-chat "$MORPHE_WORK/out/kick-<version>-patched.apk"
+```
+
+`bin/test-kick-hermes` runs `verify_sources.py`, `test_hermes.py`, `verify_literals.py`,
+`verify_hosting.py`, `verify_quality.py`, `HermesProbe.kt`, `verify_player.py`, `verify_privacy.py`,
+`verify_sleep_queue.py` and `verify_analytics_jobs.py`, and skips (saying so) the ones for patches
+the APK doesn't have; patch with `-e "Default video quality"` to include the quality check. The
+stock bundle's hash and the Kick version come from the patch sources (`tests/kick/pins.py`), so a
+version bump edits them in `Hermes.kt` and `Constants.kt` only.
 
 - `tests/kick/verify_resources.py`: actual decoded resource/manifest assertions,
   including signature-protected token sharing, intact internet permission and
