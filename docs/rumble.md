@@ -257,6 +257,7 @@ finds its switch off after updating, unless it was changed on the screen before.
 | Hide Premium upsells | `hide_premium_upsells` | when the screen is drawn again |
 | Hide Shorts | `hide_shorts` | after a restart |
 | Hide tipping and Rants | `hide_tipping` | when the data is loaded again |
+| Hide Join buttons, Hide Shop buttons | `hide_join_button`, `hide_shop_button` | when the buttons are drawn again |
 | Block update prompts | `block_update_prompts` | after a restart |
 | Default video quality (a choice; "Rumble's default" is 0) | `video_quality` | at the next video |
 | Live streams too | `video_quality_live` | after a restart |
@@ -497,6 +498,14 @@ Premium status itself isn't touched; that's Unlock Premium's job.
 - `LiveChatConfigRant.walletEnabled` returns false, which disables paying with Rumble Wallet.
 
 Rants other viewers send still show.
+
+## Hide Join and Shop buttons
+
+The channel and video headers draw Follow, Join (paid channel membership), Tip and Shop (a creator's store)
+from one list of button types. The hidden action buttons patch Hide tipping uses also passes the `Join` and
+`Shop` constants; `RumbleInterface.actionButtons` drops each while `hide_join_button` or `hide_shop_button`
+is on. Checked on 2026-10-22: with Hide Join buttons on, The Dan Bongino Show's channel shows Tip and Follow
+(Tip, Join and Follow with it off). No channel with a Shop button came up; `HideProbe` covers both lists.
 
 ## Disable autoplay
 

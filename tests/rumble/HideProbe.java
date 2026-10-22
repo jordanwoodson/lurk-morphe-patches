@@ -120,6 +120,21 @@ public final class HideProbe {
         ProbeSupport.check(Boolean.FALSE.equals(enable.invoke(rant)) && !(boolean) walletEnabled.invoke(rant),
                 "on: no Rants and no Rumble Wallet");
         ProbeSupport.setting("hide_tipping", "false");
+
+        // Hide Join and Shop buttons, through the same list.
+        if (ProbeSupport.registered("hide_join_button")) {
+            ProbeSupport.check(buttons.invoke(null, all, tip, join, shop) == all, "Join and Shop stay while off");
+            ProbeSupport.setting("hide_join_button", "true");
+            ProbeSupport.check(buttons.invoke(null, all, tip, join, shop).equals(Arrays.asList(follow, tip, shop)),
+                    "Join hidden");
+            ProbeSupport.setting("hide_shop_button", "true");
+            ProbeSupport.setting("hide_tipping", "true");
+            ProbeSupport.check(buttons.invoke(null, all, tip, join, shop).equals(Arrays.asList(follow)),
+                    "Join, Tip and Shop hidden together");
+            ProbeSupport.setting("hide_join_button", "false");
+            ProbeSupport.setting("hide_shop_button", "false");
+            ProbeSupport.setting("hide_tipping", "false");
+        }
     }
 
     /** Calls a composable with nulls: null when it returned at once, else what Rumble's code threw. */

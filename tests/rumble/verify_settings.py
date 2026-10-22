@@ -31,6 +31,8 @@ DEFAULTS = {
     "feed_previews_off": "false",
     "background_audio": "false",
     "default_speed": "0",
+    "hide_join_button": "false",
+    "hide_shop_button": "false",
     "unlock_premium": "true",
     "block_update_prompts": "true",
     "exact_counts": "false",
