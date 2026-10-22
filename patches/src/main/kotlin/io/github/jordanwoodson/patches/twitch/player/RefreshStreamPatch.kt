@@ -36,18 +36,8 @@ val refreshStreamPatch = bytecodePatch(
     compatibleWith(COMPATIBILITY_TWITCH)
     dependsOn(twitchSettingsPatch)
     execute {
-        val presenter = playerPresenterClass()
-
         // The error screen's Retry calls one presenter method with (0, true). Call exactly that one.
-        val errorScreen = PlayerErrorRetryFingerprint.twitchMatch("player error screen").originalMethod
-        val action = classDefBy(errorScreen.parameterTypes.last().toString())
-        val retry = action.methods.flatMap { method -> method.implementation?.instructions?.toList().orEmpty() }
-            .filter { it.opcode == Opcode.INVOKE_INTERFACE }
-            .mapNotNull { (it as ReferenceInstruction).reference as? MethodReference }
-            .filter { it.returnType == "V" && it.parameterTypes.map { type -> type.toString() } == listOf("Ljava/lang/Integer;", "Z") }
-            .distinct().singleOrNull()
-            ?: throw PatchException("Twitch: the player error screen's Retry changed")
-        if (retry.definingClass !in presenter.interfaces) throw PatchException("Twitch: Retry is not a player presenter call")
+        val retry = playerRetry()
         bridge("retryPlayer", """
             check-cast p0, ${retry.definingClass}
             invoke-interface { p0, p1, p2 }, $retry

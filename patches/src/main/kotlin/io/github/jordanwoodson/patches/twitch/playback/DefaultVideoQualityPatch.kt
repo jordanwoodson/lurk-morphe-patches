@@ -30,7 +30,9 @@ private val QUALITIES = linkedMapOf("Twitch's default" to "0", "Source" to "1", 
 val defaultVideoQualityPatch = bytecodePatch(
     name = "Default video quality",
     description = "Starts playback at the selected rendition when available, with Source as the default. " +
-        "Saved player choices, including Auto, take priority. Unavailable renditions use Twitch's fallback.",
+        "Saved player choices, including Auto, take priority. Unavailable renditions use Twitch's fallback. " +
+        "A lower rendition for metered networks (mobile data, or Wi-Fi marked as metered) can be chosen in Lurk " +
+        "settings > Playback > On mobile data; it's the same as on Wi-Fi until then.",
     default = false,
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
@@ -106,8 +108,16 @@ val defaultVideoQualityPatch = bytecodePatch(
             move-result-object v$key
             invoke-interface { v$array, v$key }, Lcom/facebook/react/bridge/WritableArray;->pushString(Ljava/lang/String;)V
         """)
-        twitchSettings.add(ChoiceSetting("video_quality", "Default video quality",
-            "Used until a player quality is saved. Missing renditions use Twitch's fallback.", Section.PLAYBACK,
-            default = quality!!, choices = QUALITIES.toList(), restart = true))
+        twitchSettings.add(
+            ChoiceSetting("video_quality", "Default video quality",
+                "Used until a player quality is saved. Missing renditions use Twitch's fallback.", Section.PLAYBACK,
+                default = quality!!, choices = QUALITIES.toList(), restart = true),
+            // Source is never lower than a default, so it isn't offered; Twitch's default (Auto) counts as highest.
+            ChoiceSetting("video_quality_metered", "On mobile data",
+                "Used instead of the default on metered networks (mobile data, or Wi-Fi marked as metered) when it " +
+                    "is lower. Like the default, only until a player quality is saved.", Section.PLAYBACK,
+                default = "0", choices = listOf("Same as on Wi-Fi" to "0") + QUALITIES.toList().drop(2),
+                restart = true, parent = "video_quality"),
+        )
     }
 }

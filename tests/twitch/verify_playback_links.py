@@ -22,11 +22,21 @@ def main():
                 public String value; public Intent putExtra(String k,String v){value=v;return this;} }''',
             'io/github/jordanwoodson/extension/shared/settings/Settings.java': '''
                 package io.github.jordanwoodson.extension.shared.settings;
-                public class Settings { public static boolean autoplay=true,links=true,next=true; public static int quality=1;
+                public class Settings { public static boolean autoplay=true,links=true,next=true; public static int quality=1,metered=0;
                 public static boolean isEnabled(String k) { if(k.equals("disable_autoplay"))return autoplay;
                 if(k.equals("autoplay_next_video_off"))return next;
                 if(k.equals("clean_share_links"))return links;throw new AssertionError(k); }
-                public static int getInt(String k){if(!k.equals("video_quality"))throw new AssertionError(k);return quality;} }''',
+                public static android.content.Context appContext(){return new android.content.Context();}
+                public static int getInt(String k){if(k.equals("video_quality_metered"))return metered;
+                if(!k.equals("video_quality"))throw new AssertionError(k);return quality;} }''',
+            'android/content/Context.java': '''package android.content; public class Context {}''',
+            'io/github/jordanwoodson/extension/shared/Network.java': '''
+                package io.github.jordanwoodson.extension.shared;
+                public final class Network { public static boolean metered; public static int asked;
+                public static boolean isMetered(android.content.Context c){asked++;if(c==null)throw new AssertionError();return metered;} }''',
+            'io/github/jordanwoodson/extension/shared/Logger.java': '''
+                package io.github.jordanwoodson.extension.shared;
+                public final class Logger { public static void d(String m){} }''',
             'android/content/res/Resources.java': '''package android.content.res;
                 public class Resources { public String getResourceEntryName(int id) {
                 return new String[]{"autoplay_container","autoplay_progress","autoplay_time_remaining",

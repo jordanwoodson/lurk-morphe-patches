@@ -26,7 +26,9 @@ first. CONTRIBUTING.md has the rules contributors see; keep the two in line with
 
 - Patches live in `patches/src/main/kotlin/io/github/jordanwoodson/patches/<app>/<feature>/`, with the
   patch in `<Name>Patch.kt` and its fingerprints in `Fingerprints.kt`. Each app's `shared/Constants.kt`
-  holds `COMPATIBILITY_<APP>`; every patch calls `compatibleWith(...)` with it.
+  holds `COMPATIBILITY_<APP>`; every patch calls `compatibleWith(...)` with it. The settings, Lurk icon,
+  Clone app, Change app name and Remove tracking permissions patches take their body from
+  `patches/.../shared/apps/` (one `LurkApp` per app in `Apps.kt`); the app's file keeps name and description.
 - When patches are tested on a new app version, update that version in the app's `targets`.
 - Fingerprint on strings, method signatures and instruction patterns, not obfuscated class names.
 - Java that runs inside the app goes in `extensions/` (`extensions/shared` has `Logger`, tag `lurk`).

@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -40,6 +41,7 @@ public final class TwitchEmotes {
     static final String KEY_7TV = "emotes_7tv";
     static final String KEY_BTTV = "emotes_bttv";
     static final String KEY_FFZ = "emotes_ffz";
+    static final String KEY_PICKER = "emotes_picker";
 
     private static final int SEVENTV = 0;
     private static final int BTTV = 1;
@@ -79,6 +81,8 @@ public final class TwitchEmotes {
     private static final Map<String, TwitchThirdParty.Demand> RN_REQUESTS = new HashMap<>();
     private static volatile Union union;
     private static volatile TokenTypes tokenTypes;
+    /** The channel (a Tuid) whose chat connected last: the one the chat input and its autocomplete belong to. */
+    private static volatile Object chatChannel;
 
     private TwitchEmotes() {
     }
@@ -89,6 +93,7 @@ public final class TwitchEmotes {
     /** Injection point: chat starts connecting to {@code channel} (a Tuid). Starts loading its emotes early. */
     public static void onChatChannel(Object channel) {
         try {
+            if (channel != null) chatChannel = channel;
             int mask = enabledMask();
             if (mask != 0 && channel != null) ensure(String.valueOf(channel), mask);
         } catch (RuntimeException e) {
@@ -355,6 +360,152 @@ public final class TwitchEmotes {
             if (start <= range[1] && end >= range[0]) return true;
         }
         return false;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Emote picker and autocomplete
+
+    /**
+     * Injection point (emote picker): the user's emote sets, as the picker's presenter receives them for
+     * {@code channel} (a Tuid; null outside a channel). While "Emotes in the picker" and a service are on,
+     * returns a copy with one set per service appended. Each is owned by a stand-in owner named after the
+     * service (a negative ID no account has), so the picker builds a section with that name as its header.
+     * Otherwise {@code sets} itself.
+     */
+    public static List pickerSets(List sets, Object channel) {
+        if (sets == null || channel == null || !Settings.isEnabled(KEY_PICKER)) return sets;
+        try {
+            chatChannel = channel;
+            Picked picked = picked(channel);
+            if (picked == null) return sets;
+            ArrayList out = null;
+            for (int provider = 0; provider < KEYS.length; provider++) {
+                List<Object> emotes = picked.byProvider.get(provider);
+                if (emotes.isEmpty()) continue;
+                Object set = ownerSet(-(provider + 1), NAMES[provider], NAMES[provider], null,
+                        ID_PREFIX + TAGS[provider], Collections.unmodifiableList(emotes));
+                if (set == null) continue;
+                if (out == null) out = new ArrayList(sets);
+                out.add(set);
+            }
+            return out == null ? sets : out;
+        } catch (RuntimeException e) {
+            Logger.d("emotes: picker failed: " + e);
+            return sets;
+        }
+    }
+
+    /**
+     * Injection point (chat input autocomplete): replaces the filter's call to its current source and makes
+     * that call. When the source is Twitch's emote one and "Emotes in the picker" is on, the third-party emotes
+     * of the channel whose chat connected last are merged in, in Twitch's order: codes that start with the
+     * typed text (after an optional ':'), then codes that contain it, Twitch's own first in each group. Codes
+     * Twitch already has are left out. Everything else is the source's own answer.
+     */
+    public static ArrayList autocomplete(Object source, CharSequence typed) {
+        ArrayList found = sourceMatches(source, typed);
+        if (found == null || typed == null || !Settings.isEnabled(KEY_PICKER)) return found;
+        try {
+            Object channel = chatChannel;
+            if (channel == null || !isEmoteSource(source)) return found;
+            String text = typed.toString();
+            if (text.startsWith(":")) text = text.substring(1);
+            if (text.isEmpty()) return found;
+            Picked picked = picked(channel);
+            if (picked == null) return found;
+            String lower = text.toLowerCase(Locale.ROOT);
+            ArrayList<Object> ownStart = new ArrayList<>();
+            ArrayList<Object> ownRest = new ArrayList<>();
+            for (int i = 0; i < picked.codes.length; i++) {
+                String code = picked.codes[i].toLowerCase(Locale.ROOT);
+                boolean start = code.startsWith(lower);
+                if (!start && !code.contains(lower)) continue;
+                if (sourceHas(source, picked.codes[i])) continue;
+                (start ? ownStart : ownRest).add(picked.emotes[i]);
+            }
+            if (ownStart.isEmpty() && ownRest.isEmpty()) return found;
+            ArrayList out = new ArrayList(found.size() + ownStart.size() + ownRest.size());
+            int split = 0;
+            while (split < found.size()) {
+                String code = emoteCode(found.get(split));
+                if (code == null || !code.toLowerCase(Locale.ROOT).startsWith(lower)) break;
+                split++;
+            }
+            out.addAll(found.subList(0, split));
+            out.addAll(ownStart);
+            out.addAll(found.subList(split, found.size()));
+            out.addAll(ownRest);
+            return out;
+        } catch (RuntimeException e) {
+            Logger.d("emotes: autocomplete failed: " + e);
+            return found;
+        }
+    }
+
+    /** The channel's third-party emotes as Twitch emote objects, with their codes, or null when there are none. */
+    private static Picked picked(Object channel) {
+        int mask = enabledMask();
+        if (mask == 0) return null;
+        Resolved resolved = resolve(String.valueOf(channel), mask);
+        if (resolved.byCode.isEmpty()) return null;
+        Picked picked = resolved.picked;
+        if (picked != null) return picked;
+        Class<?> type = emoteClass();
+        Object[] owners = type == null ? null : resolved.owners(type, channel);
+        if (owners == null || owners.length != resolved.byCode.size()) return null;
+        String[] codes = new String[owners.length];
+        List<List<Object>> byProvider = new ArrayList<>();
+        for (int provider = 0; provider < KEYS.length; provider++) byProvider.add(new ArrayList<>());
+        int i = 0;
+        for (Map.Entry<String, String> emote : resolved.byCode.entrySet()) {
+            codes[i] = emote.getKey();
+            int provider = providerOf(emote.getValue().charAt(4));
+            if (provider >= 0) byProvider.get(provider).add(owners[i]);
+            i++;
+        }
+        resolved.picked = picked = new Picked(codes, owners, byProvider);
+        return picked;
+    }
+
+    private static int providerOf(char tag) {
+        for (int provider = 0; provider < TAGS.length; provider++) {
+            if (TAGS[provider] == tag) return provider;
+        }
+        return -1;
+    }
+
+    /** Replaced at patch time: Twitch's emote class, the one chat's matcher and the picker use. */
+    private static Class emoteClass() {
+        return null;
+    }
+
+    /**
+     * Replaced at patch time: an emote set Twitch's picker shows as a section headed by its owner's name. The
+     * owner is a Tuid of {@code ownerId} with that login, display name and avatar URL.
+     */
+    private static Object ownerSet(int ownerId, String login, String displayName, String avatar, String setId,
+                                   List emotes) {
+        return null;
+    }
+
+    /** Replaced at patch time: the autocomplete source's own matches for the typed text (the call it replaced). */
+    private static ArrayList sourceMatches(Object source, CharSequence typed) {
+        return null;
+    }
+
+    /** Replaced at patch time: whether the autocomplete source has an emote of exactly this code. */
+    private static boolean sourceHas(Object source, String code) {
+        return false;
+    }
+
+    /** Replaced at patch time: whether the autocomplete source is Twitch's emote one. */
+    private static boolean isEmoteSource(Object source) {
+        return false;
+    }
+
+    /** Replaced at patch time: the code (the text chat inserts) of one of Twitch's emote objects. */
+    private static String emoteCode(Object emote) {
+        return null;
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -890,6 +1041,8 @@ public final class TwitchEmotes {
         final Map<String, String> byCode;
         private volatile Object[] owners;
         private volatile Class<?> ownerClass;
+        /** The emotes for the picker and autocomplete, made once per resolution. */
+        volatile Picked picked;
 
         Resolved(int mask, int generation, Map<String, String> byCode) {
             this.mask = mask;
@@ -938,6 +1091,19 @@ public final class TwitchEmotes {
                 Logger.d("emotes: can't make emotes: " + e);
                 return new Object[0];
             }
+        }
+    }
+
+    /** One channel's emotes as Twitch emote objects: codes and emotes in matching order, and by provider. */
+    private static final class Picked {
+        final String[] codes;
+        final Object[] emotes;
+        final List<List<Object>> byProvider;
+
+        Picked(String[] codes, Object[] emotes, List<List<Object>> byProvider) {
+            this.codes = codes;
+            this.emotes = emotes;
+            this.byProvider = byProvider;
         }
     }
 

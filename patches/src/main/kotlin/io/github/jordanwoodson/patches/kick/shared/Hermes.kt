@@ -716,6 +716,7 @@ internal object HermesOp {
     const val ITERATOR_NEXT = 0xac
     const val JMP_TRUE = 0xb1
     const val JMP_TRUE_LONG = 0xb2
+    const val JMP_FALSE = 0xb3
 }
 
 /** An array or object literal [instruction] in [function], whose values occupy value-buffer bytes [start, end). */

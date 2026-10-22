@@ -384,8 +384,37 @@ async def look_scenario(page):
         await page.go(PAGE)
         await page.apply({"textSize": 99})
         check((await page.eval(measure))[1] == "16px", "a text size outside 10 to 32 px is ignored")
+        await clock_checks(page)
     finally:
         page.html = HTML
+
+
+async def clock_checks(page):
+    """Chat timestamps clock: the page's own times ("03:10 PM", written with toLocaleTimeString in the config's
+    locale) become 15:10 or 3:10, for lines already there and lines added later; text the page's format can't have
+    written, and the clock without Chat timestamps, are left alone."""
+    times = "Array.from(document.querySelectorAll('.timestamp')).map(e => e.textContent)"
+    add = """(() => { for (const text of ['11:59 PM', 'soon']) { const line = document.createElement('div');
+        line.className = 'message-container'; line.innerHTML = '<span class="timestamp"></span>';
+        line.firstChild.textContent = text; document.getElementById('app').appendChild(line); } })()"""
+    await page.go(PAGE)
+    check(await page.apply({"timestamps": True, "clock": 0}) == "timestamps, 24-hour clock", "reports the 24-hour clock")
+    await page.eval(add)
+    await asyncio.sleep(0.1)
+    check(await page.eval(times) == ["15:10", "23:59", "soon"], "24-hour clock: 03:10 PM is 15:10, a later 11:59 PM 23:59")
+    await page.go(PAGE)
+    check(await page.apply({"timestamps": True, "clock": 1}) == "timestamps, 12-hour clock", "reports the 12-hour clock")
+    await page.eval(add)
+    await asyncio.sleep(0.1)
+    check(await page.eval(times) == ["3:10", "11:59", "soon"], "12-hour clock: 3:10 and 11:59")
+    german = "https://chat.mobile.kick.com/?config=" + urllib.parse.quote(json.dumps({"channelId": 668, "locale": "de"}))
+    await page.go(german)
+    await page.eval("document.querySelector('.timestamp').textContent = '15:10'")
+    await page.apply({"timestamps": True, "clock": 1})
+    check(await page.eval(times) == ["3:10"], "the config's locale: German 15:10 is 3:10 on the 12-hour clock")
+    await page.go(PAGE)
+    check(await page.apply({"clock": 1}) == "nothing" and await page.eval(times) == ["03:10 PM"],
+          "the clock without Chat timestamps changes nothing")
 
 
 async def resilient_scenario(page):

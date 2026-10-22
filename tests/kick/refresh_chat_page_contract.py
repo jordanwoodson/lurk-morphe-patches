@@ -36,12 +36,14 @@ REQUIRED = {
     "class:host-container": "Hide chat highlights: Hide host messages",
     "class:reward-redeem-container": "Hide chat highlights: Hide reward redemptions",
     "class:line-through": "Show deleted messages (moderator view marks removed lines)",
+    "class:timestamp": "Chat timestamps clock (each line's time)",
     "code:message-list": r"""getElementById\(["']app["']\)""",
     "code:config-from-bridge-first": r"""injectedObjectJson\)\?window\.ReactNativeWebView\.injectedObjectJson\(\):new URL\(location\.href\)\.searchParams\.get\(["']config["']\)""",
     "code:moderator-view": r"""userCanModerate""",
     "code:clear-empties-list": r"""\.innerHTML\s*=\s*["']{2}""",
     "code:sender-id-attribute": r"""data-sender-id""",
     "css:timestamps-display": r"""\.timestamp\{[^}]*display:\s*var\(--timestamps-display\)""",
+    "code:timestamp-format": r"""toLocaleTimeString\([^,()]+,\{hour:["']2-digit["'],minute:["']2-digit["']\}\)""",
     "css:chatroom-font-size": r"""font-size:\s*var\(--chatroom-font-size\)""",
     "css:message-gap": r"""row-gap:\s*var\(--message-gap\)""",
 }
@@ -52,6 +54,8 @@ CODE_PURPOSE = {
     "code:clear-empties-list": "Ignore chat clears (a clear empties the list through innerHTML)",
     "code:sender-id-attribute": "Chat keywords (blocked users, by sender ID)",
     "css:timestamps-display": "Chat timestamps (each line's time shows through --timestamps-display)",
+    "code:timestamp-format": "Chat timestamps clock (the page writes each time with toLocaleTimeString, 2-digit hour "
+                             "and minute)",
     "css:chatroom-font-size": "Chat text size (the text follows --chatroom-font-size)",
     "css:message-gap": "Compact chat (lines are spaced by --message-gap)",
 }

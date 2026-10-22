@@ -2,41 +2,32 @@ package io.github.jordanwoodson.patches.rumble.settings
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
-import app.morphe.patcher.patch.resourcePatch
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod.Companion.toMutable
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.builder.MutableMethodImplementation
-import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21c
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.immutable.ImmutableMethod
 import com.android.tools.smali.dexlib2.immutable.ImmutableMethodParameter
-import com.android.tools.smali.dexlib2.immutable.reference.ImmutableStringReference
-import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
 import io.github.jordanwoodson.patches.rumble.shared.clickableCall
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.rumble.shared.staticRangeCalls
 import io.github.jordanwoodson.patches.shared.Locators
-import io.github.jordanwoodson.patches.shared.SHARED_EXTENSION
-import io.github.jordanwoodson.patches.shared.settings.writeLocators
+import io.github.jordanwoodson.patches.shared.apps.RUMBLE
+import io.github.jordanwoodson.patches.shared.apps.lurkSettings
 import io.github.jordanwoodson.patches.shared.settings.SETTINGS_CLASS
-import io.github.jordanwoodson.patches.shared.settings.SettingsScreen
-import io.github.jordanwoodson.patches.shared.settings.debugLoggingSetting
-import org.w3c.dom.Element
 
-private const val SETTINGS_ACTIVITY = "io.github.jordanwoodson.extension.shared.settings.SettingsActivity"
 private const val STRING = "Ljava/lang/String;"
 private const val FUNCTION0 = "Lkotlin/jvm/functions/Function0;"
 
 /** The Rumble entries on the Lurk settings screen. Each patch that can be switched adds its own. */
-internal val rumbleSettings = SettingsScreen("Rumble")
+internal val rumbleSettings = RUMBLE.settings
 
 /**
  * The Lurk settings screen, opened from a "Lurk" row in Rumble's Settings (App Info) or the launcher
@@ -45,60 +36,7 @@ internal val rumbleSettings = SettingsScreen("Rumble")
 val settingsPatch = bytecodePatch(
     description = "Adds Lurk to Rumble's settings, where the other patches can be turned off and on.",
 ) {
-    compatibleWith(COMPATIBILITY_RUMBLE)
-    extendWith(SHARED_EXTENSION)
-
-    dependsOn(
-        resourcePatch {
-            execute {
-                Locators.clear()
-                document("AndroidManifest.xml").use { document ->
-                    val application = document.getElementsByTagName("application").item(0) as Element
-                    application.appendChild(
-                        document.createElement("activity").apply {
-                            setAttribute("android:name", SETTINGS_ACTIVITY)
-                            setAttribute("android:exported", "false")
-                            setAttribute("android:label", "Lurk")
-                            // Launched from the launcher shortcut, it gets a task of its own instead of
-                            // joining Rumble's, which may be a picture-in-picture window.
-                            setAttribute("android:taskAffinity", "")
-                            // Only for the window shown while it starts (dark, like the apps); the activity picks dark or light.
-                            setAttribute("android:theme", "@android:style/Theme.DeviceDefault.NoActionBar")
-                        },
-                    )
-                }
-            }
-            // Finalized after every other patch, so everything they matched is recorded.
-            finalize { writeLocators("rumble") }
-        },
-    )
-
-    execute {
-        rumbleSettings.clear()
-        rumbleSettings.add(debugLoggingSetting)
-
-        // The extension's context, before any of Rumble's own startup.
-        ApplicationOnCreateFingerprint.single("RumbleApplication.onCreate").method.addInstruction(
-            0,
-            "invoke-static/range { p0 .. p0 }, $SETTINGS_CLASS->init(Landroid/content/Context;)V",
-        )
-
-        addLurkRow()
-    }
-
-    // Every patch has executed and registered its settings by now.
-    finalize {
-        SettingsRegistryFingerprint.single("settings registry").method.apply {
-            val stub = implementation!!.instructions.first()
-            if (stub.opcode != Opcode.CONST_4 || implementation!!.registerCount != 1) {
-                throw PatchException("Lurk: unexpected settings registry stub")
-            }
-            replaceInstruction(
-                0,
-                BuilderInstruction21c(Opcode.CONST_STRING, 0, ImmutableStringReference(rumbleSettings.json())),
-            )
-        }
-    }
+    lurkSettings(RUMBLE) { addLurkRow() }
 }
 
 /**

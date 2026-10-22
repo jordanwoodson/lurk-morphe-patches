@@ -5,6 +5,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import io.github.jordanwoodson.extension.shared.twitch.TwitchPlayback;
 import io.github.jordanwoodson.extension.shared.twitch.TwitchLinks;
+import io.github.jordanwoodson.extension.shared.Network;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
 import java.util.LinkedHashSet;
 import java.util.Objects;
@@ -23,6 +24,55 @@ public final class PlaybackLinksProbe {
             @Override public Set<Quality> getQualities() { return qualities; }
         };
     }
+    /** "On mobile data": replaces the default on a metered network only when it is lower. */
+    private static void meteredQuality() {
+        // Same as on Wi-Fi (0): the network isn't even asked.
+        Settings.quality = 1;
+        Settings.metered = 0;
+        Network.metered = true;
+        Network.asked = 0;
+        equal("chunked", TwitchPlayback.qualityDefault("auto"));
+        equal(0, Network.asked);
+        // Lower than Source: used on a metered network, not on Wi-Fi.
+        Settings.metered = 480;
+        equal("480p", TwitchPlayback.qualityDefault("auto"));
+        equal("480p", TwitchPlayback.qualityPreferenceDefault("auto", "_live"));
+        equal("480", TwitchPlayback.qualityPreferenceDefault("auto", "_clip"));
+        equal("\"480p\"", TwitchPlayback.storageQualityDefault("preferred-video-quality"));
+        Network.metered = false;
+        equal("chunked", TwitchPlayback.qualityDefault("auto"));
+        equal(null, TwitchPlayback.storageQualityDefault("preferred-video-quality"));
+        // Twitch's own default (Auto) counts as highest: the mobile choice applies.
+        Network.metered = true;
+        Settings.quality = 0;
+        equal("480p", TwitchPlayback.qualityDefault("auto"));
+        Network.metered = false;
+        equal("auto", TwitchPlayback.qualityDefault("auto"));
+        // Not lower than the default: the default stays, and the network isn't asked.
+        Network.metered = true;
+        Network.asked = 0;
+        Settings.quality = 360;
+        equal("360p", TwitchPlayback.qualityDefault("auto"));
+        Settings.metered = 360;
+        equal("360p", TwitchPlayback.qualityDefault("auto"));
+        equal(0, Network.asked);
+        // 720p60 is above 720p and 1080p below 1080p60.
+        Settings.quality = 720;
+        Settings.metered = 72060;
+        equal("720p", TwitchPlayback.qualityDefault("auto"));
+        Settings.quality = 108060;
+        Settings.metered = 1080;
+        equal("1080p", TwitchPlayback.qualityDefault("auto"));
+        // The native player resolves Lurk's choice; a mobile choice is an exact name and passes through.
+        Settings.quality = 1;
+        Settings.metered = 720;
+        Player stream = player("1080p60 (source)", "720p60", "720p");
+        equal("720p", TwitchPlayback.playerQuality("720p", stream));
+        equal("1080p60 (source)", TwitchPlayback.playerQuality("chunked", stream));
+        Settings.metered = 0;
+        Network.metered = false;
+    }
+
     public static void main(String[] args) {
         equal("never", TwitchPlayback.autoplayDefault(""));
         Settings.autoplay = false;
@@ -87,6 +137,7 @@ public final class PlaybackLinksProbe {
             String clip = code == 160 ? "240" : String.valueOf(code > 10000 ? code / 100 : code);
             equal(clip, TwitchPlayback.qualityPreferenceDefault("auto", "_clip"));
         }
+        meteredQuality();
         equal(null, TwitchLinks.cleanShareText(null));
         equal("Watch https://www.twitch.tv/videos/123?t=42s&clip=id#time", TwitchLinks.cleanShareText(
                 "Watch https://www.twitch.tv/videos/123?tt_medium=mobile_web_share&tt_content=vod&t=42s&clip=id#time"));
