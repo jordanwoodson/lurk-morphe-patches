@@ -175,6 +175,17 @@ and manifests and test both playback and ad delivery. Do not classify disabling 
 Datazoom or ad overlays alone as a complete ad blocker. Datazoom's analytics and ad
 session handling are coupled, which also matters for the analytics patch.
 
+Live ads, checked on 40.32.3 signed out on an emulator, on one network: the playback response
+gave the player a plain IVS channel URL (`*.playback.live-video.net/api/video/v1/...channel.<id>.m3u8`)
+and no MediaTailor tracking URL, with PAL nonces both on and off (Disable analytics off and on).
+Without a tracking URL no MediaTailor session reports `AD_START`/`AD_END`, so `onAdEvent` and the
+player's "Ad" label (`player.controls.ad.label`) can't appear. The IVS SDK's own ad marker,
+`AdCue` (start, duration, pod position and count, PRE/MID/POST roll type, tracking URLs), arrives
+through `Player.Listener.onCue`, which Kick's listener ignores; on the most-watched English live
+stream no cue of any kind arrived in eight minutes. A patch that mutes and covers the player during
+a stitched ad break could key on either signal, but neither could be observed, so there is none
+yet. Ads stitched into the media itself can't be skipped by a client patch, only muted and covered.
+
 ## Shared infrastructure and implementation order
 
 **Account for Expo updates before shipping Hermes edits.** The manifest enables
