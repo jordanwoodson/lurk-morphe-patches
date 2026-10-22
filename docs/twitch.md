@@ -75,7 +75,7 @@ ReVive, bttv-android, TwitchMod, Xtra, Twire and Frosty.
 | Stitched (SSAI) ad handling without a proxy | Avoid stitched ads (picture-by-picture stream during breaks) and Mute stitched ads (fallback) |
 | Proxy ad blocking | Playlist proxy (opt-in, own URL) |
 | Hide display ads, audio ads | Block display ads |
-| Fix login / notifications in re-signed builds | Fix notifications. Sign-in has no signature gate (see below). |
+| Fix login / notifications in re-signed builds | Fix notifications. Sign-in sends nothing signature-derived; the traced cause is in [Sign-in after re-signing](#sign-in-after-re-signing). |
 | Disable Bugsnag | Not in 31.6.0 or 31.7.0. Nielsen and Sprig, the remaining reporters, are now in Disable analytics. |
 | Disable Google Play services | Declined |
 | Anonymous chat | Anonymous chat |
@@ -151,10 +151,58 @@ Verified on the emulator: the clone's `PersistedInstallation` moved from `FisErr
 status 3 (registered) with auth and refresh tokens, and an FCM token was stored. Delivering a
 notification needs an account.
 
-No client-side sign-in gate depends on the signature:
-- Kasada `Client-Integrity` is attached only when available.
-- Play Integrity "passport attestation" is a delayed background report whose failures are only
-  logged.
+No client-side sign-in gate depends on the signature; see [Sign-in after re-signing](#sign-in-after-re-signing)
+for the full trace, including the one report that carries the signature to Twitch's servers.
+
+### Sign-in after re-signing
+
+Other bundles ship a "Fix login" for "This app version/OS is not currently supported" after re-signing,
+blaming a background Play Integrity report. Traced in 31.7.0's code, the question comes out like this.
+
+**The Play Integrity report.** `yut` (found by its `play_integrity_setup_begin` analytics event) is started by
+`obv` once the app's lifecycle reaches STARTED: `b()` waits two minutes, then runs only if the Eppo flag
+`Android-Play-Integrity` (`qdg.i`, default off, assigned by Twitch's servers through the `tut` cached
+experiment) is on. `a()` prepares Google's Standard Integrity API (`pvc.z`, `StandardIntegrityManager`
+prepare), `d()` requests a token whose `requestHash` is a random attestation request ID (`pvc.r`), and `c()`
+hands it to `s5s.v`, which POSTs `PassportPlayIntegrityAttestationRequest{request_id, token, client_id,
+device_id, session_id}` to `https://passport.twitch.tv/api/v1/android/attestation` (`AccountService.attest`,
+called from `x7`). The response is only reported to analytics (`passport_attest_response`), and every failure
+is caught and logged (`play_integrity_*_failure`). The token is made and signed by Google Play services: it
+carries the installed package's name, its signing certificate's SHA-256 and version code as Play computes them
+(for a re-signed APK, the re-signer's certificate and `UNRECOGNIZED_VERSION`), so the app has no value in it to
+replace. This report is the only place where a signature-derived value reaches Twitch, and it is tied to the
+login only through the `device_id` the server sees on both.
+
+**The login request.** The native login (`LoginFragment` → presenter `qko` → `AccountService.protectedLogin`,
+`POST passport.twitch.tv/protected_login`) sends `ProtectedLoginRequestInfoModel`: username, password, Authy
+and Twitch Guard codes, captcha proof, `undeleteUser`, `forceTwitchguard`, obscured e-mail and the constant
+Client-ID. Nothing in it is derived from the signature. Its protection is Kasada: `ue1` registers
+`passport.twitch.tv/protected_login` and `gql.twitch.tv/integrity` with the Kasada SDK (`x-kpsdk-v a-1.20.1`),
+a Java and WebView client with no native library, whose `x-kpsdk-dv` value is an encrypted
+`{SDK int, versionName}` (`tgs.f`). The `Client-Integrity` token comes from `gql.twitch.tv/integrity` behind the
+same Kasada check. No code of the app or of these SDKs reads Twitch's own signing certificate: the only
+readers are Firebase Installations (`X-Android-Cert`, which *Fix notifications* answers), the Amazon sign-in SDK
+(Amazon's own sign-in), Chromium's `BuildInfo`, and Play Core and AndroidX checks of *other* packages (Play
+Store, Play services, font providers).
+
+**The message.** The string isn't in the app's resources or native code. Passport answers a refused
+`protected_login` with an error code and text; the native enum `f7t` names the integrity ones
+(`IntegrityInvalid` 5021, `IntegrityMissing` 5022, `AppOutdated` 5023, `AppUnsupported` 5024, `IntegrityFailed`
+5025, `IntegrityUnexpected` 5026). The login presenter has cases for none of them, so it shows the server's
+`error` text as it is. Twitch's bundled web login form (`assets/public/assets`, `AuthFormLoginError` and
+`AuthFormSignupError`) maps 5021, 5022, 5025 and 5026 to "This app version/OS is not currently supported." in
+the app and "Your browser is not currently supported." in a browser. The message is therefore the server's
+verdict on the login's integrity check (Kasada), and possibly on the attestation the same device sent earlier;
+nothing on the device produces it.
+
+**Conclusion.** The approach of *Fix notifications* (sending the original package name and certificate
+digest) has nothing to act on: no Twitch request carries a package name or certificate digest the app computes,
+and the one signature-derived value is inside Google's signed token. The remaining client-side lever is the
+one other bundles use, not sending the attestation at all (the report is optional for the app: it runs only
+under a server flag and its failures are ignored). Whether Twitch's server refuses logins because of that
+report, or because of Kasada's own verdict, can only be told with an account on a device where the flag is on,
+so Lurk doesn't ship that change on speculation. If a user reports the error, the place to stop the report is
+`yut.a` (the method logging `play_integrity_setup_begin`).
 
 ### Default startup tab
 
