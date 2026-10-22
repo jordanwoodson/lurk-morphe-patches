@@ -9,6 +9,7 @@ import io.github.jordanwoodson.patches.kick.settings.kickMatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.settings.kickSettingsPatch
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.kick.shared.OTA_UPDATES_OFF
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
 import io.github.jordanwoodson.patches.shared.bridge
@@ -26,7 +27,7 @@ val defaultVideoQualityPatch = bytecodePatch(
     name = "Default video quality",
     description = "Sets the default adaptive quality ceiling to the selected height when that rendition exists. " +
         "Kick can still choose a lower quality. The player's Auto option uses this ceiling. A lower starting " +
-        "ceiling can be set for mobile data in Lurk settings > Playback; it's off until then.",
+        "ceiling can be set for mobile data in Lurk settings > Playback; it's off until then." + OTA_UPDATES_OFF,
     default = false,
 ) {
     compatibleWith(COMPATIBILITY_KICK)

@@ -3,6 +3,7 @@ package io.github.jordanwoodson.patches.kick.search
 import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.kick.shared.OTA_UPDATES_OFF
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -14,7 +15,7 @@ private const val KEY = "no_search_history"
 val dontSaveSearchesPatch = bytecodePatch(
     name = "Don't save searches",
     description = "Stops Kick from saving what you search for on this device. Searches you saved earlier stay " +
-        "until you remove them. On by default. Turn it off in Lurk settings > Privacy.",
+        "until you remove them. On by default. Turn it off in Lurk settings > Privacy." + OTA_UPDATES_OFF,
 ) {
     compatibleWith(COMPATIBILITY_KICK)
     dependsOn(kickHermesPatch)

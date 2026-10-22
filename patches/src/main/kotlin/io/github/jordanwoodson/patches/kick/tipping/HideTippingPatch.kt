@@ -3,6 +3,7 @@ package io.github.jordanwoodson.patches.kick.tipping
 import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.kick.shared.OTA_UPDATES_OFF
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -13,7 +14,7 @@ private const val KEY = "hide_kicks"
 @Suppress("unused")
 val hideTippingPatch = bytecodePatch(
     name = "Hide KICKs tipping",
-    description = "Hides the chat gift-shop button, KICKs purchase button and leaderboard tipping prompt.",
+    description = "Hides the chat gift-shop button, KICKs purchase button and leaderboard tipping prompt." + OTA_UPDATES_OFF,
     default = false,
 ) {
     compatibleWith(COMPATIBILITY_KICK)

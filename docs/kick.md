@@ -267,7 +267,10 @@ its runtime switch restores Kick's default when disabled.
 
 Hermes patches disable Expo OTA updates, including the controller path that reads
 the update database. Native-only combinations leave Expo enabled. Repatch with a
-supported new app version to receive JavaScript updates.
+supported new app version to receive JavaScript updates. Every patch that edits Kick's
+JavaScript ends its Manager description with the same sentence saying so
+(`OTA_UPDATES_OFF` in `kick/shared/KickHermesPatch.kt`), so turning all of their switches off
+is not the same as an unpatched Kick: the updates stay off.
 
 ## Second batch
 

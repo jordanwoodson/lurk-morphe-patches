@@ -4,6 +4,7 @@ import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
 import io.github.jordanwoodson.patches.kick.shared.HermesOp
+import io.github.jordanwoodson.patches.kick.shared.OTA_UPDATES_OFF
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -15,7 +16,7 @@ private const val KEY = "bypass_vod_ad_sessions"
 val bypassVodAdSessionsPatch = bytecodePatch(
     name = "Bypass VOD ad sessions",
     description = "Experimental: uses the original VOD URL instead of requesting a separate ad-session manifest. " +
-        "Does not remove ads stitched into live streams. Enable in Lurk settings after patching.",
+        "Does not remove ads stitched into live streams. Enable in Lurk settings after patching." + OTA_UPDATES_OFF,
     default = false,
 ) {
     compatibleWith(COMPATIBILITY_KICK)

@@ -3,6 +3,7 @@ package io.github.jordanwoodson.patches.kick.upsells
 import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.kick.shared.OTA_UPDATES_OFF
 import io.github.jordanwoodson.patches.kick.shared.hex
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
@@ -15,7 +16,7 @@ private const val KEY = "hide_subscription_upsells"
 val hideSubscriptionUpsellsPatch = bytecodePatch(
     name = "Hide subscription upsells",
     description = "Hides channel Subscribe and Gift a Sub buttons and the leaderboard gift-subscription prompt. " +
-        "Keeps the existing subscribed indicator.",
+        "Keeps the existing subscribed indicator." + OTA_UPDATES_OFF,
     default = false,
 ) {
     compatibleWith(COMPATIBILITY_KICK)

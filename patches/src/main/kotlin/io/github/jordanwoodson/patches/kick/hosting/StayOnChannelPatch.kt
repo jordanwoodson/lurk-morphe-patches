@@ -4,6 +4,7 @@ import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.kick.shared.OTA_UPDATES_OFF
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -16,7 +17,7 @@ val stayOnChannelPatch = bytecodePatch(
     name = "Stay on channel when it hosts",
     description = "When the channel you're watching hosts another one, Kick's host dialog waits for you instead of " +
         "switching when its countdown ends: Watch now still switches, Cancel stays. Starts off. Turn it on in Lurk " +
-        "settings > Interface.",
+        "settings > Interface." + OTA_UPDATES_OFF,
 ) {
     compatibleWith(COMPATIBILITY_KICK)
     dependsOn(kickHermesPatch)

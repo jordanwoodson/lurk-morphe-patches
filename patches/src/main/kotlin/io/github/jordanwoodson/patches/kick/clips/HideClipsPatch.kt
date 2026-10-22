@@ -4,6 +4,7 @@ import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
 import io.github.jordanwoodson.patches.kick.shared.HermesOp
+import io.github.jordanwoodson.patches.kick.shared.OTA_UPDATES_OFF
 import io.github.jordanwoodson.patches.kick.shared.hex
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
@@ -16,7 +17,7 @@ private const val KEY = "hide_clips"
 val hideClipsPatch = bytecodePatch(
     name = "Hide Clips",
     description = "Hides Clips tabs in Browse, channels and categories, and the popular-clips row on channels. " +
-        "Shared clip links still open.",
+        "Shared clip links still open." + OTA_UPDATES_OFF,
     default = false,
 ) {
     compatibleWith(COMPATIBILITY_KICK)

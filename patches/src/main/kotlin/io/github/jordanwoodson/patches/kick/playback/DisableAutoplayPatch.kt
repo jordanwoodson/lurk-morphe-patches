@@ -3,6 +3,7 @@ package io.github.jordanwoodson.patches.kick.playback
 import app.morphe.patcher.patch.rawResourcePatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.kick.shared.OTA_UPDATES_OFF
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -14,7 +15,7 @@ private const val KEY = "disable_autoplay"
 val disableAutoplayPatch = rawResourcePatch(
     name = "Disable autoplay",
     description = "Starts Kick's feed previews switched off. Existing preferences and Kick's own " +
-        "autoplay switch keep working. Does not change intentionally opened streams.",
+        "autoplay switch keep working. Does not change intentionally opened streams." + OTA_UPDATES_OFF,
 ) {
     compatibleWith(COMPATIBILITY_KICK)
     dependsOn(kickHermesPatch)

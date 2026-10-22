@@ -10,6 +10,7 @@ import io.github.jordanwoodson.patches.kick.player.MainActivityCreateFingerprint
 import io.github.jordanwoodson.patches.kick.settings.kickMatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.kick.shared.OTA_UPDATES_OFF
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
 import io.github.jordanwoodson.patches.shared.settings.ChoiceSetting
@@ -21,7 +22,7 @@ private const val KEY = "amoled_black"
 val amoledBlackPatch = bytecodePatch(
     name = "AMOLED black",
     description = "Makes Kick's dark background pure black for OLED screens, optionally with near-black cards and " +
-        "sheets. Starts off. Choose it in Lurk settings > Interface.",
+        "sheets. Starts off. Choose it in Lurk settings > Interface." + OTA_UPDATES_OFF,
 ) {
     compatibleWith(COMPATIBILITY_KICK)
     dependsOn(kickHermesPatch)

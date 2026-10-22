@@ -10,6 +10,7 @@ import io.github.jordanwoodson.patches.kick.chat.kickChatPagePatch
 import io.github.jordanwoodson.patches.kick.settings.kickMatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.kick.shared.OTA_UPDATES_OFF
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 
@@ -29,7 +30,7 @@ val thirdPartyEmotesPatch = bytecodePatch(
     name = "Third-party emotes",
     description = "Adds optional 7TV emotes to chat, the native picker and autocomplete, with zero-width layers " +
         "and live set updates. Sends the channel owner's Kick user ID to 7tv.io, subscribes to set IDs at " +
-        "events.7tv.io and loads images from cdn.7tv.app. Starts off. Turn it on in Lurk settings > Chat.",
+        "events.7tv.io and loads images from cdn.7tv.app. Starts off. Turn it on in Lurk settings > Chat." + OTA_UPDATES_OFF,
 ) {
     compatibleWith(COMPATIBILITY_KICK)
     dependsOn(kickChatPagePatch, kickComposerPatch)
