@@ -14,6 +14,8 @@ internal class LurkApp(
     val slug: String,
     /** The app's `COMPATIBILITY_<APP>` from its shared/Constants.kt. */
     val compatibility: Compatibility,
+    /** The launcher icon Lurk icon installs. */
+    val icon: LauncherIcon,
     /** The `<uses-permission>` entries Remove tracking permissions takes out. Each must be in the manifest. */
     val trackingPermissions: Set<String>,
     /** The `<queries>` entries Remove tracking permissions takes out with them. */
