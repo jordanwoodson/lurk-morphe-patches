@@ -116,9 +116,46 @@ consent recorded while the switch was off, or before the patch was included, wou
 trackers on every launch. While the switch is on, the cached model's `hasDecision` getter returns `false`
 (found as the class whose `toString` starts `CachedConsent(hasDecision=`; it is the only `()Z` there).
 Startup then hands every tracker an empty purpose set, as on a fresh install: Firebase Analytics,
-Crashlytics, Performance and Facebook switch their persisted collection off again, and AppsFlyer and
-Airship are never started. The cached consent strings still go into ad requests, which Block ads stops.
-Turning the switch off uses the cached consent again.
+Crashlytics, Performance and Facebook switch their persisted collection off again, and AppsFlyer is never
+started. The cached consent strings still go into ad requests, which Block ads stops. Turning the switch
+off uses the cached consent again.
+
+### Push notifications (Airship)
+
+Rumble's consent service keeps a set of trackers (AppsFlyer, Firebase Analytics, Crashlytics, Performance,
+Facebook, Airship), each tied to one purpose. Two loops hand them the granted purposes: an update loop that
+every change runs, and a start loop that runs once, only when a decision exists. Airship, Rumble's push
+service, is taken off in its tracker's start method, so with no decision it never starts. Rumble files
+Airship, Crashlytics and Firebase Performance under `essential_services`. Granting that purpose through
+Rumble's own path would switch Crashlytics and Performance on too, and the start loop starts AppsFlyer
+whatever was granted (its start method calls `init` and `start` and only passes the purposes on as consent
+flags). So stock Rumble starts AppsFlyer even for a user who rejects everything but essential services.
+
+While Block cookie notice is on, the start loop (found in the consent service, whose constructor checks
+`trackers`, `sendDebugLogEventUseCase` and `getAdvertisingIdUseCase`, as the `()V` method that sets a flag
+and calls the tracker interface's `(Set, boolean)` method) starts only the tracker that calls into
+`com.urbanairship.UAirship`, with `essential_services`. It sets the loop's "started" flag itself, so it runs
+once. The other trackers only ever get the update loop's empty set.
+
+For `essential_services` the Airship tracker enables push, contacts (your Rumble user ID as Airship's named
+user when signed in, as in stock Rumble), tags and attributes, in-app messages and Airship's own analytics.
+`RumblePrivacy.airshipFeatures` filters the array the tracker passes to Airship's privacy manager and drops
+analytics (Airship's public `FEATURE_ANALYTICS` value, 16) while the switch is on.
+
+Checked on 2026-10-22 on the Android 16 emulator, signed out, default patch selection:
+
+- Fresh install, switch on: logcat shows `consent: starting Airship with essential_services only`, Airship's
+  "taking off", "Airship ready", "Push registration updated", and `consent: Airship analytics left off`
+  followed by Airship deleting its analytics events. Airship's `PrivacyManager.enabledFeatures` is 101 (in-app
+  messages, push, tags, contacts). No Ketch, AppsFlyer or Crashlytics connections; Firebase consent `G100`.
+- Switch off (Ketch records consent): Ketch, AppsFlyer (`cdn-settings.appsflyersdk.com`) and Crashlytics
+  settings connect, and Airship's features are 117 (the same plus analytics).
+- Switched on again and restarted: features 101, Crashlytics and Performance collection persisted as off.
+  Crashlytics sent the reports it had queued while it was on (`crashlyticsreports-pa.googleapis.com`) during
+  that first launch, before the empty purpose set reached it.
+- Within 45 s neither run created an Airship channel ("No channel ID"), stock path included, so channel
+  creation and notification delivery are not established on the emulator. They need a device with Google
+  Play and a real push.
 
 The switch offers a restart after either toggle. It blocks future Ketch calls immediately, but cannot
 undo SDK initialization or replace consent already applied to the running process. Restart to apply the
@@ -140,14 +177,6 @@ US-MO:
 
 The visible banner itself wasn't reproduced, since no notice is shown at that location; the patch doesn't
 depend on jurisdiction, because both entry points that can display one are disabled.
-
-Block cookie notice prevents Airship, Rumble's push service, from starting after a restart.
-Airship-handled messages cannot be processed without it; Airship's push feature requires the
-`essential_services` purpose. The actual consent matrix confirms startup and feature state,
-but no notification was delivered. The inherited FirebaseMessagingService can independently
-auto-display recognized notification payloads while the app is backgrounded or locked, before
-calling Airship's `onMessageReceived`. Data-message handling has a separate Airship-availability
-guard. This is therefore not a guarantee that every incoming FCM notification is suppressed.
 
 ## Lurk settings
 
