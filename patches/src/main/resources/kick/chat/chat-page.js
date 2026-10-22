@@ -131,7 +131,7 @@
             for (const e of (set && Array.isArray(set.emotes) ? set.emotes : []).slice(0, 2000)) {
                 if (!e || !idOK(e.id) || typeof e.name !== 'string' || !/^[^\s:<>&"'\\]{1,100}$/u.test(e.name)) continue;
                 result.push({id: e.id, name: e.name, flags: ((e.flags & 1) || (e.data && (e.data.flags & 256))) ? 1 : 0,
-                    url: 'https://cdn.7tv.app/emote/' + e.id + (options.nonAnimatedEmotes && e.data && e.data.animated === true ? '/2x_static.webp' : '/2x.webp'),
+                    url: 'https://cdn.7tv.app/emote/' + e.id + '/2x.webp',
                     animated: !!(e.data && e.data.animated === true), width: 64, height: 64});
             }
             return result;
@@ -161,7 +161,8 @@
             if (!stopped && set) { sets.global = set; publish(); connect(); }
         }
         async function loadChannel() {
-            const owner = user || (slug && await get('https://kick.com/api/v2/channels/' + encodeURIComponent(slug)) || {}).user_id;
+            // KickChat learns the owner from the same Kick response as the slug; without it, globals only.
+            const owner = user;
             if (!owner || stopped) return;
             const result = await get(API + 'users/kick/' + encodeURIComponent(owner));
             if (stopped || !result || typeof result !== 'object' || Array.isArray(result)) return;

@@ -7,7 +7,8 @@ every request is answered by the test through the DevTools protocol, so the scri
 https://chat.mobile.kick.com shaped like Kick's (the #app message list, its message, emote, link and highlight
 elements; none of Kick's code), plus fixed Kick and 7TV responses. Checks the host guard, running once per page,
 hidden highlight lines, ignored clears, 7TV words in existing and new messages (channel over global, exact words
-only, links and Kick emotes untouched), the owner lookup, and that no request carries a referrer or cookies.
+only, links and Kick emotes untouched), global emotes only without a known owner, and that no request carries
+a referrer or cookies.
 It also runs the Show deleted messages script at document start on a page that reads its config the way Kick's
 does, and first checks that every class Lurk selects is one Kick's real page used when
 tests/kick/chat-page-contract.json was captured (refresh_chat_page_contract.py refreshes it from the live page).
@@ -43,7 +44,6 @@ HTML = """<!doctype html><html><head></head><body><div id="app">
 </div></body></html>"""
 PIXEL = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 JSON_RESPONSES = {
-    "https://kick.com/api/v2/channels/xqc": {"id": 668, "slug": "xqc", "user_id": 676},
     "https://7tv.io/v3/users/kick/676": {"emote_set": {"emotes": [
         {"id": "111111111111111111111111", "name": "OMEGALUL"},
         {"id": "222222222222222222222222", "name": "shared"},
@@ -182,8 +182,8 @@ async def scenario(page):
                           "return app.children.length; })()") == 0, "control: without the switch a clear empties chat")
 
     await page.go(PAGE)
-    options = {"ignoreClears": True, "hide": HIGHLIGHTS, "sevenTv": True, "sevenTvChannel": "xqc", "sevenTvUser": None}
-    check(await page.apply(options) == "hide " + " ".join(HIGHLIGHTS) + ", ignore clears, 7tv xqc", "reports what it applied")
+    options = {"ignoreClears": True, "hide": HIGHLIGHTS, "sevenTv": True, "sevenTvChannel": "xqc", "sevenTvUser": "676"}
+    check(await page.apply(options) == "hide " + " ".join(HIGHLIGHTS) + ", ignore clears, 7tv 676", "reports what it applied")
     check(await page.apply(options) == "already applied", "applies once per page")
 
     hidden = await page.eval("Array.from(document.querySelectorAll('#app > div')).map(e => getComputedStyle(e).display)")
@@ -219,11 +219,10 @@ async def scenario(page):
     check(await page.eval("(() => { const app = document.getElementById('app'); app.innerHTML = '<p>x</p>'; "
                           "return app.innerHTML; })()") == "<p>x</p>", "other assignments still work")
 
-    lookups = [r for r in page.requests if r["url"].startswith("https://kick.com/")]
-    third_party = [r for r in page.requests if "7tv" in r["url"] or "kick.com/api" in r["url"]]
-    check(len(lookups) == 1, "one owner lookup on Kick")
+    third_party = [r for r in page.requests if "7tv" in r["url"]]
+    check(not any(r["url"].startswith("https://kick.com/") for r in page.requests), "nothing is asked of Kick itself")
     check(third_party and all(not {k.lower() for k in r["headers"]} & {"referer", "cookie"} for r in third_party),
-          "no referrer or cookies on lookups and 7TV requests")
+          "no referrer or cookies on 7TV requests")
     # Control: the page's own fetches do send one, so the check above can see it.
     page.requests.clear()
     await page.eval("fetch('https://7tv.io/v3/emote-sets/global').then(r => r.status)")
@@ -233,9 +232,11 @@ async def scenario(page):
 
     page.requests.clear()
     await page.go(PAGE)
-    await page.apply({"sevenTv": True, "sevenTvChannel": "xqc", "sevenTvUser": "676"})
+    await page.apply({"sevenTv": True, "sevenTvChannel": "xqc", "sevenTvUser": None})
     await page.until("window.lurkChat.sevenTvCount")
-    check(not any(r["url"].startswith("https://kick.com/") for r in page.requests), "a known owner needs no lookup")
+    check(await page.eval("window.lurkChat.sevenTvCount") == [0, 3] and
+          not any("/users/" in r["url"] or r["url"].startswith("https://kick.com/") for r in page.requests),
+          "a channel whose owner the app hasn't seen gets global emotes only, without asking Kick")
 
     page.requests.clear()
     await page.go(PAGE)
@@ -307,10 +308,10 @@ async def resilient_scenario(page):
     await page.call("Fetch.enable", patterns=[{"urlPattern": "*"}])
     # A hung owner must not hold the independently successful global catalog hostage.
     await page.go(PAGE)
-    await page.eval("""window.fetch = ((original) => (url, opts) => url.includes('/channels/')
+    await page.eval("""window.fetch = ((original) => (url, opts) => url.includes('/users/')
         ? new Promise(() => {}) : original(url, opts))(window.fetch);
         window.WebSocket = class { close() {} };""")
-    await page.apply({"sevenTv": True, "sevenTvChannel": "xqc"})
+    await page.apply({"sevenTv": True, "sevenTvChannel": "xqc", "sevenTvUser": "676"})
     await page.until("document.querySelector('img[alt=EZ]')")
     check(True, "successful globals render while owner request never settles")
 
@@ -366,13 +367,12 @@ async def resilient_scenario(page):
             {id:'333333333333333333333333',name:'EZ',data:{animated:true}},
             {id:'444444444444444444444444',name:'OMEGALUL',data:{animated:false}}
         ]}),{status:200}));window.WebSocket=class {close(){}};""")
-    await page.apply({"sevenTv":True,"nonAnimatedEmotes":True})
+    await page.apply({"sevenTv":True})
     await page.eval("Object.defineProperty(document,'hidden',{value:false});document.dispatchEvent(new Event('visibilitychange'))")
     await page.until("document.querySelector('img[alt=EZ]')")
-    check(await page.eval("document.querySelector('img[alt=EZ]').src.endsWith('/2x_static.webp')"),
-          "visible resume loads missing catalog and animated emotes use a static filename")
-    check(await page.eval("document.querySelector('img[alt=OMEGALUL]').src.endsWith('/2x.webp')"),
-          "naturally static emotes keep their supported original filename")
+    check(await page.eval("document.querySelector('img[alt=EZ]').src.endsWith('/2x.webp') && "
+                          "document.querySelector('img[alt=OMEGALUL]').src.endsWith('/2x.webp')"),
+          "visible resume loads the missing catalog; chat images keep 7TV's animated file")
 
     # Header and body stalls share the same deadline, with exactly three transient attempts.
     await page.go(PAGE)
