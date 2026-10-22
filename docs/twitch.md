@@ -429,6 +429,13 @@ badge/pronoun metadata.
 The original RN live store is keyed by channel login. Keyword notification ownership preserves that
 bounded login exactly; provider row acquisition independently uses the numeric channel/source-room ID.
 
+The compiled chat reads Lurk's chat settings through one synchronous native call and keeps them until
+the native side invalidates them, which it does whenever an activity resumes (Lurk settings is an
+activity of its own), or until `configure` runs. Rows, message bodies, timestamps and the history
+selector share that read instead of asking per render, and keyword verdicts are cached by line
+content per config revision. `TwitchRNChat.config()` builds its JSON only when a value or the keyword
+lists changed. `tests/twitch/test_chat.js` counts the native calls.
+
 The pinned live RN owners are discovered by unique exports in Hermes98, with an additional compiled
 bundle installed before consumers render. Both embedded and prepared main bundles retain
 `assets://index.android.bundle`; ReactInstance and native-module teardown retire their own state.
