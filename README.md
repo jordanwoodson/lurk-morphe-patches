@@ -1,12 +1,8 @@
 <p align="center">
-  <img src="patches-bundle.png" width="128" alt="">
-</p>
-
-<h1 align="center">Lurk</h1>
-
-<p align="center">
-  <b>Morphe privacy patches for Twitch, Kick and Rumble.</b><br>
-  Watch the stream. Skip the tracking.
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme-hero.png">
+    <img src="assets/readme-hero-light.png" width="800" alt="Lurk: Morphe privacy patches for Twitch, Kick and Rumble. Watch the stream. Skip the tracking.">
+  </picture>
 </p>
 
 <p align="center">

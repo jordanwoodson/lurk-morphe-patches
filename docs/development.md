@@ -37,7 +37,11 @@ Everything regenerable (decompiled code, patched APKs, the emulator, logs) goes 
 | `extensions/shared/` | Java injected into patched apps (`extensions/shared.mpe`): the Lurk settings screen, `Logger` (tag `lurk`), per-app helpers under `twitch/` and `kick/`. Add `extensions/<app>/` when an app needs its own module. |
 | `tests/<app>/` | Output checks and on-device probes, run through `bin/test-<app>*`. See [Testing](#testing). |
 | `docs/<app>.md` | Per-app notes: what each patch hooks, how it was found, how it was tested. |
-| `assets/icon.png` | The Lurk icon at full size (1254 px). `patches-bundle.png` is a 512 px copy: Manager shows it for this source, and the README header uses it. |
+| `assets/icon.png` | The Lurk icon at full size (1254 px): the hooded figure in mint `#39F8AE` on navy `#080D1B`. `patches-bundle.png` is a 512 px copy, which Manager shows for this source. |
+| `assets/readme-hero.png`, `assets/readme-hero-light.png` | The README header (1600×400): the figure, the "Lurk" wordmark, the tagline and the three app icons, on navy for GitHub's dark theme and on white for the light one (a `<picture>` element picks one). |
+| `assets/social-preview.png` | The same elements at 1280×640 for link previews. GitHub doesn't read it from the repository: upload it by hand under the repository's **Settings › General › Social preview** whenever it changes. |
+| `assets/wordmark.svg` | "Lurk" in mint as outlines (DejaVu Sans Bold, letter-spaced 0.02 em), for places that need the name without the figure. |
+| `assets/screenshots/<app>-settings.png` | The Lurk settings screen of each patched app, shown in the README's Screenshots section. |
 | `assets/<app>-icon.png` | An app's Lurk launcher artwork, flattened to its two colors. `bin/app-icon` turns it into `patches/src/main/resources/<app>/icon/` (adaptive icon, vector logo, legacy `.webp`), which the app's icon patch copies in. |
 | `assets/<app>-icon-round.webp` | The README patch-list icon for apps whose icon patch recolors Rumble's Lurk logo while patching instead of shipping its own (`twitch`, `kick`). |
 | `apks/<app>/<version>/` | Original APKs, added with `bin/apk-add`. Not committed. |

@@ -22,6 +22,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+sys.dont_write_bytecode = True  # no __pycache__ next to the scripts
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import apk  # noqa: E402
 
