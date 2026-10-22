@@ -101,6 +101,21 @@ public final class ChatBoundaryProbe {
         call(chat,"onPageDisposed",new Class<?>[]{WebView.class},view);
         System.out.println("PASS: Chat keywords batches, ChatFilter verdicts, page and origin guards");
     }
+    /** Chat timestamps, text size and compact chat reach the page as options, each only when set. */
+    static void look()throws Exception {
+        Class<?>[] pageTypes={WebView.class,String.class};
+        setting("chat_timestamps",true);ProbeSupport.setting("chat_text_size","20");setting("chat_compact",true);
+        Capture view=(Capture)ProbeSupport.allocate(Capture.class);
+        call(c(CHAT),"onPage",pageTypes,view,page("{}"));
+        JSONObject options=new JSONObject(view.source.substring(view.source.lastIndexOf("\n(")+2,view.source.length()-2));
+        ProbeSupport.check(options.getBoolean("timestamps") && options.getInt("textSize")==20 && options.getBoolean("compact"),"timestamps, text size and compact reach the page");
+        setting("chat_timestamps",false);ProbeSupport.setting("chat_text_size","99");setting("chat_compact",false);
+        view.source=null;
+        call(c(CHAT),"onPage",pageTypes,view,page("{}"));
+        ProbeSupport.check(view.source==null,"switched off, and an out-of-range size, add nothing");
+        ProbeSupport.setting("chat_text_size","0");
+        System.out.println("PASS: chat look options");
+    }
     static JSONObject line(String id,String name,String slug,String text)throws Exception{
         return new JSONObject().put("id",id).put("name",name).put("slug",slug).put("text",text);
     }
@@ -191,5 +206,6 @@ public final class ChatBoundaryProbe {
         setting("chat_show_deleted",false);
         lifecycle();
         keywords();
+        look();
     });}
 }

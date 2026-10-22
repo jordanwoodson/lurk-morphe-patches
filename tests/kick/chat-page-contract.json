@@ -62,13 +62,17 @@
    "present": true,
    "for": "Chat keywords (blocked users, by sender ID)"
   },
-  "code:timestamps-switch": {
+  "css:timestamps-display": {
    "present": true,
-   "for": "Chat timestamps (the page's own timestamp switch)"
+   "for": "Chat timestamps (each line's time shows through --timestamps-display)"
   },
-  "code:text-size-switch": {
+  "css:chatroom-font-size": {
    "present": true,
-   "for": "Chat text size (the page's own text size function)"
+   "for": "Chat text size (the text follows --chatroom-font-size)"
+  },
+  "css:message-gap": {
+   "present": true,
+   "for": "Compact chat (lines are spaced by --message-gap)"
   }
  },
  "classes": [

@@ -346,6 +346,48 @@ async def keywords_scenario(page):
     check(await page.eval("sent.length") == 2, "a line that moves is not sent again")
 
 
+# Kick's page styles chat from custom properties on <body> that its own code sets inline from the app's settings
+# (tests/kick/chat-page-contract.json pins these rules on the real page).
+LOOK_PAGE = """<!doctype html><html><head><style>
+body{--timestamps-display:inline;--message-gap:2px;--chatroom-font-size:16px;font-size:var(--chatroom-font-size);line-height:1.5}
+#app{display:flex;flex-direction:column;row-gap:var(--message-gap)}
+.message-container{padding:4px 8px}
+.timestamp{display:var(--timestamps-display)}
+</style></head><body><div id="app"><div class="message-container"><span class="timestamp">03:10 PM</span>
+<span class="message-content">hi</span></div><div class="message-container"><span class="message-content">yo</span></div></div>
+<script>window.setPage = (timestamps, size) => { document.body.style.setProperty('--timestamps-display', timestamps ? 'inline' : 'none');
+document.body.style.setProperty('--chatroom-font-size', size + 'px'); }; setPage(false, 16);</script></body></html>"""
+
+
+async def look_scenario(page):
+    """Chat timestamps, text size and compact chat override the page's own settings, whenever it sets them."""
+    await page.call("Page.enable")
+    await page.call("Fetch.enable", patterns=[{"urlPattern": "*"}])
+    page.html = LOOK_PAGE
+    measure = """[getComputedStyle(document.querySelector('.timestamp')).display,
+        getComputedStyle(document.querySelector('.message-content')).fontSize,
+        getComputedStyle(document.getElementById('app')).rowGap,
+        getComputedStyle(document.querySelector('.message-container')).paddingTop]"""
+    try:
+        await page.go(PAGE)
+        check(await page.apply({}) == "nothing" and await page.eval(measure) == ["none", "16px", "2px", "4px"],
+              "control: without the switches the page's own settings apply")
+        await page.go(PAGE)
+        check(await page.apply({"timestamps": True}) == "timestamps", "reports timestamps")
+        check((await page.eval(measure))[:2] == ["inline", "16px"], "timestamps show; the text size is the page's")
+        await page.go(PAGE)
+        check(await page.apply({"timestamps": True, "textSize": 20, "compact": True}) == "timestamps, text size 20, compact",
+              "reports timestamps, text size and compact")
+        check(await page.eval(measure) == ["inline", "20px", "0px", "1px"], "all three apply")
+        await page.eval("setPage(false, 12)")
+        check(await page.eval(measure) == ["inline", "20px", "0px", "1px"], "and still apply after the page sets its own")
+        await page.go(PAGE)
+        await page.apply({"textSize": 99})
+        check((await page.eval(measure))[1] == "16px", "a text size outside 10 to 32 px is ignored")
+    finally:
+        page.html = HTML
+
+
 async def resilient_scenario(page):
     await page.call("Page.enable")
     await page.call("Fetch.enable", patterns=[{"urlPattern": "*"}])
@@ -505,6 +547,7 @@ async def main():
             try:
                 await moderator_scenario(page)
                 await keywords_scenario(page)
+                await look_scenario(page)
                 await resilient_scenario(page)
                 await scenario(page)
                 if args.native_captures:

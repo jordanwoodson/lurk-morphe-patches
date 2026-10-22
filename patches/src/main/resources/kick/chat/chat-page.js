@@ -3,6 +3,7 @@
 // it finishes loading, with the switches that are on:
 //   moderatorView Show deleted messages is on. Its moderator view comes from lurk-chat-moderator.js, which runs
 //                 before the page's own scripts; this only reports whether that worked.
+//   timestamps    show each line's time; textSize the chat text size in px; compact less space between lines
 //   ignoreClears  keep the messages when a moderator clears the chat
 //   hide          CSS selectors of chat lines to hide (subs and gifts, hosts, reward redemptions)
 //   sevenTv       show 7TV emotes. sevenTvChannel is the channel's slug and sevenTvUser its owner's Kick user ID,
@@ -38,6 +39,27 @@
             (document.head || document.documentElement).appendChild(style);
         });
         applied.push('hide ' + options.hide.join(' '));
+    }
+
+    // Chat timestamps, text size and compact lines: the page styles each line from custom properties on <body>,
+    // which it sets inline from the app's chat settings (--timestamps-display, --chatroom-font-size,
+    // --message-gap). A stylesheet rule marked !important wins over those inline values whenever the page sets them.
+    const look = [];
+    if (options.timestamps) look.push('--timestamps-display:inline!important');
+    if (Number.isInteger(options.textSize) && options.textSize >= 10 && options.textSize <= 32) {
+        look.push('--chatroom-font-size:' + options.textSize + 'px!important');
+    }
+    if (options.compact) look.push('--message-gap:0px!important;line-height:1.3!important');
+    if (look.length) {
+        whenReady(() => {
+            const style = document.createElement('style');
+            style.textContent = 'body{' + look.join(';') + '}' +
+                (options.compact ? '.message-container{padding-top:1px!important;padding-bottom:1px!important}' : '');
+            (document.head || document.documentElement).appendChild(style);
+        });
+        if (options.timestamps) applied.push('timestamps');
+        if (look.length > (options.timestamps ? 1 : 0)) applied.push('text size ' + (options.textSize || 'Kick') +
+            (options.compact ? ', compact' : ''));
     }
 
     // The page clears chat by emptying the message list (`app.innerHTML = ""`); nothing else empties it outside

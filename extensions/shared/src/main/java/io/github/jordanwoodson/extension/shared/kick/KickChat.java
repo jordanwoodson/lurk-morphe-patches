@@ -39,6 +39,9 @@ public final class KickChat {
     private static final String MODERATOR_SCRIPT = "lurk-chat-moderator.js";
     private static final String SHOW_DELETED = "chat_show_deleted";
     private static final String IGNORE_CLEARS = "chat_ignore_clears";
+    private static final String TIMESTAMPS = "chat_timestamps";
+    private static final String TEXT_SIZE = "chat_text_size";
+    private static final String COMPACT = "chat_compact";
     static final String SEVEN_TV = "emotes_7tv";
     /** A switch, then the page's elements for the chat lines it hides. */
     private static final String[][] HIDE = {
@@ -281,6 +284,10 @@ public final class KickChat {
         if (on(SHOW_DELETED)) options.put("moderatorView", true);
         if (on(IGNORE_CLEARS)) options.put("ignoreClears", true);
         if (on(ChatFilter.KEY)) options.put("keywords", true);
+        if (on(TIMESTAMPS)) options.put("timestamps", true);
+        int textSize = Settings.isRegistered(TEXT_SIZE) ? Settings.getInt(TEXT_SIZE) : 0;
+        if (textSize >= 10 && textSize <= 32) options.put("textSize", textSize);
+        if (on(COMPACT)) options.put("compact", true);
         JSONArray hide = new JSONArray();
         for (String[] lines : HIDE) {
             if (!on(lines[0])) continue;

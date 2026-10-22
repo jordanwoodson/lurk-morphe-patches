@@ -25,7 +25,7 @@ FIXTURE = Path(__file__).resolve().with_name("chat-page-contract.json")
 USER_AGENT = "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36"
 
 # What Lurk's chat page scripts and KickChat need, with the patch that needs it. "class" entries must be class
-# names the page uses; "code" entries are patterns that must match the page's script.
+# names the page uses; "code" entries are patterns that must match the page's script, "css" ones its stylesheet.
 REQUIRED = {
     "class:message-container": "7TV emotes, Chat keywords, Chat timestamps (each chat line)",
     "class:message-content": "7TV emotes, Chat keywords (a line's text)",
@@ -41,8 +41,9 @@ REQUIRED = {
     "code:moderator-view": r"""userCanModerate""",
     "code:clear-empties-list": r"""\.innerHTML\s*=\s*["']{2}""",
     "code:sender-id-attribute": r"""data-sender-id""",
-    "code:timestamps-switch": r"""window\.showMessagesTimestamps\s*=""",
-    "code:text-size-switch": r"""window\.updateTextSize\s*=""",
+    "css:timestamps-display": r"""\.timestamp\{[^}]*display:\s*var\(--timestamps-display\)""",
+    "css:chatroom-font-size": r"""font-size:\s*var\(--chatroom-font-size\)""",
+    "css:message-gap": r"""row-gap:\s*var\(--message-gap\)""",
 }
 CODE_PURPOSE = {
     "code:message-list": "every chat page feature (the #app message list)",
@@ -50,8 +51,9 @@ CODE_PURPOSE = {
     "code:moderator-view": "Show deleted messages",
     "code:clear-empties-list": "Ignore chat clears (a clear empties the list through innerHTML)",
     "code:sender-id-attribute": "Chat keywords (blocked users, by sender ID)",
-    "code:timestamps-switch": "Chat timestamps (the page's own timestamp switch)",
-    "code:text-size-switch": "Chat text size (the page's own text size function)",
+    "css:timestamps-display": "Chat timestamps (each line's time shows through --timestamps-display)",
+    "css:chatroom-font-size": "Chat text size (the text follows --chatroom-font-size)",
+    "css:message-gap": "Compact chat (lines are spaced by --message-gap)",
 }
 
 
@@ -79,7 +81,7 @@ def capture():
     checks = {}
     for key, value in REQUIRED.items():
         kind, name = key.split(":", 1)
-        checks[key] = name in names if kind == "class" else bool(re.search(value, code))
+        checks[key] = name in names if kind == "class" else bool(re.search(value, css if kind == "css" else code))
     return {
         "page": PAGE,
         "captured": datetime.date.today().isoformat(),

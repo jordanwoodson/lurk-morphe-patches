@@ -245,6 +245,8 @@ details and validation follow.
 | Don't save searches | Yes | On | New searches aren't added to the search history. |
 | AMOLED black | Yes | Off (choice) | Pure black background, optionally near-black cards and sheets. |
 | Third-party emotes | Yes | 7TV emotes, off | The channel's and 7TV's global emotes in live chat. |
+| Chat timestamps | Yes | Off | The time next to each chat message, signed out too. |
+| Chat text size | Yes | Kick's size; Compact chat, off | Chat text from 12 to 24 px; less space between messages. |
 | Chat keywords | Yes | Off; mentions on, vibration off, lists empty | Tints messages that mention you or contain highlight words, optionally vibrating; hides blocked words and users. |
 
 The second batch follows one switch policy, the same in all three apps: every patch whose
@@ -600,7 +602,8 @@ stays Kick's `#090A0B`, and colours hardcoded in components stay as they are.
 ### Chat page script
 
 The switches that change chat lines (Ignore chat clears, Hide sub and gift messages, Hide host
-messages, Hide reward redemptions, Chat keywords and 7TV emotes) work inside Kick's chat page, since
+messages, Hide reward redemptions, Chat keywords, Chat timestamps, Chat text size and 7TV emotes) work inside
+Kick's chat page, since
 that is where the lines are drawn. Any patch with one of them adds a hook to react-native-webview's
 `RNCWebViewClient.onPageStarted` and `onPageFinished`, after their super calls. For a page on
 `chat.mobile.kick.com`, other than the single-gift KICKs preview (`preview=true`),
@@ -627,6 +630,26 @@ script and `KickChat` is one the captured page uses. The capture of 2026-10-22
 can change at any time: the script then does nothing for what it no longer finds, and Lurk
 can't check it at patch time. `tests/kick/test_chat_page.py` runs it in headless Chrome on a
 copy of the page's structure.
+
+### Chat timestamps and Chat text size
+
+Kick's chat page styles its lines from custom properties on `<body>` that its own code sets inline
+from the app's chat settings: `--timestamps-display` (each line already has a `.timestamp`, shown
+through it), `--chatroom-font-size` (text, emotes and badges scale with it) and `--message-gap`
+(between lines). Kick's own chat settings menu has "Show timestamps" and "Text size", but tapping
+it signed out opened the sign-in screen on the emulator. With Chat timestamps on, the chat page
+script adds a stylesheet rule holding `--timestamps-display: inline !important`; Chat text size
+holds `--chatroom-font-size` at the chosen 12 to 24 px, and Compact chat sets `--message-gap` to 0,
+the line height to 1.3 and each line's vertical padding to 1 px. An author `!important` rule beats
+the page's inline values, so the result doesn't depend on when the page applies its settings, and
+while set, Lurk's choice wins over Kick's own. They apply to chats opened afterwards. The page
+contract pins the three properties in the live page's stylesheet.
+
+Checked on the emulator, signed out, on a live channel: with the switches on and 20 px chosen, the
+page's own `--timestamps-display` was `none` while the timestamps showed, the message text measured
+20 px, the list's row gap 0 and the line padding 1 px; off, the page's values applied.
+`test_chat_page.py` checks the same on a page with Kick's rules, including the page setting its own
+values afterwards, and `bin/test-kick-chat` checks the options KickChat passes on ART.
 
 ### Chat keywords
 
