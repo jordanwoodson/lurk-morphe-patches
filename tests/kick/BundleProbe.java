@@ -19,7 +19,8 @@ import org.json.JSONObject;
 
 /** Executes the injected loader on Android. All-off must reconstruct the independent stock SHA-256. */
 public final class BundleProbe {
-    private static final String STOCK = "dd5e4d45bffa1a7befbf943985eb3f0d0d1896d303d28abf0a5748b1d5f124dc";
+    /** The stock bundle's SHA-256, from HermesBundle.SOURCE_SHA256 (bin/test-kick passes it). */
+    private static String stock;
     private static final Map<String, Boolean> switches = new HashMap<>();
     private static final Map<String, String> choices = new HashMap<>();
 
@@ -192,12 +193,13 @@ public final class BundleProbe {
 
     public static void main(String[] args) throws Exception {
         File directory = new File(args[1]);
+        stock = args[2];
         directory.mkdirs();
         AssetManager assets = AssetManager.class.getDeclaredConstructor().newInstance();
         AssetManager.class.getMethod("addAssetPath", String.class).invoke(assets, args[0]);
         byte[] embedded = read(assets, "index.android.bundle");
         JSONObject manifest = new JSONObject(new String(read(assets, "lurk-hermes.json"), "UTF-8"));
-        check(STOCK.equals(manifest.getString("sourceSha256")), "Unexpected source hash");
+        check(stock.equals(manifest.getString("sourceSha256")), "Unexpected source hash");
         JSONArray edits = manifest.getJSONArray("edits");
         check(edits.length() > 0, "No selected Hermes patches");
         SharedPreferences preferences = (SharedPreferences) Proxy.newProxyInstance(
@@ -250,7 +252,7 @@ public final class BundleProbe {
         // Simulate process restart; every switch off and every choice at 0 must reconstruct the
         // independently hashed stock bundle.
         byte[] restored = load(prepare, prepared, defaults, assets, embedded);
-        check(digest("SHA-256", restored).equals(STOCK), "All-off did not restore the stock bundle");
+        check(digest("SHA-256", restored).equals(stock), "All-off did not restore the stock bundle");
         for (String key : switches.keySet()) {
             switches.put(key, true);
             byte[] selected = load(prepare, prepared, defaults, assets, embedded);

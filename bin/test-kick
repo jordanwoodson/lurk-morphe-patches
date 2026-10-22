@@ -22,7 +22,10 @@ adb -s "$serial" shell mkdir -p "$remote"
 trap 'adb -s "$serial" shell rm -rf "$remote" >/dev/null 2>&1 || true' EXIT
 adb -s "$serial" push "$1" "$remote/app.apk" >/dev/null
 adb -s "$serial" push "$out/probe.jar" "$remote/probe.jar" >/dev/null
-result=$(adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin BundleProbe $remote/app.apk $remote/cache" 2>&1)
+# The stock bundle's hash is written once, in the Hermes helper.
+stock=$(sed -n 's/.*const val SOURCE_SHA256 = "\([0-9a-f]\{64\}\)".*/\1/p' "$PATCHES_SRC/kick/shared/Hermes.kt")
+[[ ${#stock} == 64 ]] || die "no SOURCE_SHA256 in kick/shared/Hermes.kt"
+result=$(adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin BundleProbe $remote/app.apk $remote/cache $stock" 2>&1)
 printf '%s\n' "$result"
 [[ "$result" == *"PASS: loader defaults"* && "$result" != *"Exception"* && "$result" != *"Error"* ]] ||
     die "bundle loader probe did not pass"
