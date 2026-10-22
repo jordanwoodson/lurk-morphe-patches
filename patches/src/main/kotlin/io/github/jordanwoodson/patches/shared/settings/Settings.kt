@@ -57,10 +57,12 @@ internal class SwitchSetting(
 
 /**
  * Switches "Pause Lurk" leaves as they are, besides any registered with keepWhenPaused: Block update prompts
- * (without it a forced update can lock someone out of the app, and updating removes Lurk) and Lurk's own
- * Debug logging, which helps while finding out whether Lurk is the cause of a problem.
+ * (without it a forced update can lock someone out of the app, and updating removes Lurk), Twitch's Watch
+ * without signing in (without it a signed-out Twitch stops at the sign-in screen, so the pause would lock
+ * the person out too) and Lurk's own Debug logging, which helps while finding out whether Lurk is the
+ * cause of a problem.
  */
-private val KEEP_WHEN_PAUSED = setOf("block_update_prompts", "debug_logging")
+private val KEEP_WHEN_PAUSED = setOf("block_update_prompts", "watch_without_login", "debug_logging")
 
 /** One of [choices] (label to value). Injected code reads the value as a number with [intValue]. */
 internal class ChoiceSetting(
