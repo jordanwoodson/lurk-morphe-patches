@@ -1,7 +1,11 @@
 package io.github.jordanwoodson.extension.shared.rumble;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.text.NumberFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 
 import io.github.jordanwoodson.extension.shared.ChatFilter;
@@ -27,6 +31,57 @@ public final class RumbleInterface {
             countLocale = locale;
         }
         return countFormat.format(count);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Channel action buttons (Hide tipping and Rants, Hide Join and Shop buttons)
+
+    static final String HIDE_TIPPING = "hide_tipping";
+    static final String HIDE_JOIN = "hide_join_button";
+    static final String HIDE_SHOP = "hide_shop_button";
+
+    /** The last lists handed out, so a composable drawn again with the same list gets the same list back. */
+    private static final int REMEMBERED = 8;
+    private static final Object[][] BUTTONS = new Object[REMEMBERED][];
+    private static int nextButtons;
+
+    /** Whether a switch of an included patch is on. Keys of patches left out count as off here. */
+    static boolean on(String key) {
+        return Settings.isRegistered(key) && Settings.isEnabled(key);
+    }
+
+    /**
+     * Injection point: the start of the composable that draws a channel's or video's action buttons, with the
+     * list of buttons it may draw and Rumble's Tip, Join and Shop constants. Returns the list without the
+     * buttons whose switch is on: the same list while none is, and the same filtered list as last time for the
+     * same list, so Compose can still skip the buttons when nothing changed.
+     */
+    public static List<?> actionButtons(List<?> buttons, Object tip, Object join, Object shop) {
+        if (buttons == null || buttons.isEmpty()) return buttons;
+        boolean hideTip = tip != null && on(HIDE_TIPPING);
+        boolean hideJoin = join != null && on(HIDE_JOIN);
+        boolean hideShop = shop != null && on(HIDE_SHOP);
+        if (!hideTip && !hideJoin && !hideShop) return buttons;
+        int settings = (hideTip ? 1 : 0) | (hideJoin ? 2 : 0) | (hideShop ? 4 : 0);
+        synchronized (BUTTONS) {
+            for (Object[] remembered : BUTTONS) {
+                if (remembered != null && ((WeakReference<?>) remembered[0]).get() == buttons
+                        && (Integer) remembered[1] == settings) {
+                    return (List<?>) remembered[2];
+                }
+            }
+        }
+        List<Object> kept = new ArrayList<>(buttons.size());
+        for (Object button : buttons) {
+            if ((hideTip && button == tip) || (hideJoin && button == join) || (hideShop && button == shop)) continue;
+            kept.add(button);
+        }
+        List<?> result = kept.size() == buttons.size() ? buttons : Collections.unmodifiableList(kept);
+        synchronized (BUTTONS) {
+            BUTTONS[nextButtons] = new Object[]{new WeakReference<>(buttons), settings, result};
+            nextButtons = (nextButtons + 1) % REMEMBERED;
+        }
+        return result;
     }
 
     // ---------------------------------------------------------------------------------------------

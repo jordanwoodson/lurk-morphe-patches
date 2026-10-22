@@ -424,7 +424,12 @@ Premium status itself isn't touched; that's Unlock Premium's job.
 
 ## Hide tipping and Rants
 
-- `Tip` is dropped from the list of action buttons the channel and video headers may draw.
+- `Tip` is dropped from the list of action buttons the channel and video headers may draw. A hidden patch
+  passes that list (the composable whose strings include `possibleCreatorActionButtonTypesToDisplay`) through
+  `RumbleInterface.actionButtons` with the enum's `Tip`, `Join` and `Shop` constants; it returns Rumble's own
+  list while no switch hides one, and the same filtered list for the same list, so the buttons can still
+  skip recomposition. Both callers pass the list (their `$default` masks, 0 and 0x2002, leave bit 14 clear),
+  so the default-argument code after the hook doesn't overwrite it.
 - `Creator.tipsInfo` and `VideoSource.wallet` (the Shorts tip button) are null.
 - `LiveChatConfigRant.enable` returns false, which hides the Rant button.
 - `LiveChatConfigRant.walletEnabled` returns false, which disables paying with Rumble Wallet.
@@ -734,6 +739,11 @@ the App Info rows as for the Lurk row, and a tap reloads the player at the same 
   no quality.
 - The player's load method (the one asking the start-source chooser) records which player loaded which
   video, so a panel reloads its own player.
+- The hook runs at the start of the composable, on every recomposition. `RumblePlayer.refreshable` makes
+  one tap action per video and remembers the last panels' (modifier, video) pairs, so a panel drawn again
+  gets the same clickable modifier and Compose can skip what didn't change. Its one caller passes the
+  modifier (`Modifier.fillMaxSize()`, `$default` 0), so the default-argument code after the hook doesn't
+  overwrite it.
 
 Rumble retries network errors itself: with the network cut, live streams and VODs keep buffering for
 minutes without the error panel and resume when the network returns. The panel, and so the reload, is for
