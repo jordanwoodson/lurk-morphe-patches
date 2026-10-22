@@ -1,3 +1,98 @@
+## [1.13.0](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.12.0...v1.13.0) (2026-10-22)
+
+### Kick
+
+#### ✨ New Features
+
+* add an opt-in FingerprintJS block to **Disable analytics** ([f1daa60](https://github.com/jordanwoodson/lurk-morphe-patches/commit/f1daa60fd005a7a881aaa15b238daf9e71e7fae9))
+* add **Chat keywords** ([69d1f01](https://github.com/jordanwoodson/lurk-morphe-patches/commit/69d1f011d51f9a91e938b6d5475cd2189ead7bff))
+* add **Chat timestamps** and Chat text size ([08534cd](https://github.com/jordanwoodson/lurk-morphe-patches/commit/08534cd195d23d01a94817561b83e12284bacd6b))
+* add **Fill screen** ([9737826](https://github.com/jordanwoodson/lurk-morphe-patches/commit/97378267ad6819c584a3018e0097d4cd8e04b193))
+* add **Hide mature-content warning** ([4e82b82](https://github.com/jordanwoodson/lurk-morphe-patches/commit/4e82b8263abe1b4e5b73922c1cc9c770a5fb73b5))
+* add **Show exact counts** ([d17ae1c](https://github.com/jordanwoodson/lurk-morphe-patches/commit/d17ae1ccf74f40a57b67aaa7df5fcd222e901434))
+
+#### 🐛 Bug Fixes
+
+* keep injected calls from being dropped above v15 ([c73bc8a](https://github.com/jordanwoodson/lurk-morphe-patches/commit/c73bc8a62738595cbd96b4c7e816d3ace7a8600e))
+* list **Bypass VOD ad sessions** under Playback ([d17092b](https://github.com/jordanwoodson/lurk-morphe-patches/commit/d17092b02587df7de43c2ea51f806bb015b92392))
+* log setting and 7TV load failures as warnings ([345c1ab](https://github.com/jordanwoodson/lurk-morphe-patches/commit/345c1abec6df3aa8f6bea3eca38e5f2957e2e0b6))
+* refuse Hermes edits that a jump or switch case lands inside ([12581d6](https://github.com/jordanwoodson/lurk-morphe-patches/commit/12581d609206d36463d76f0b2a5e1a0300b2c466))
+* say in Manager that JavaScript patches turn off Kick's updates ([b7d5bab](https://github.com/jordanwoodson/lurk-morphe-patches/commit/b7d5bab2d2279fcf0894f6c33dbd47f6bbd0d738))
+* say what 7TV can learn from **Third-party emotes** ([6c6fe6e](https://github.com/jordanwoodson/lurk-morphe-patches/commit/6c6fe6e8a9f3dde0ea4cef73b8c9b330c0e40579))
+* select tipping, upsell and Clips hiding with their switch off ([130ef49](https://github.com/jordanwoodson/lurk-morphe-patches/commit/130ef4938e860cca5131e1dc3e160395dc55f1b3))
+* **show deleted messages** without telling Kick's server ([9f6d33a](https://github.com/jordanwoodson/lurk-morphe-patches/commit/9f6d33a6a7782f73471babf9bbe71d4fb58cd117))
+
+#### 🔧 Improvements
+
+* reuse the prepared Hermes bundle across cold starts ([a6cd7fd](https://github.com/jordanwoodson/lurk-morphe-patches/commit/a6cd7fd4092d63dbda4307f62eed16ed8f2a6ab5))
+* skip chat bridge messages when 7TV is off ([220a605](https://github.com/jordanwoodson/lurk-morphe-patches/commit/220a60520a4a34beb019cc0db0e8bd35c56fd1cf))
+
+### Rumble
+
+#### ✨ New Features
+
+* add **Background audio by default** ([ab6e133](https://github.com/jordanwoodson/lurk-morphe-patches/commit/ab6e13354afce0d1f294c879cd2fd85efc61b763))
+* add **Default playback speed** ([fd7e9f5](https://github.com/jordanwoodson/lurk-morphe-patches/commit/fd7e9f55b8ac7d8f27bd7f4b0016c45c4c452aa5))
+* add **Disable tracking SDKs** ([6f129bb](https://github.com/jordanwoodson/lurk-morphe-patches/commit/6f129bb567caf01c9e315a259c4cf41712b2934f))
+* add **Hide comments and related videos** ([0346f1c](https://github.com/jordanwoodson/lurk-morphe-patches/commit/0346f1c0fb198c7a96d388dcf0cae4f79d8c0b26))
+* add **Hide Join and Shop buttons** ([75c60cf](https://github.com/jordanwoodson/lurk-morphe-patches/commit/75c60cf2e2a23a08b56a2fead86522009f1026c9))
+* add **Hide premium-only videos** ([f130472](https://github.com/jordanwoodson/lurk-morphe-patches/commit/f1304728f592940a0a58081c2fbc34de8a4c99d8))
+* add **Player gestures** ([b0c3b2a](https://github.com/jordanwoodson/lurk-morphe-patches/commit/b0c3b2a81632bff037741964c7bb0b86a17aeaf4))
+* hide Boosted videos and Home ad sections with **Block ads** ([16e5521](https://github.com/jordanwoodson/lurk-morphe-patches/commit/16e552181ac1871fcd5605645cce2aa758fae6da))
+* select **Hide Shorts**, tipping, autoplay and quality by default ([275f42e](https://github.com/jordanwoodson/lurk-morphe-patches/commit/275f42e3298a0e609f5bad22a3caa42b18adce68))
+
+#### 🐛 Bug Fixes
+
+* describe what **Unlock Premium** does and doesn't do ([e908707](https://github.com/jordanwoodson/lurk-morphe-patches/commit/e90870759f0915a3b290e0ae3034f626398520c6))
+* keep push notifications with **Block cookie notice** ([5f2a726](https://github.com/jordanwoodson/lurk-morphe-patches/commit/5f2a72620771fc871049c426fd31114a893aa4d2))
+* let Compose skip the refresh panel and action buttons ([d5a957c](https://github.com/jordanwoodson/lurk-morphe-patches/commit/d5a957c6e877e73461b18ad4042421243084196b))
+* pause the **sleep timer** through Rumble's own player ([ed346fa](https://github.com/jordanwoodson/lurk-morphe-patches/commit/ed346fa3d8997b693ea4024f6d42a44c87518460))
+* say the zero advertising ID needs Android 13 ([97aecb8](https://github.com/jordanwoodson/lurk-morphe-patches/commit/97aecb8bf997e5fd3e3d5ffc0c4eef4622ddb7be))
+* send only watch progress events when they are kept ([7a720d3](https://github.com/jordanwoodson/lurk-morphe-patches/commit/7a720d3ff79602bb44829936b0b6af03facca22f))
+* skip the chat DTO walk while no chat switch is on ([c7dea22](https://github.com/jordanwoodson/lurk-morphe-patches/commit/c7dea2212a65401d12e0e4eed7e8c84c3dfc8853))
+
+### Twitch
+
+#### 🐛 Bug Fixes
+
+* apply the **chat timestamps** clock only while the switch is on ([cc291c6](https://github.com/jordanwoodson/lurk-morphe-patches/commit/cc291c60a1d533da297a3e7ef4d42ee7cb688cd8))
+* check the auto-claim's null chat mode is safe at patch time ([b07ca62](https://github.com/jordanwoodson/lurk-morphe-patches/commit/b07ca6259a9459c46f0c033432e82314ea023bac))
+* fail the patch when injected smali loses an instruction ([ad72844](https://github.com/jordanwoodson/lurk-morphe-patches/commit/ad72844fa6899a9b684e55f67de9d7a28a2c58e4))
+* finish an avoided ad break when **Avoid stitched ads** is switched off ([04bd34a](https://github.com/jordanwoodson/lurk-morphe-patches/commit/04bd34a2be725d7d4803a4b3cba0bc517dbbb232))
+* give Fix notifications and **Fix stuck start screen** switches ([c75372e](https://github.com/jordanwoodson/lurk-morphe-patches/commit/c75372edd425794bd4fb55fe239eae1ec50f02d8))
+* keep third-party badge holder IDs as 64-bit numbers ([b2d6104](https://github.com/jordanwoodson/lurk-morphe-patches/commit/b2d6104f40bdf21757cf0d2738888b9542e05d82))
+* leave chat and the player gear alone while their switches are off ([7c8614d](https://github.com/jordanwoodson/lurk-morphe-patches/commit/7c8614d1cdac54de4c3c55fe6c2a1a7a7dede5c2))
+* prove registers are dead before mid-method hooks write them ([fa01193](https://github.com/jordanwoodson/lurk-morphe-patches/commit/fa01193247a71c3e019aad044ae02a7db2a04cc5))
+* refuse Hermes edits that a jump lands inside ([8de0e9f](https://github.com/jordanwoodson/lurk-morphe-patches/commit/8de0e9faf28fe1f2a6eab510ab8f9a8c5ea857e2))
+* rename Amazon's suffix-form provider authorities in **Clone app** ([ef8d652](https://github.com/jordanwoodson/lurk-morphe-patches/commit/ef8d6525281c3cf96b9c67dfc9b39c3fa75e2bee))
+* require a local before the **chat overlay** teardown hook uses v0 ([d03cd02](https://github.com/jordanwoodson/lurk-morphe-patches/commit/d03cd02481e4b41797017e8a99b4c2088b7d061f))
+* take the Home tab list method's name from the match ([88ecf64](https://github.com/jordanwoodson/lurk-morphe-patches/commit/88ecf64a80cdd9ce6172c14a7db1720d565367b4))
+
+#### 🔧 Improvements
+
+* read React Native chat settings once per change, not per row ([b482dfa](https://github.com/jordanwoodson/lurk-morphe-patches/commit/b482dfa080de3720414492e27dfda158a0a1fc55))
+* reuse the prepared Hermes bundle when settings are unchanged ([15375af](https://github.com/jordanwoodson/lurk-morphe-patches/commit/15375af1e455166a26d7b83ae8ff24ef1c4d74a2))
+
+### Shared
+
+#### ✨ New Features
+
+* **settings:** add a Debug logging switch that gates Logger.d ([03b7739](https://github.com/jordanwoodson/lurk-morphe-patches/commit/03b7739f83a065716b8b79cdec184aa78a03f4e7))
+* **settings:** redesign the Lurk settings screen ([3ed74de](https://github.com/jordanwoodson/lurk-morphe-patches/commit/3ed74de5e07a1e56816c19c7469ee2088af4fac3))
+* **settings:** write the matched names to assets/lurk/locators.json ([9be4d93](https://github.com/jordanwoodson/lurk-morphe-patches/commit/9be4d931f6f8c692ece2571b954743304bdc8ae0))
+
+#### 🐛 Bug Fixes
+
+* **settings:** allow settings grouped under a choice ([aab3bd2](https://github.com/jordanwoodson/lurk-morphe-patches/commit/aab3bd2b3ef6c1c1527a3001316c044c4814a544))
+* **settings:** fail closed when the settings registry is unreadable ([6178001](https://github.com/jordanwoodson/lurk-morphe-patches/commit/6178001df752c414643b1e6be9c1f9f63b0fc8d0))
+* **settings:** keep **Watch without signing in** on while Lurk is paused ([307e386](https://github.com/jordanwoodson/lurk-morphe-patches/commit/307e3869a99f08a0d89afb1c56fd36ae3b464223))
+* **settings:** refresh an existing launcher shortcut's label ([41e41c4](https://github.com/jordanwoodson/lurk-morphe-patches/commit/41e41c41b28f87f759828822e8f4201f742caa15))
+* **settings:** run the **sleep timer**'s pause outside its bookkeeping lock ([5031b1b](https://github.com/jordanwoodson/lurk-morphe-patches/commit/5031b1b2a0e2e21610cf57f690084610bc430b13))
+
+#### 🔧 Improvements
+
+* **settings:** keep chat keyword lists until a setting changes ([ca89eb3](https://github.com/jordanwoodson/lurk-morphe-patches/commit/ca89eb37c320d3618567529e089bf4e4c49d7e26))
+
 ## [1.13.0-dev.1](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.12.0...v1.13.0-dev.1) (2026-10-22)
 
 ### Kick
