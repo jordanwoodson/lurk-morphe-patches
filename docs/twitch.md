@@ -670,6 +670,17 @@ load are retried by Twitch through the same method. Native clips use `ClipQualit
 strings without frame rates (`source`, `1080`, `720`, `480`, `360`; 160p maps to the
 smallest clip quality, `240`), and Twitch picks the closest one a clip has.
 
+*On mobile data* (`video_quality_metered`, under Default video quality, "Same as on Wi-Fi" by default) is a
+second choice that replaces the default wherever the default is used, while `Network.isMetered` says the
+active network is metered (mobile data, or Wi-Fi marked as metered) and only when it is lower than the
+default; Twitch's own default (Auto) counts as the highest. The network is asked each time a default is
+looked up: at the native player's select-by-name and preference fallbacks, and for the RN storage row and
+the last-used fallback at startup. A saved player choice still wins on any network. `PlaybackLinksProbe`
+(`verify_playback_links.py`) covers the ranking, the network double and every lookup. Verified on the
+emulator with Source as the default and 480p on mobile data: on Wi-Fi the stats panel showed `chunked` at
+1920x1080; after `svc wifi disable` (the cellular network is metered) and a restart it showed 852x480 at about
+1 Mbps, and the log said `quality: metered network, 480p instead of chunked`.
+
 RN shares one exact rendition name across content types (after mapping `p30` to `p`);
 if that name is unavailable, its existing effect resets to Auto and saves that. Source
 has no fixed name, so it leaves the RN row absent and RN players start on Auto. Named
