@@ -39,7 +39,8 @@ public final class KeywordsProbe {
         ProbeSupport.check(highlight.invoke(null, modifier, entity("viewer", "hi @Lurker")) != modifier,
                 "empty join learns the signed-in identity");
 
-        // An account change clears the name immediately; keywords-off joining must still learn users.
+        // An account change clears the name immediately. While keywords are off the hook doesn't read the
+        // users list at all; the next update with keywords on learns the new account.
         currentUserId.invoke(null, "_u" + Long.toString(43, 36));
         ProbeSupport.check(highlight.invoke(null, modifier, entity("viewer", "hi @Lurker")) == modifier,
                 "account transition clears the previous identity");
@@ -48,8 +49,11 @@ public final class KeywordsProbe {
         ProbeSupport.set(init, "messages", messages);
         ProbeSupport.check(history.invoke(init) == messages, "keywords-off join keeps its messages");
         ProbeSupport.setting("chat_keywords", "true");
+        ProbeSupport.check(highlight.invoke(null, modifier, entity("viewer", "hi @Second")) == modifier,
+                "keywords-off join must not read the users list");
+        ProbeSupport.check(history.invoke(init) == messages, "keywords-on update keeps its messages");
         ProbeSupport.check(highlight.invoke(null, modifier, entity("viewer", "hi @Second")) != modifier,
-                "keywords-off join learns the new account");
+                "keywords-on update learns the new account");
         ProbeSupport.check(highlight.invoke(null, modifier, entity("viewer", "hi @Lurker")) == modifier,
                 "previous account no longer receives mention highlights");
         currentUserId.invoke(null, "_u" + Long.toString(42, 36));
