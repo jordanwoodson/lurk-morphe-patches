@@ -176,7 +176,7 @@ Run `bin/test-host` for offline, APK-free checks with Python 3, Git, a JDK (21 r
 Chrome or Chromium, and `python3 -m pip install -r tests/requirements-host.txt`.
 It honors `JAVA_HOME`, `CHROME` and `MORPHE_WORK`, runs all registered checks and fails if any check fails.
 Both PR builds and release jobs require it before building or publishing. The suite exercises
-the settings framework against each app's registry (`tests/shared/test_settings.py`), the Twitch interface, playback/link and privacy-consent helpers, Kick player and privacy helpers,
+the Twitch interface, playback/link and privacy-consent helpers, Kick player and privacy helpers,
 the offline Kick chat page in headless Chrome,
 and release recovery using local Git fixtures. See [tests/README.md](../tests/README.md) for coverage
 and how to register another host check.
