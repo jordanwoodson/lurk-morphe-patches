@@ -62,11 +62,31 @@ bash bin/test-rumble ~/build/lurk-morphe-patches/out/rumble-3.21.0-patched.apk
 ```
 
 `bin/test-rumble` runs every probe in `tests/rumble/`, or only the ones named after the APK
-(`bash bin/test-rumble <apk> PremiumProbe`). Running them all also checks the extension hooks: 
-`tests/rumble/expected_hooks.py` reads the settings registry out of the APK's dex and lists the hooks of
-`tests/rumble/expected-hooks.txt` whose setting is registered, and `tests/verify_extension_calls.py` fails
-unless app code calls each one. Add a line there with every new hook. Each probe calls the patched APK's
-real methods; settings are
+(`bash bin/test-rumble <apk> PremiumProbe`). Running them all also runs three checks on the APK's dex:
+
+- `tests/rumble/verify_compose.py`: the Compose trace labels and App Info rows the patches rely on (see
+  [Finding code](#finding-code-in-3210)).
+- The extension hooks: `tests/rumble/expected_hooks.py` reads the settings registry out of the dex and lists
+  the hooks of `tests/rumble/expected-hooks.txt` whose setting is registered, and
+  `tests/verify_extension_calls.py` fails unless app code calls each one. Add a line there with every new hook.
+- `tests/rumble/verify_switch_reads.py`: every registered setting's key is loaded by some code, app or
+  extension, so a switch can't silently do nothing.
+
+| Probe | Covers |
+|---|---|
+| `AdsProbe` | Block ads: the repository's ad answers, Boosted videos left out of the five video lists, `Video.boosted`, `ad_block` sections |
+| `PrivacyProbe` | Disable analytics and Keep watch progress, Block cookie notice (Ketch, cached consent, the Airship-only start loop, Airship features), Clean share links |
+| `HideProbe` | Hide Shorts (parser, channel tabs, `ShortsListView`), Hide Premium upsells, Hide tipping and Rants |
+| `PlaybackProbe` | Fill screen (Media3's real `AspectRatioFrameLayout` measured in landscape and portrait), Seek interval, the sleep timer's pause through the listener |
+| `ChatProbe`, `KeywordsProbe` | Hide chat clutter, Show deleted messages, Chat timestamps, Chat keywords |
+| `CountProbe`, `InterfaceProbe`, `SearchProbe`, `UpdateProbe` | Show exact counts, startup tab and Home sections, Don't save searches, Block update prompts |
+| `PlayerProbe`, `QualityProbe`, `RefreshProbe` | Remember speed, audio focus, keep screen on; Default video quality; Refresh stream |
+| `PremiumProbe` | Unlock Premium's getter and mapper |
+
+Disable autoplay changes DataStore defaults inside coroutine readers that can't run under `app_process`;
+`verify_switch_reads.py` checks that its keys are read, and the 2026-10-14 walk-through covers the behavior.
+Composables are called with a null Composer: a hooked one returns before touching it, Rumble's own code
+fails on it. Each probe calls the patched APK's real methods; settings are
 switched by rewriting their defaults in the registry, since there is no Context under `app_process`
 (`ProbeSupport.setting`). `tests/rumble/verify_settings.py <apktool-dir>` checks the settings registry of a
 decoded patched APK: unique keys, valid sections and choices, and the documented defaults. `PremiumProbe` executes the actual APK's profile

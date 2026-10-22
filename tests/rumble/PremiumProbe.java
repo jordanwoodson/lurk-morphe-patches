@@ -1,69 +1,58 @@
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
-/** Runs the real Rumble 3.21.0 profile code on Android, without an account or network requests. */
+/**
+ * Unlock Premium: runs the real profile getter and profile mapper on Android, without an account or network
+ * requests, with free and paid fixtures and absent subscription metadata.
+ */
 public final class PremiumProbe {
-    private static Object allocate(Class<?> type) throws Exception {
-        Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
-        Field singleton = unsafeClass.getDeclaredField("theUnsafe");
-        singleton.setAccessible(true);
-        return unsafeClass.getMethod("allocateInstance", Class.class).invoke(singleton.get(null), type);
-    }
-
-    private static void set(Object target, String name, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(target, value);
-    }
-
-    private static void check(boolean condition, String message) {
-        if (!condition) throw new AssertionError(message);
-    }
+    private static final String PROFILE = "com.rumble.network.dto.profile.";
 
     public static void main(String[] args) {
-        try {
-            run();
-        } catch (Throwable failure) {
-            failure.printStackTrace();
-            System.exit(1);
-        }
+        ProbeSupport.run("free/paid profile flags and entity mapping; unrelated state preserved", PremiumProbe::run);
     }
 
     private static void run() throws Exception {
-        Class<?> profileClass = Class.forName("com.rumble.network.dto.profile.UserProfile");
-        Object profile = allocate(profileClass);
-        set(profile, "email", "test@example.invalid");
-        set(profile, "apiKey", "test-only");
+        Class<?> profileClass = Class.forName(PROFILE + "UserProfile");
+        Object profile = ProbeSupport.allocate(profileClass);
+        ProbeSupport.set(profile, "email", "test@example.invalid");
+        ProbeSupport.set(profile, "apiKey", "test-only");
 
-        Object age = allocate(Class.forName("com.rumble.network.dto.profile.AgeVerification"));
-        set(age, "required", true);
-        set(age, "minEligible", 18);
-        set(profile, "ageVerification", age);
-        Object onboarding = allocate(Class.forName("com.rumble.network.dto.profile.Onboarding"));
-        set(onboarding, "isPending", true);
-        set(profile, "onboarding", onboarding);
+        Object age = ProbeSupport.allocate(Class.forName(PROFILE + "AgeVerification"));
+        ProbeSupport.set(age, "required", true);
+        ProbeSupport.set(age, "minEligible", 18);
+        ProbeSupport.set(profile, "ageVerification", age);
+        Object onboarding = ProbeSupport.allocate(Class.forName(PROFILE + "Onboarding"));
+        ProbeSupport.set(onboarding, "isPending", true);
+        ProbeSupport.set(profile, "onboarding", onboarding);
 
-        // These obfuscated names are deliberately pinned in the version-specific integration test,
-        // never in the patch. They are independently identified from the original 3.21.0 APK.
-        Method premiumGetter = profileClass.getMethod("l");
-        Method mapper = Class.forName("we.a").getMethod("t", profileClass,
-                String.class, String.class, String.class);
+        // The getter is the one the patch matched. The mapper and the entity's getters aren't patched, so
+        // their names stay pinned to the APK this probe was written against.
+        Method premiumGetter = ProbeSupport.method("rumble.unlock_premium.profile_premium",
+                "Lcom/rumble/network/dto/profile/UserProfile;->l()Z");
+        Method mapper = ProbeSupport.method("rumble.unlock_premium.profile_mapper",
+                "Lwe/a;->t(Lcom/rumble/network/dto/profile/UserProfile;Ljava/lang/String;Ljava/lang/String;"
+                        + "Ljava/lang/String;)Llf/h;");
+        Method premiumData = ProbeSupport.bySignature(profileClass, Class.forName(PROFILE + "PremiumData"));
         for (boolean serverPremium : new boolean[] {false, true}) {
-            set(profile, "isPremium", serverPremium);
-            check(Boolean.TRUE.equals(premiumGetter.invoke(profile)),
+            ProbeSupport.set(profile, "isPremium", serverPremium);
+            ProbeSupport.check(Boolean.TRUE.equals(premiumGetter.invoke(profile)),
                     "Profile must report premium when server is_premium=" + serverPremium);
             Object entity = mapper.invoke(null, profile, "test-user", "test-airship", "test-eid");
-            check(Boolean.TRUE.equals(entity.getClass().getMethod("x").invoke(entity)),
+            ProbeSupport.check(Boolean.TRUE.equals(entity.getClass().getMethod("x").invoke(entity)),
                     "Profile mapper must propagate premium to the entity used by the session");
-            check(profileClass.getMethod("i").invoke(profile) == null,
-                    "Missing subscription metadata must remain null");
-            check(Boolean.FALSE.equals(entity.getClass().getMethod("w").invoke(entity)),
+            ProbeSupport.check(premiumData.invoke(profile) == null, "Missing subscription metadata must remain null");
+            ProbeSupport.check(Boolean.FALSE.equals(entity.getClass().getMethod("w").invoke(entity)),
                     "Account validation must not change");
-            check(Boolean.TRUE.equals(age.getClass().getMethod("b").invoke(age)),
+            ProbeSupport.check(Boolean.TRUE.equals(age.getClass().getMethod("b").invoke(age)),
                     "Age verification must not change");
-            check(Boolean.TRUE.equals(onboarding.getClass().getMethod("e").invoke(onboarding)),
+            ProbeSupport.check(Boolean.TRUE.equals(onboarding.getClass().getMethod("e").invoke(onboarding)),
                     "Onboarding must not change");
         }
-        System.out.println("PASS: free/paid profile flags and entity mapping; unrelated state preserved");
+
+        ProbeSupport.setting("unlock_premium", "false");
+        ProbeSupport.set(profile, "isPremium", false);
+        ProbeSupport.check(Boolean.FALSE.equals(premiumGetter.invoke(profile)), "off: the server's is_premium=false");
+        ProbeSupport.set(profile, "isPremium", true);
+        ProbeSupport.check(Boolean.TRUE.equals(premiumGetter.invoke(profile)), "off: the server's is_premium=true");
     }
 }

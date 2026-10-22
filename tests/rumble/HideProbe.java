@@ -1,0 +1,153 @@
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
+import java.util.List;
+
+/**
+ * Hide Shorts, Hide Premium upsells and Hide tipping and Rants: runs the DTO getters and parsers they change,
+ * the composables they empty (called with a null Composer: a hooked composable returns before touching it,
+ * Rumble's own code fails on it) and the action button filter, with each switch on and off.
+ */
+public final class HideProbe {
+    private static final String DTO = "com.rumble.network.dto.";
+    private static final String INTERFACE = "io.github.jordanwoodson.extension.shared.rumble.RumbleInterface";
+
+    public static void main(String[] args) {
+        ProbeSupport.run("Shorts, Premium upsells and tipping hidden while on, Rumble's own while off", HideProbe::run);
+    }
+
+    private static void run() throws Exception {
+        shorts();
+        upsells();
+        tipping();
+    }
+
+    private static void shorts() throws Exception {
+        Method shortsList = ProbeSupport.method("rumble.hide_shorts.shorts_list_view",
+                "LNb/f1;->o(Lt1/o;Lu0/Z;Ls5/b;ZZZLkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;"
+                        + "Lai/o;Lai/n;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;LZ0/r;III)V");
+        Class<?> kindType = Class.forName(DTO + "home.HomeSectionKind");
+        Object companion = kindType.getField("Companion").get(null);
+        Method parse = ProbeSupport.bySignature(companion.getClass(), kindType, String.class);
+        Object creator = ProbeSupport.allocate(Class.forName(DTO + "creator.Creator"));
+        List<String> channelTabs = Arrays.asList("all", "shorts", "live");
+        ProbeSupport.set(creator, "tabs", channelTabs);
+        Method tabs = getterOf(creator, "tabs");
+
+        // Off (the default): Rumble's own.
+        ProbeSupport.check(composable(shortsList) instanceof Throwable, "off: ShortsListView draws");
+        ProbeSupport.check("SHORTS".equals(ProbeSupport.name(parse.invoke(companion, "shorts"))), "off: Shorts sections load");
+        ProbeSupport.check(tabs.invoke(creator) == channelTabs, "off: channel tabs are Rumble's");
+
+        ProbeSupport.setting("hide_shorts", "true");
+        ProbeSupport.check(composable(shortsList) == null, "on: ShortsListView returns at once");
+        ProbeSupport.check("HIDE".equals(ProbeSupport.name(parse.invoke(companion, "shorts"))), "on: Shorts sections hidden");
+        ProbeSupport.check("VIDEOS".equals(ProbeSupport.name(parse.invoke(companion, "videos"))), "on: other sections stay");
+        ProbeSupport.check(tabs.invoke(creator).equals(Arrays.asList("all", "live")), "on: the shorts tab is gone");
+        List<String> onlyShorts = Arrays.asList("shorts");
+        ProbeSupport.set(creator, "tabs", onlyShorts);
+        ProbeSupport.check(tabs.invoke(creator).equals(onlyShorts), "on: a channel's only tab stays");
+    }
+
+    private static void upsells() throws Exception {
+        String composer = "LZ0/r;";
+        Method[] views = {
+                ProbeSupport.method("rumble.hide_premium_upsells.premium_banner_view",
+                        "Lac/e2;->d(Lcom/rumble/battles/landing/c;Lt1/o;Lkotlin/jvm/functions/Function0;"
+                                + "Lkotlin/jvm/functions/Function0;" + composer + "II)V"),
+                ProbeSupport.method("rumble.hide_premium_upsells.premium_offer_banner",
+                        "Lzc/g;->c(Lt1/o;Lef/f;Lkotlin/jvm/functions/Function1;" + composer + "II)V"),
+                ProbeSupport.method("rumble.hide_premium_upsells.downloads_upsell_view",
+                        "LPb/n;->b(Lcom/rumble/battles/landing/c;LPb/l;" + composer + "I)V"),
+        };
+        Method promo = ProbeSupport.method("rumble.hide_premium_upsells.promo_check", "Lgf/s;->a(LQh/c;)Ljava/lang/Object;");
+        Object promoCheck = ProbeSupport.allocate(promo.getDeclaringClass());
+        Object config = ProbeSupport.allocate(Class.forName(DTO + "livechat.LiveChatConfig"));
+        ProbeSupport.set(config, "giftList", ProbeSupport.allocate(Class.forName(DTO + "livechat.PremiumGiftList")));
+        ProbeSupport.setting("hide_premium_upsells", "false");
+        Method gifts = getterOf(config, "giftList");
+        ProbeSupport.setting("hide_premium_upsells", "true");
+
+        // On (the default).
+        for (Method view : views) ProbeSupport.check(composable(view) == null, "on: " + view.getName() + " is empty");
+        ProbeSupport.check(Boolean.FALSE.equals(ProbeSupport.outcome(promo, promoCheck, (Object) null)),
+                "on: the Premium sheet is never due");
+        ProbeSupport.check(gifts.invoke(config) == null, "on: no Premium gifts in live chat");
+
+        ProbeSupport.setting("hide_premium_upsells", "false");
+        for (Method view : views) ProbeSupport.check(composable(view) instanceof Throwable, "off: " + view.getName() + " draws");
+        ProbeSupport.check(ProbeSupport.outcome(promo, promoCheck, (Object) null) instanceof Throwable,
+                "off: Rumble decides the Premium sheet");
+        ProbeSupport.check(gifts.invoke(config) != null, "off: Premium gifts stay");
+        ProbeSupport.setting("hide_premium_upsells", "true");
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void tipping() throws Exception {
+        Class buttonType = ProbeSupport.type("rumble.hide_tipping.button_type", "Lxb/a;");
+        Object follow = Enum.valueOf(buttonType, "Follow");
+        Object join = Enum.valueOf(buttonType, "Join");
+        Object tip = Enum.valueOf(buttonType, "Tip");
+        Object shop = Enum.valueOf(buttonType, "Shop");
+        Method buttons = Class.forName(INTERFACE).getMethod("actionButtons", List.class, Object.class, Object.class,
+                Object.class);
+        List<Object> all = Arrays.asList(follow, join, tip, shop);
+
+        Object creator = ProbeSupport.allocate(Class.forName(DTO + "creator.Creator"));
+        ProbeSupport.set(creator, "tipsInfo", ProbeSupport.allocate(Class.forName(DTO + "creator.TipsInfo")));
+        Method tipsInfo = getterOf(creator, "tipsInfo");
+        Object source = ProbeSupport.allocate(Class.forName(DTO + "video.VideoSource"));
+        ProbeSupport.set(source, "wallet", ProbeSupport.allocate(Class.forName(DTO + "creator.Wallet")));
+        Method wallet = getterOf(source, "wallet");
+        Object rant = ProbeSupport.allocate(Class.forName(DTO + "livechat.LiveChatConfigRant"));
+        ProbeSupport.set(rant, "enable", Boolean.TRUE);
+        ProbeSupport.set(rant, "walletEnabled", true);
+        Method enable = getterOf(rant, "enable");
+        Method walletEnabled = getterOf(rant, "walletEnabled");
+
+        // Off (the default).
+        ProbeSupport.check(buttons.invoke(null, all, tip, join, shop) == all, "off: every button stays");
+        ProbeSupport.check(tipsInfo.invoke(creator) != null && wallet.invoke(source) != null, "off: tip data stays");
+        ProbeSupport.check(Boolean.TRUE.equals(enable.invoke(rant)) && (boolean) walletEnabled.invoke(rant), "off: Rants");
+
+        ProbeSupport.setting("hide_tipping", "true");
+        List<?> withoutTip = (List<?>) buttons.invoke(null, all, tip, join, shop);
+        ProbeSupport.check(withoutTip.equals(Arrays.asList(follow, join, shop)), "on: Tip is gone, got " + withoutTip);
+        ProbeSupport.check(buttons.invoke(null, all, tip, join, shop) == withoutTip, "on: the same list for the same list");
+        List<Object> noTip = Arrays.asList(follow, join);
+        ProbeSupport.check(buttons.invoke(null, noTip, tip, join, shop) == noTip, "on: a list without Tip is Rumble's");
+        ProbeSupport.check(tipsInfo.invoke(creator) == null && wallet.invoke(source) == null, "on: no tip data");
+        ProbeSupport.check(Boolean.FALSE.equals(enable.invoke(rant)) && !(boolean) walletEnabled.invoke(rant),
+                "on: no Rants and no Rumble Wallet");
+        ProbeSupport.setting("hide_tipping", "false");
+    }
+
+    /** Calls a composable with nulls: null when it returned at once, else what Rumble's code threw. */
+    private static Object composable(Method view) throws Exception {
+        return ProbeSupport.outcome(view, null, ProbeSupport.defaults(view));
+    }
+
+    /** The no-argument getter of a DTO field: the one method returning the field's value. */
+    private static Method getterOf(Object dto, String field) throws Exception {
+        Class<?> type = ProbeSupport.field(dto.getClass(), field).getType();
+        Method found = null;
+        for (Method m : dto.getClass().getDeclaredMethods()) {
+            if (m.getParameterTypes().length != 0 || m.getReturnType() != type || Modifier.isStatic(m.getModifiers())
+                    || m.getName().equals("toString") || m.getName().equals("hashCode")) {
+                continue;
+            }
+            // Of the getters with the field's type, the one returning this field's (unique) value.
+            Object original = ProbeSupport.get(dto, field);
+            if (original != null && m.invoke(dto) == original) {
+                if (found != null) throw new AssertionError("several getters for " + field);
+                found = m;
+            } else if (original != null && type == boolean.class && m.invoke(dto).equals(original)) {
+                if (found != null) throw new AssertionError("several getters for " + field);
+                found = m;
+            }
+        }
+        if (found == null) throw new AssertionError("no getter for " + field + " in " + dto.getClass());
+        found.setAccessible(true);
+        return found;
+    }
+}

@@ -51,6 +51,8 @@ if [[ $# -eq 0 ]]; then
         note "extension hooks"
         # shellcheck disable=SC2086
         python3 -I "$ROOT/tests/verify_extension_calls.py" "$apk" $hooks || failed=1
+        note "settings read by code"
+        python3 -I "$ROOT/tests/rumble/verify_switch_reads.py" "$apk" || failed=1
     fi
 fi
 exit $failed
