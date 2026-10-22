@@ -395,6 +395,22 @@ the usher URL in its query, isn't consumed.
 so real ad delivery is verified only through the probe and the emitted bytecode. The proxy was checked
 end to end with a local test proxy.
 
+### AMOLED black
+
+*AMOLED black* (`amoled_black`, off by default, applies after a restart) blacks out the dark theme's greys on
+screens drawn with Android views. A resource patch on the dark colors (`values-night` `background_body` =
+`hinted_grey_1` #0e0e10, `background_base` #18181b, `background_alt`/`background_float` #1f1f23) can't be
+switched off at runtime, and turning those colors into theme-attribute color lists would make every
+`Resources.getColor` call without a theme return the fallback magenta, so the patch works at runtime instead.
+A call at the start of `TwitchApplication.onCreate` registers activity callbacks; the switch is read at the
+first activity and kept until the app restarts. In dark mode each Twitch activity gets a black window
+background and navigation bar, and after each layout (a global-layout listener on the decor view, plus each
+resume) every view background that is a `ColorDrawable` or a single-color `GradientDrawable` of the palette is
+repainted: #0e0e10 and #18181b black, #1f1f23 #0b0b0d so cards stay apart. Lurk's own settings screen is left
+alone. Compose screens draw their own backgrounds, and dialogs and bottom sheets are separate windows, so those
+stay dark grey. Verified on the emulator with screenshots: Browse's background read #0e0e10 with the switch off
+and #000000 with it on, and the theatre's player area, chat and leaderboard rows read #000000.
+
 ### Clip download
 
 *Clip download* (`clip_download`, off by default) adds "Download clip" to the menu (⋮) of a clip in the clips

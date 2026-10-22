@@ -168,6 +168,9 @@ TwitchInterface.homeTabs
 # if default_tab
 TwitchInterface.startDestination
 
+# if amoled_black
+TwitchTheme.init
+
 # if force_exoplayer
 TwitchLayout.forceExoPlayer
 
