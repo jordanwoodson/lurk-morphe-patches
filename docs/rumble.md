@@ -258,6 +258,7 @@ finds its switch off after updating, unless it was changed on the screen before.
 | Hide Shorts | `hide_shorts` | after a restart |
 | Hide tipping and Rants | `hide_tipping` | when the data is loaded again |
 | Hide Join buttons, Hide Shop buttons | `hide_join_button`, `hide_shop_button` | when the buttons are drawn again |
+| Hide comments, Hide related videos | `hide_comments`, `hide_related_videos` | when a video is opened again |
 | Block update prompts | `block_update_prompts` | after a restart |
 | Default video quality (a choice; "Rumble's default" is 0) | `video_quality` | at the next video |
 | Live streams too | `video_quality_live` | after a restart |
@@ -498,6 +499,22 @@ Premium status itself isn't touched; that's Unlock Premium's job.
 - `LiveChatConfigRant.walletEnabled` returns false, which disables paying with Rumble Wallet.
 
 Rants other viewers send still show.
+
+## Hide comments and related videos
+
+- **Comments:** the video page adds its Comments button (which opens `CommentsView` with its
+  `CommentsHeaderView`) only when the video entity says comments are on, which comes from the Gson DTO field
+  `Video.areCommentsDisabled`. While `hide_comments` is on its getter returns `TRUE`, so Rumble leaves the button
+  out as for a video whose creator turned comments off. Emptying the two composables instead would leave a
+  button that opens an empty panel.
+- **Related videos:** the getters of `RelatedVideoData.videos` (the related endpoint) and `Video.related` pass
+  their list through `RumbleInterface.relatedVideos`, which returns an empty list while `hide_related_videos` is
+  on. The page then shows Rumble's own empty state ("There is nothing to see here"), and Autoplay next video has
+  nothing to play.
+
+Checked on 2026-10-22: a VOD's page shows Like, Share, Comments and Repost and a list of related videos with
+both switches off; with both on, Share, Repost and Save follow Like and the related list is Rumble's empty
+state. `HideProbe` runs both getters.
 
 ## Hide Join and Shop buttons
 

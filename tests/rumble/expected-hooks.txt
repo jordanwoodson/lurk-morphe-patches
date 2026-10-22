@@ -20,6 +20,7 @@ clean_share_links  RumblePrivacy.cleanShareLink
 exact_counts  RumbleInterface.exactCount
 hide_tipping|hide_join_button|hide_shop_button  RumbleInterface.actionButtons
 home_hide_categories  RumbleInterface.homeSectionKind
+hide_related_videos  RumbleInterface.relatedVideos
 startup_tab  Settings.getInt
 
 chat_hide_raid_notices|chat_keywords  RumbleChat.messages

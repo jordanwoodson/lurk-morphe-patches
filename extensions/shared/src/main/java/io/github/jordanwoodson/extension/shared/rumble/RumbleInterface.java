@@ -85,6 +85,15 @@ public final class RumbleInterface {
     }
 
     // ---------------------------------------------------------------------------------------------
+    // Hide comments and related videos
+
+    /** Injection point: a video's related videos from the server. Empty while Hide related videos is on. */
+    public static List<?> relatedVideos(List<?> videos) {
+        if (videos == null || videos.isEmpty() || !on("hide_related_videos")) return videos;
+        return Collections.emptyList();
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Hide Home sections
 
     private static volatile Field titleField;

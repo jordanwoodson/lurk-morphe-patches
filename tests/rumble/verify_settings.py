@@ -33,6 +33,8 @@ DEFAULTS = {
     "default_speed": "0",
     "hide_join_button": "false",
     "hide_shop_button": "false",
+    "hide_comments": "false",
+    "hide_related_videos": "false",
     "unlock_premium": "true",
     "block_update_prompts": "true",
     "exact_counts": "false",

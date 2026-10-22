@@ -20,6 +20,26 @@ public final class HideProbe {
         shorts();
         upsells();
         tipping();
+        if (ProbeSupport.registered("hide_comments")) commentsAndRelated();
+    }
+
+    private static void commentsAndRelated() throws Exception {
+        Object video = ProbeSupport.allocate(Class.forName(DTO + "video.Video"));
+        ProbeSupport.set(video, "areCommentsDisabled", Boolean.FALSE);
+        Method commentsDisabled = getterOf(video, "areCommentsDisabled");
+        List<Object> related = Arrays.asList(ProbeSupport.allocate(video.getClass()));
+        Object relatedData = ProbeSupport.allocate(Class.forName(DTO + "video.RelatedVideoData"));
+        ProbeSupport.set(relatedData, "videos", related);
+        Method relatedVideos = getterOf(relatedData, "videos");
+
+        ProbeSupport.check(Boolean.FALSE.equals(commentsDisabled.invoke(video)), "off: comments follow the server");
+        ProbeSupport.check(relatedVideos.invoke(relatedData) == related, "off: related videos stay");
+        ProbeSupport.setting("hide_comments", "true");
+        ProbeSupport.setting("hide_related_videos", "true");
+        ProbeSupport.check(Boolean.TRUE.equals(commentsDisabled.invoke(video)), "on: comments read as turned off");
+        ProbeSupport.check(((List<?>) relatedVideos.invoke(relatedData)).isEmpty(), "on: no related videos");
+        ProbeSupport.setting("hide_comments", "false");
+        ProbeSupport.setting("hide_related_videos", "false");
     }
 
     private static void shorts() throws Exception {
