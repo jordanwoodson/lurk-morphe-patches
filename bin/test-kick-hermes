@@ -2,7 +2,7 @@
 # Kick's structural checks, no device needed: the Hermes edits of a patched APK decoded independently (hermes-dec),
 # executed where they matter (Interface patches, Stay on channel, Anonymous chat, Default video quality), the
 # literal-buffer edits, the JVM Hermes helper probe on the stock bundle, the emitted smali hooks, the player and privacy
-# helpers, and the sources.
+# helpers, Chat keywords and timestamps against Twitch's, and the sources.
 # Usage: bin/test-kick-hermes <patched.apk> [stock index.android.bundle]
 # The stock bundle defaults to $MORPHE_WORK/kick/<version>/hermes/index.android.bundle (bin/decompile kick).
 # HERMES_PYTHON names a Python with hermes-dec; by default the mise-installed one (bin/bootstrap) is used.
@@ -61,6 +61,9 @@ run python3 -I "$ROOT/tests/kick/kotlin_probe.py" "$out/hermes-probe" "$ROOT/tes
     io.github.jordanwoodson.patches.kick.shared.HermesProbeKt "$stock" "$out/probe.bundle" "$out/probe-manifest.json"
 run python3 -I "$ROOT/tests/kick/verify_player.py"
 run python3 -I "$ROOT/tests/kick/verify_privacy.py"
+# Chat keywords and Chat timestamps against Twitch's, with the production helpers on the JVM and the page scripts in
+# Node; it needs no APK, so it runs whatever the APK holds.
+run python3 -I "$ROOT/tests/kick/test_chat_parity.py"
 
 # The emitted smali: decode the patched APK's code (no resources) and compare with the stock decode.
 note "decoding $(basename "$apk") with apktool"

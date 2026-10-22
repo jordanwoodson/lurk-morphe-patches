@@ -845,6 +845,24 @@ and `ChatFilter` with a batch from a page whose config names a signed-in user (b
 by handle, blocked word, mention, own message, highlight words and phrases, a malformed ID, a stale
 generation and a foreign origin), and `test_chat_page.py` checks the page side in headless Chrome.
 
+### Chat parity with Twitch
+
+`tests/kick/test_chat_parity.py` (run by `bin/test-kick-hermes`; it needs no APK or device, only a JDK and Node.js)
+checks that Chat keywords and Chat timestamps give the same result on Kick as on Twitch for the same input. On the
+JVM it compiles the production `ChatFilter`, `KickChat`, `TwitchChatKeywords`, `TwitchChat` and `TwitchContext`
+against small Android doubles, opens a Kick chat page through `KickChat.onPage` and hands it Chat keywords batches the
+way the page script sends them, and asks `TwitchChatKeywords.classify`, which Twitch's native and React Native chats
+both use, about the same messages with the same lists. 24 messages, with mentions on and off, cover mentions of the
+account (by login or name and by display name or kick.com handle; your own messages never count), highlight words and
+phrases, blocked words and users (`@` and case ignored), case folding beyond ASCII, whole-word matching and blocks
+winning over highlights; all 48 verdicts are the expected ones on both apps. Twitch's login and display name stand for
+Kick's name shown in chat and kick.com handle. For timestamps it formats six moments with Twitch's native pattern
+(`TwitchChat.timestampPattern` applied to Twitch's own `H:mm`) and Twitch's React Native 12-hour clock (`chat.js`), and
+runs Lurk's real chat page script in Node over pages whose times Kick wrote in English, British English, German,
+French, Japanese and Arabic: each clock gives the same text everywhere. One difference is by design and not checked as
+parity: Kick also hides a blocked user by kick.com handle, which Twitch, matching the login only, has no counterpart
+for.
+
 ### Anonymous chat
 
 The chat page's config (see [Show deleted messages](#show-deleted-messages)) is built by an anonymous function in
@@ -1051,8 +1069,8 @@ probe, and say so. Kick's own classes keep their names (R8 doesn't rename them),
 mostly protects against library renames and Metro renumbering.
 
 `bin/test-kick-hermes` runs `verify_sources.py`, `test_hermes.py`, `verify_literals.py`,
-`verify_interface.py`, `verify_hosting.py`, `verify_quality.py`, `HermesProbe.kt`, `verify_player.py`,
-`verify_privacy.py`,
+`verify_interface.py`, `verify_hosting.py`, `verify_chat_config.py`, `verify_quality.py`, `HermesProbe.kt`,
+`verify_player.py`, `verify_privacy.py`, `test_chat_parity.py`,
 `verify_sleep_queue.py` and `verify_analytics_jobs.py`, and skips (saying so) the ones for patches
 the APK doesn't have; patch with `-e "Default video quality"` to include the quality check. The
 stock bundle's hash and the Kick version come from the patch sources (`tests/kick/pins.py`), so a
