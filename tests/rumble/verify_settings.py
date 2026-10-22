@@ -71,6 +71,8 @@ DEFAULTS = {
     "home_hide_titles": "",
     "refresh_stream": "true",
     "seek_seconds": "0",
+    "amoled_black": "false",
+    "amoled_near_black": "false",
 }
 
 
