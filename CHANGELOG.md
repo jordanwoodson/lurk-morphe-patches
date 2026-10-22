@@ -1,3 +1,11 @@
+## [1.14.1-dev.1](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.14.0...v1.14.1-dev.1) (2026-10-22)
+
+### Shared
+
+#### 🐛 Bug Fixes
+
+* **release:** drop a pre-release whose push loses to a stable back-merge ([bc40491](https://github.com/jordanwoodson/lurk-morphe-patches/commit/bc40491ce10e44eac274bd7c104f37593ae0335f))
+
 ## [1.14.0](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.13.0...v1.14.0) (2026-10-22)
 
 ### Kick
