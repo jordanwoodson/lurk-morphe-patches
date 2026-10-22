@@ -368,8 +368,19 @@ without a target user as a no-op, in native and React Native chat; timeouts and 
 *Chat timestamps* turns on Twitch's own history timestamp for live channel chat, not whispers, with a
 24/12-hour choice. The choice replaces the `H:mm` pattern of the one formatter that also draws chat
 history's timestamps, so it is read only while the switch is on; with it off, history keeps Twitch's
-clock (`ChatArtProbe` checks both). *Auto-claim channel points* (off by default, needs an account) calls the bonus
-chest's own claim action once per claim ID.
+clock (`ChatArtProbe` checks both).
+
+*Auto-claim channel points* (off by default, needs an account) calls the bonus chest's own claim action
+once per claim ID, from the points button presenter's subscriber to the points store. The action takes
+`(claim ID, ChatModeMetadata)`; the chest's two tap handlers read the chat mode from the chat UI's
+state, which the presenter can't reach, so the patch passes null. That is safe in 31.7.0, checked
+statically: the three implementations of the action null-check only the claim ID (R8's `getClass`
+form of Kotlin's parameter check) and hand the chat mode to the claim's success callback, which reads it
+behind `chatModeMetadata != null` for the `chatroom_type` field of the
+`channel_points_client_bonus_points_claim` analytics event (blocked by Disable analytics). The patch
+fails on a version where any implementation dereferences the chat mode before overwriting its register
+(`neverDereferenced`, every path). Without an account, the claim was exercised on ART only with a
+stand-in for the action, so the request itself is unverified.
 
 `bin/test-twitch-chat <apk>` runs the real classes with each switch on and off. Signed-in IRC login
 and bonus claims are verified only through bytecode and the probe.

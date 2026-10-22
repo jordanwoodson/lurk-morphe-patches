@@ -73,7 +73,36 @@ internal fun MutableMethod.requireNotBranchTarget(index: Int, what: String) {
  * exception handlers of instructions that can throw), the first instruction that uses it only writes it,
  * or the path returns or throws without reading it. Wide uses and read-modify-write forms count as reads.
  */
-internal fun MutableMethod.isFreeRegister(index: Int, register: Int): Boolean {
+internal fun MutableMethod.isFreeRegister(index: Int, register: Int): Boolean =
+    everyPath(index) { instruction ->
+        val used = instruction.registers()
+        when {
+            register !in used && !(instruction.isWide() && register - 1 in used) -> null
+            else -> instruction.writesOnly(register, used)
+        }
+    }
+
+/**
+ * Whether no path from the method's start can [dereference] parameter [register] while it still holds the
+ * argument: every path writes it first, or returns or throws without.
+ */
+internal fun MutableMethod.neverDereferenced(register: Int, dereference: (Instruction) -> Boolean): Boolean =
+    everyPath(0) { instruction ->
+        when {
+            dereference(instruction) -> false
+            instruction.opcode.setsRegister() && (instruction as? OneRegisterInstruction)?.registerA.let {
+                it == register || instruction.isWide() && it == register - 1
+            } -> true
+            else -> null
+        }
+    }
+
+/**
+ * Walks every path from [index] (branches, switch cases and the exception handlers of instructions that
+ * can throw) until [decide] settles it: true ends the path as fine, false fails the walk, null goes on.
+ * A path that returns or throws ends fine; one that runs off the code fails.
+ */
+private fun MutableMethod.everyPath(index: Int, decide: (Instruction) -> Boolean?): Boolean {
     val instructions = implementation!!.instructions
     val visited = HashSet<Int>()
     val pending = ArrayDeque(listOf(index))
@@ -81,10 +110,10 @@ internal fun MutableMethod.isFreeRegister(index: Int, register: Int): Boolean {
         var i = pending.removeLast()
         path@ while (visited.add(i)) {
             val instruction = instructions.getOrNull(i) ?: return false
-            val used = instruction.registers()
-            if (register in used || instruction.isWide() && register - 1 in used) {
-                if (instruction.writesOnly(register, used)) break@path
-                return false
+            when (decide(instruction)) {
+                true -> break@path
+                false -> return false
+                null -> Unit
             }
             if (instruction.opcode.canThrow()) pending += handlers(i)
             val opcode = instruction.opcode
