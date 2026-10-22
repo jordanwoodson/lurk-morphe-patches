@@ -56,5 +56,8 @@ KickInterface.compactNumbers
 # Fill screen
 KickPlayer.resizeMode
 
+# Show video stats
+KickStats.onStatistics
+
 # Default video quality (not selected by default)
 # KickPlayer.autoQualityCeiling

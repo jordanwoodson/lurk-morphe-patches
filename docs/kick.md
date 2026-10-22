@@ -250,6 +250,7 @@ details and validation follow.
 | Background audio | Yes | On; a second switch for picture-in-picture, off | Audio keeps playing through Kick's own audio service when you leave the app. |
 | Normal latency | Yes | Off | Turns off low-latency mode for live streams. |
 | Fill screen | Yes | Off | In landscape, 16:9 streams fill a taller phone's screen, cropped top and bottom, instead of showing side bars. |
+| Show video stats | Yes | Off | A panel over the player with latency, bitrate, buffer, dropped frames, quality and codecs, refreshed every second. |
 | Sleep timer | Yes | Off (choice) | Pauses playback a chosen time after it last started. |
 | Default startup tab | Yes | Home (choice) | Opens Kick on Browse or Following instead. |
 | Hide Home sections | Yes | Three switches, all off | Featured, recommended streams and categories rows on Home. |
@@ -561,6 +562,30 @@ keep FIT's scale). On the emulator (720x1600), signed out, a 16:9 live stream in
 fullscreen with the chat hidden showed black bars at the sides with the switch off and
 filled the screen with it on; with the chat shown next to it, the player kept FIT's
 letterbox.
+
+### Show video stats
+
+Kick's player view runs an observer every second while it is attached and has a player
+(`playerObserverCallback`, on its player thread). There `handlePlayerStatistics(Player)` reads the IVS player's
+average bitrate, duration and live latency for React Native's `onVideoStatistics` event, which Kick's player store
+never asks for (`sendVideoStatistics` stays false). The patch hooks the start of that method. With `video_stats` on,
+`KickStats` reads what the IVS player keeps through the public names of Amazon's SDK, which its native code needs:
+`getLiveLatency`, `getAverageBitrate`, `getBandwidthEstimate`, `getBufferedPosition` minus `getPosition`,
+`getStatistics` (the video bitrate, frame rate, dropped and decoded frames) and `getQuality` (name, size, codecs). It
+draws them as white monospace lines on a translucent box in the player's top left corner. The panel is a drawable in
+the player view's `ViewOverlay`: drawn over the video's `SurfaceView` and under Kick's own controls, which are
+separate React Native views, so it never takes a touch. The switch is read at every refresh, so the panel appears
+within a second of turning it on and goes at the next refresh after turning it off; while it is off the hook returns
+before reading anything. Recorded videos show no latency line (IVS reports none for them). In picture-in-picture Kick
+moves the video into a window-sized host above its views, which hides the panel.
+
+Checked on the emulator, signed out, on a live channel with about 130,000 viewers: the panel showed a latency of
+17.9 s, 569 kbps (network estimate 108.89 Mbps), 17.6 s of buffer, 74 of 371 frames dropped at 30 fps, 360p at
+640x360 and `avc1.4D401F, mp4a.40.2` (the emulator's software decoder settles on 360p and falls behind), and it was
+gone a second after the switch was turned off. `bin/test-kick` runs Kick's real `handlePlayerStatistics` on ART
+(`PlayerProbe`) with a stand-in IVS player and Amazon's own `Statistics` and `Quality`: the six expected lines with the
+switch on, drawn in the top left corner only, Kick's own code still running after the hook, nothing read from the
+player while off, a player that throws tolerated, and the panel removed once the switch is off.
 
 ### Sleep timer
 
@@ -938,7 +963,9 @@ version bump edits them in `Hermes.kt` and `Constants.kt` only.
   hooks), so an injected call Morphe dropped fails the run; then executes the injected Java
   loader on Android, checking defaults, process snapshots, independent switches, the exact
   bytes of each choice value, exact stock restoration and the reuse of the private copy;
-  invokes the two Insider job guards and checks synchronous completion without SDK dispatch.
+  invokes the two Insider job guards and checks synchronous completion without SDK dispatch. A second probe,
+  `PlayerProbe`, runs the player view's hooks in a fresh process with Kick's real player classes and a stand-in IVS
+  player (Show video stats).
   Hand-written invokes in the Kick patches either use `/range`, copy a parameter into low
   locals first (Datadog's `initialize`, whose promise is `v11` today) or call
   `requireLowRegisters`, so a later Kick version with more locals fails at patch time instead
