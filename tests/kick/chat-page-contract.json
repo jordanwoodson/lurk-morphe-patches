@@ -42,6 +42,10 @@
    "present": true,
    "for": "Show deleted messages (moderator view marks removed lines)"
   },
+  "class:timestamp": {
+   "present": true,
+   "for": "Chat timestamps clock (each line's time)"
+  },
   "code:message-list": {
    "present": true,
    "for": "every chat page feature (the #app message list)"
@@ -65,6 +69,10 @@
   "css:timestamps-display": {
    "present": true,
    "for": "Chat timestamps (each line's time shows through --timestamps-display)"
+  },
+  "code:timestamp-format": {
+   "present": true,
+   "for": "Chat timestamps clock (the page writes each time with toLocaleTimeString, 2-digit hour and minute)"
   },
   "css:chatroom-font-size": {
    "present": true,

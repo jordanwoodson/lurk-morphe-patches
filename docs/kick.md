@@ -262,7 +262,7 @@ details and validation follow.
 | Don't save searches | Yes | On | New searches aren't added to the search history. |
 | AMOLED black | Yes | Off (choice) | Pure black background, optionally near-black cards and sheets. |
 | Third-party emotes | Yes | 7TV emotes, off | The channel's and 7TV's global emotes in live chat. |
-| Chat timestamps | Yes | Off | The time next to each chat message, signed out too. |
+| Chat timestamps | Yes | Off; clock 24-hour | The time next to each chat message, signed out too, as 13:05 or 1:05. |
 | Chat text size | Yes | Kick's size; Compact chat, off | Chat text from 12 to 24 px; less space between messages. |
 | Chat keywords | Yes | Off; mentions on, vibration off, lists empty | Tints messages that mention you or contain highlight words, optionally vibrating; hides blocked words and users. |
 | Anonymous chat | Yes | Off | The chat page opens without the sign-in token and the account, as when signed out; sending chat messages is refused. |
@@ -802,6 +802,21 @@ page's own `--timestamps-display` was `none` while the timestamps showed, the me
 20 px, the list's row gap 0 and the line padding 1 px; off, the page's values applied.
 `test_chat_page.py` checks the same on a page with Kick's rules, including the page setting its own
 values afterwards, and `bin/test-kick-chat` checks the options KickChat passes on ART.
+
+"Chat timestamps clock" (`chat_timestamp_format`, Twitch's key, values and default: `0` for 24-hour, 13:05, `1` for
+12-hour, 1:05) applies while Chat timestamps is on, as on Twitch. Kick's page writes each line's time with
+`toLocaleTimeString(locale, {hour: '2-digit', minute: '2-digit'})` in its config's locale: "01:05 PM" in English,
+"13:05" in German, "01:05 م" in Arabic. The chat page script reads the hour and minute back from that text
+through a table of every minute of a day written the same way, in the same locale (`window.locale`, else the config's,
+else the page's default `en`), and writes them as Twitch does: `H:mm` or `h:mm`, without a period marker, as Twitch's
+native chat (`SimpleDateFormat` with its `H:mm`, or Lurk's `h:mm`) and its React Native chat show them. Lines already
+on the page are rewritten when the script runs and new ones as they arrive. Text the table doesn't know, or that two
+minutes of the day share, stays as Kick wrote it. The page contract pins the page's call (`code:timestamp-format`).
+`KickChat` passes the choice as the `clock` option only while Chat timestamps is on; it applies to chats opened
+afterwards. `test_chat_page.py` checks the rewrite in headless Chrome (English 12-hour text to 24-hour and 12-hour,
+later lines, a German page, and nothing without Chat timestamps), and `bin/test-kick-chat` the option on ART. On the
+emulator, signed out, on a live channel with Chat timestamps on: the 12-hour clock showed 5:51 and, with the chat
+reopened, the 24-hour clock 17:51 for the history and 17:53 for new lines.
 
 ### Chat keywords
 

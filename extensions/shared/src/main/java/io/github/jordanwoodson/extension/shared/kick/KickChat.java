@@ -40,6 +40,8 @@ public final class KickChat {
     private static final String SHOW_DELETED = "chat_show_deleted";
     private static final String IGNORE_CLEARS = "chat_ignore_clears";
     private static final String TIMESTAMPS = "chat_timestamps";
+    /** Chat timestamps clock, Twitch's key and values: 0 for 13:05, 1 for 1:05. */
+    private static final String CLOCK = "chat_timestamp_format";
     private static final String TEXT_SIZE = "chat_text_size";
     private static final String COMPACT = "chat_compact";
     static final String SEVEN_TV = "emotes_7tv";
@@ -284,7 +286,10 @@ public final class KickChat {
         if (on(SHOW_DELETED)) options.put("moderatorView", true);
         if (on(IGNORE_CLEARS)) options.put("ignoreClears", true);
         if (on(ChatFilter.KEY)) options.put("keywords", true);
-        if (on(TIMESTAMPS)) options.put("timestamps", true);
+        if (on(TIMESTAMPS)) {
+            options.put("timestamps", true);
+            if (Settings.isRegistered(CLOCK)) options.put("clock", Settings.getInt(CLOCK) == 1 ? 1 : 0);
+        }
         int textSize = Settings.isRegistered(TEXT_SIZE) ? Settings.getInt(TEXT_SIZE) : 0;
         if (textSize >= 10 && textSize <= 32) options.put("textSize", textSize);
         if (on(COMPACT)) options.put("compact", true);

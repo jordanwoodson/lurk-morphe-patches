@@ -109,6 +109,14 @@ public final class ChatBoundaryProbe {
         call(c(CHAT),"onPage",pageTypes,view,page("{}"));
         JSONObject options=new JSONObject(view.source.substring(view.source.lastIndexOf("\n(")+2,view.source.length()-2));
         ProbeSupport.check(options.getBoolean("timestamps") && options.getInt("textSize")==20 && options.getBoolean("compact"),"timestamps, text size and compact reach the page");
+        if(ProbeSupport.registered("chat_timestamp_format")){
+            ProbeSupport.check(options.getInt("clock")==0,"the 24-hour clock reaches the page by default");
+            ProbeSupport.setting("chat_timestamp_format","1");
+            call(c(CHAT),"onPageStarted",pageTypes,view,page("{}"));
+            options=new JSONObject(view.source.substring(view.source.lastIndexOf("\n(")+2,view.source.length()-2));
+            ProbeSupport.check(options.getInt("clock")==1,"the 12-hour clock reaches the page");
+            ProbeSupport.setting("chat_timestamp_format","0");
+        }
         setting("chat_timestamps",false);ProbeSupport.setting("chat_text_size","99");setting("chat_compact",false);
         view.source=null;
         call(c(CHAT),"onPage",pageTypes,view,page("{}"));
