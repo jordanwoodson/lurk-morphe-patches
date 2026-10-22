@@ -228,10 +228,15 @@ public final class ChatArtProbe {
             check((boolean) shown.invoke(null, chat, true), "History keeps its time");
         }
         Method pattern = Class.forName(CHAT).getMethod("timestampPattern", String.class);
+        settings.put("chat_timestamps", true);
         settings.put("chat_timestamp_format", "0");
         check("H:mm".equals(pattern.invoke(null, "H:mm")), "24-hour must keep Twitch's pattern");
         settings.put("chat_timestamp_format", "1");
         check("h:mm".equals(pattern.invoke(null, "H:mm")), "12-hour pattern");
+        // The formatter also draws Twitch's own history timestamps: with the switch off the clock stays stock.
+        settings.put("chat_timestamps", false);
+        check("H:mm".equals(pattern.invoke(null, "H:mm")), "Off must keep Twitch's pattern whatever the clock choice");
+        settings.remove("chat_timestamp_format");
     }
 
     private static void autoClaim() throws Exception {

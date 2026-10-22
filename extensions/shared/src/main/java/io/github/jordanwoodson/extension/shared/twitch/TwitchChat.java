@@ -135,8 +135,13 @@ public final class TwitchChat {
         return source != null && "Chat".equals(source.name());
     }
 
-    /** Injection point: the pattern of the time shown before a chat line. Read once per formatter. */
+    /**
+     * Injection point: the pattern of the time shown before a chat line. Read once per formatter. The same
+     * formatter draws Twitch's own chat-history timestamps, so the clock choice applies only while Chat
+     * timestamps is on.
+     */
     public static String timestampPattern(String stock) {
+        if (!Settings.isEnabled(TIMESTAMPS)) return stock;
         return Settings.getInt(TIMESTAMP_FORMAT) == 1 ? "h:mm" : stock;
     }
 

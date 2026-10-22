@@ -28,9 +28,10 @@ val chatTimestampsPatch = bytecodePatch(
         chooseTimeFormat()
         twitchSettings.add(
             SwitchSetting("chat_timestamps", "Chat timestamps", "The time in front of each chat message.", Section.CHAT),
-            // "Chat timestamps clock" sorts right after the switch on the settings screen.
+            // Read only while the switch is on: the same formatter draws Twitch's own history timestamps,
+            // which keep their stock clock with the switch off.
             ChoiceSetting("chat_timestamp_format", "Chat timestamps clock", "", Section.CHAT, "0",
-                listOf("24-hour (13:05)" to "0", "12-hour (1:05)" to "1"), restart = true),
+                listOf("24-hour (13:05)" to "0", "12-hour (1:05)" to "1"), restart = true, parent = "chat_timestamps"),
         )
     }
 }

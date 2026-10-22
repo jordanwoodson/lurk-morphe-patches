@@ -356,7 +356,9 @@ use the original delayed-drop predicate. The setting requires restart. *Ignore c
 without a target user as a no-op, in native and React Native chat; timeouts and bans still apply.
 
 *Chat timestamps* turns on Twitch's own history timestamp for live channel chat, not whispers, with a
-24/12-hour choice. *Auto-claim channel points* (off by default, needs an account) calls the bonus
+24/12-hour choice. The choice replaces the `H:mm` pattern of the one formatter that also draws chat
+history's timestamps, so it is read only while the switch is on; with it off, history keeps Twitch's
+clock (`ChatArtProbe` checks both). *Auto-claim channel points* (off by default, needs an account) calls the bonus
 chest's own claim action once per claim ID.
 
 `bin/test-twitch-chat <apk>` runs the real classes with each switch on and off. Signed-in IRC login
