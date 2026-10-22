@@ -194,6 +194,19 @@ Verified on the emulator: an (i) button appears in the overlay and opens the pan
 debug menu is not exposed. Faking staff status would change experiment targeting and expose
 network-altering tools.
 
+The panel also shows a live stream's *Uptime*. Twitch's master playlist carries `#EXT-X-TWITCH-INFO` with
+the session's `SERVING-ID` and `STREAM-TIME`, the stream's age in seconds when usher served it. Twitch's
+parser (the static `(String)` method reading `#EXT-X-TWITCH-INFO:`, `STREAM-TIME` and `SERVING-ID`) shows the
+serving ID in the panel and drops the stream time. A hook at the parser's start hands the playlist to
+`TwitchStats.masterPlaylist`, which keeps the start time on the `elapsedRealtime` clock per serving ID (16 at
+most). The panel's rows are built in one lambda that turns each state entry into a label/value row
+(`getLabel()`, then the row's `(String, String)` constructor, collected with `ArrayList.add`); right before
+Twitch iterates that list into list items, `TwitchStats.statsRows` finds the row labelled "Serving ID" and
+appends "Uptime" as `H:MM:SS`, made with Twitch's row constructor through a bridge stub. The panel rebuilds
+its rows on every stats update, so the value counts up. VODs and clips have no stream time and get no row.
+No request is added. Verified on the emulator on a live channel: the panel's Uptime read 4:23:37, five
+seconds after the overlay's own counter read 4:23:32.
+
 ### Use native player
 
 Live channels open in the React Native "Ultralight" theatre only when

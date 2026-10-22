@@ -184,6 +184,10 @@ TwitchPlayback.storageQualityDefault
 # if native_player
 TwitchPlayback.routeLiveToReactNative
 
+# if video_stats
+TwitchStats.masterPlaylist
+TwitchStats.statsRows
+
 # if refresh_stream
 TwitchPlayer.bindRefresh
 TwitchPlayer.videoLongPress
