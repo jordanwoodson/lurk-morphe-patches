@@ -636,7 +636,17 @@ per process. Long-pressing the launcher icon opens the Lurk shortcut.
 The original Hermes v98 bundle SHA-256 is
 `928f89c5766562e9cb266485282e90c058dd7947f73c9bcafa1d0fc626debf5e` (31.7.0).
 Patch-time parsing pins that hash/version, verifies function boundaries and unique
-instruction patterns, and permits only equal-length non-overlapping edits. The
+instruction patterns, and permits only equal-length non-overlapping edits. Every edit also passes
+`HermesBundle.requireSafeEdit`, which decodes the function with the v98 instruction lengths
+(generated from hermes-dec's hbc98 definitions) and reads its jumps, `UIntSwitchImm` jump tables and
+catch table. An edit must start and end on instructions and its replacement must decode to whole
+instructions. Nothing outside the edit may jump into its interior, since the helpers pad with
+`Unreachable` (0x00), which aborts the app. The one exception is a landing instruction from which the
+replacement keeps the original bytes: Hide subscription upsells' cache-hit path still reaches the
+same `Ret`. Edits in one function are also checked pairwise, together when they share a setting and in
+any combination when they don't. A function with a `StringSwitchImm` is refused, since its table isn't
+decoded. `bin/test-twitch-interface-hermes` runs `HermesEditSafetyProbe.kt`: every function of the
+stock bundle must decode, and padding over a real jump target must be refused. The
 runtime loader snapshots switches. When every switch is at its patch-time default it
 loads the embedded asset as is and deletes any earlier private copy; otherwise it
 validates the embedded hash and edit manifest, applies original/replacement bytes,
