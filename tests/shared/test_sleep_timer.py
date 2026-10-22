@@ -70,5 +70,6 @@ if __name__ == '__main__':
         PROBE, [helper + ':' + scenario for helper in ['kick.KickPlayer', 'twitch.TwitchPlayer']
                 for scenario in ['new', 'resume', 'replay', 'stop', 'repeat', 'disable']]
         + ['concurrency:' + boundary for boundary in ['initial-expiry', 'initial-runnable', 'fallback', 'executor',
-            'queued-new', 'queued-resume', 'queued-current', 'queued-stock', 'queued-failure', 'queued-disabled']],
+            'queued-new', 'queued-resume', 'queued-current', 'queued-stock', 'queued-failure', 'queued-disabled',
+            'lockfree-stop', 'lockfree-play']],
         extra={'SleepTimerConcurrencyProbe.java': Path(__file__).with_name('SleepTimerConcurrencyProbe.java').read_text()})
