@@ -196,13 +196,14 @@ relies on:
 ## Testing
 
 Run `bin/test-host` for offline, APK-free checks with Python 3, Git, a JDK (21 recommended),
-Chrome or Chromium, and `python3 -m pip install -r tests/requirements-host.txt`.
+Chrome or Chromium, Node.js, the pinned Hermes compilers (`mise install`) and
+`python3 -m pip install -r tests/requirements-host.txt`.
 It honors `JAVA_HOME`, `CHROME` and `MORPHE_WORK`, runs all registered checks and fails if any check fails.
-Both PR builds and release jobs require it before building or publishing. The suite exercises
-the Twitch interface, playback/link and privacy-consent helpers, Kick player and privacy helpers,
-the offline Kick chat page in headless Chrome,
-and release recovery using local Git fixtures. See [tests/README.md](../tests/README.md) for coverage
-and how to register another host check.
+Both PR builds and release jobs require it before building or publishing. The suite runs the
+extension's Twitch, Kick, Rumble and shared helpers on the JVM against small Android doubles, the
+offline Kick chat page in headless Chrome, the Hermes compilers, the release script on local Git
+fixtures, the patch tooling and the version-literal rule. See [tests/README.md](../tests/README.md)
+for what each check covers and how to register another one.
 
 Before each release build, `release.py` reruns the selected source's host gate after checkout,
 including an older release being rebuilt for recovery. A missing or failed gate stops publication.
