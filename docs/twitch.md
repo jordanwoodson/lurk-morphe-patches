@@ -652,6 +652,13 @@ loads the embedded asset as is and deletes any earlier private copy; otherwise i
 validates the embedded hash and edit manifest, applies original/replacement bytes,
 recomputes the Hermes footer and writes a private copy. All switches off must
 reproduce the independently hashed stock bundle. Changes require a restart.
+Next to the copy, `lurk-twitch.json` records what it was made from (the manifest's SHA-256, the
+embedded bundle's SHA-256 and the switch snapshot) and the copy's length and modification time. A
+later cold start with the same selection loads the copy without reading or hashing the 28 MB asset;
+any difference, a missing sidecar or a copy changed since it was written means a rebuild, and the
+sidecar is deleted before a rebuild starts. Android clears the code cache on app updates.
+`bin/test-twitch` checks reuse, rebuilds on a changed switch, a modified copy and a missing sidecar,
+and that the defaults remove both files.
 
 The shipped release `RNSourceModePolicy` disables Metro and selects the embedded
 asset through `RNReactHostFactory` and `DefaultReactHost`; the file path argument is

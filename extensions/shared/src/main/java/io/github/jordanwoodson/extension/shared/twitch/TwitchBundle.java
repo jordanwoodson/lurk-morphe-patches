@@ -12,7 +12,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.TreeMap;
 import java.util.Map;
 import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
@@ -35,14 +35,14 @@ public final class TwitchBundle {
         if (prepared != null || embedded) return prepared;
         try {
             if (context == null) throw new IllegalStateException("No application context");
-            JSONObject manifest = new JSONObject(new String(read(assets, "lurk-hermes.json", 1024 * 1024),
-                    StandardCharsets.UTF_8));
+            byte[] manifestBytes = read(assets, "lurk-hermes.json", 1024 * 1024);
+            JSONObject manifest = new JSONObject(new String(manifestBytes, StandardCharsets.UTF_8));
             if (manifest.getInt("format") != 1 || manifest.getInt("version") != 98) {
                 throw new IllegalArgumentException("Unknown bundle manifest");
             }
             JSONArray edits = manifest.getJSONArray("edits");
-            // Each process gets a single snapshot.
-            Map<String, Boolean> snapshot = new HashMap<>();
+            // Each process gets a single snapshot. A TreeMap keeps its text stable for the sidecar.
+            Map<String, Boolean> snapshot = new TreeMap<>();
             boolean defaults = true;
             for (int i = 0; i < edits.length(); i++) {
                 JSONObject edit = edits.getJSONObject(i);
@@ -60,15 +60,31 @@ public final class TwitchBundle {
                 if (!snapshot.get(key)) defaults = false;
             }
             File output = new File(context.getCodeCacheDir(), "lurk-twitch.hbc");
+            File sidecar = new File(context.getCodeCacheDir(), "lurk-twitch.json");
             if (defaults) {
                 // The embedded asset already has the patch-time defaults: don't copy 28 MB every start.
                 embedded = true;
+                sidecar.delete();
                 output.delete();
                 Logger.d("Twitch Hermes: every setting is at its default, using the embedded bundle");
                 return null;
             }
-            byte[] bundle = read(assets, "index.android.bundle", 32 * 1024 * 1024);
             String embeddedHash = manifest.getString("embeddedSha256");
+            // What the private copy was made from: this APK's manifest and embedded bundle, and the switches.
+            String selection = new JSONObject()
+                    .put("format", 1)
+                    .put("manifestSha256", hex(MessageDigest.getInstance("SHA-256").digest(manifestBytes)))
+                    .put("embeddedSha256", embeddedHash)
+                    .put("snapshot", new JSONObject(snapshot).toString())
+                    .toString();
+            if (reusable(sidecar, output, selection)) {
+                prepared = output.getAbsolutePath();
+                Logger.d("Twitch Hermes: settings unchanged since the last start, reusing the prepared bundle");
+                return prepared;
+            }
+            // A sidecar must never describe a copy it didn't see written.
+            sidecar.delete();
+            byte[] bundle = read(assets, "index.android.bundle", 32 * 1024 * 1024);
             if (!hex(MessageDigest.getInstance("SHA-256").digest(bundle)).equals(embeddedHash)) {
                 throw new IllegalArgumentException("Embedded bundle hash mismatch");
             }
@@ -113,16 +129,14 @@ public final class TwitchBundle {
             sha1.update(bundle, 0, bundle.length - 20);
             System.arraycopy(sha1.digest(), 0, bundle, bundle.length - 20, 20);
             // Atomic replacement tolerates interrupted starts.
-            AtomicFile atomic = new AtomicFile(output);
-            FileOutputStream stream = null;
-            try {
-                stream = atomic.startWrite();
-                stream.write(bundle);
-                atomic.finishWrite(stream);
-            } catch (Exception e) {
-                if (stream != null) atomic.failWrite(stream);
-                throw e;
-            }
+            write(output, bundle);
+            // The sidecar names the copy by its length and modification time, so a copy rewritten after it
+            // (an interrupted start with other settings) doesn't match.
+            write(sidecar, new JSONObject()
+                    .put("selection", selection)
+                    .put("length", output.length())
+                    .put("modified", output.lastModified())
+                    .toString().getBytes(StandardCharsets.UTF_8));
             prepared = output.getAbsolutePath();
             Logger.d("Twitch Hermes: selected " + edits.length() + " edits across " + snapshot.size() + " settings");
             return prepared;
@@ -130,6 +144,44 @@ public final class TwitchBundle {
             // The APK still has the validated patch-time defaults. Do not load a stale private copy.
             Logger.d("Twitch Hermes: using embedded defaults: " + e);
             return null;
+        }
+    }
+
+    /**
+     * Whether the private copy was made from this {@code selection} and is still the file that was written
+     * then. Android clears the code cache when the app is updated, and the manifest's hash covers a reinstall.
+     */
+    private static boolean reusable(File sidecar, File output, String selection) {
+        if (!sidecar.isFile() || !output.isFile()) return false;
+        try {
+            JSONObject recorded = new JSONObject(new String(readFile(sidecar, 64 * 1024), StandardCharsets.UTF_8));
+            return selection.equals(recorded.getString("selection")) &&
+                    recorded.getLong("length") == output.length() &&
+                    recorded.getLong("modified") == output.lastModified();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static void write(File file, byte[] bytes) throws Exception {
+        AtomicFile atomic = new AtomicFile(file);
+        FileOutputStream stream = null;
+        try {
+            stream = atomic.startWrite();
+            stream.write(bytes);
+            atomic.finishWrite(stream);
+        } catch (Exception e) {
+            if (stream != null) atomic.failWrite(stream);
+            throw e;
+        }
+    }
+
+    private static byte[] readFile(File file, int limit) throws Exception {
+        if (file.length() > limit) throw new IllegalArgumentException("Sidecar exceeds size limit");
+        try (InputStream input = new java.io.FileInputStream(file); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            for (int count; (count = input.read(buffer)) != -1; ) output.write(buffer, 0, count);
+            return output.toByteArray();
         }
     }
 
