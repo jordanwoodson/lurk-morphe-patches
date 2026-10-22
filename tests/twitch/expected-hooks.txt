@@ -20,6 +20,10 @@ TwitchBundle.prepare
 TwitchStartup.firstRoute
 TwitchStartup.watchStart
 
+# if refresh_stream vod_chapters
+# The player-view attach hook both patches share.
+TwitchPlayerViews.attached
+
 # if fix_notifications
 TwitchNotifications.firebaseHeader
 
@@ -178,7 +182,6 @@ TwitchPlayback.routeLiveToReactNative
 
 # if refresh_stream
 TwitchPlayer.bindRefresh
-TwitchPlayer.playerView
 TwitchPlayer.videoLongPress
 
 # if vod_skip_seconds
@@ -205,5 +208,4 @@ TwitchPlayer.pauseRegistry
 
 # if vod_chapters
 TwitchVod.bindChapters
-TwitchVod.playerView
 TwitchVod.vodLoaded

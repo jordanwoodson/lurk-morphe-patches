@@ -62,7 +62,6 @@ import io.github.jordanwoodson.extension.shared.settings.Settings;
 public final class TwitchBackupStream {
     private static final String KEY = "avoid_stitched_ads";
     private static final String USHER_HOST = "usher.ttvnw.net";
-    private static final String CLIENT_ID = "kd1unb4b3q4t58fwlpcbzcbnm76a8fp";
     private static final String GQL = "https://gql.twitch.tv/gql";
     private static final String TOKEN_QUERY = "query StreamAccessTokenQuery($channelName: String!, "
             + "$params: PlaybackAccessTokenParams!) { streamPlaybackAccessToken(channelName: $channelName, "
@@ -1005,7 +1004,7 @@ public final class TwitchBackupStream {
 
     /** A request for [stream]'s work, given up when the stream is no longer handled. */
     private static String http(String url, String json, long deadline, Stream stream) {
-        return TwitchRequest.http(url, json, CLIENT_ID, deadline, () -> handled(stream));
+        return TwitchRequest.http(url, json, TwitchRequest.CLIENT_ID, deadline, () -> handled(stream));
     }
 
     /**

@@ -538,7 +538,9 @@ limit as playlist I/O. Tapping a row seeks through Twitch's own VOD seek.
 
 Feed previews also load VOD presenters, so the button finds its video through its own overlay: the
 presenter whose visible player view lies under it (captured in the base presenter's view binding),
-mapped to the video it loaded. `VodModel.getId()` carries a `v` prefix that GQL rejects, so the
+mapped to the video it loaded. That binding has one hook, `TwitchPlayerViews.attached`, which Refresh
+stream and VOD chapters share: whichever patch runs first inserts it, and it passes the view on to
+each included patch. `VodModel.getId()` carries a `v` prefix that GQL rejects, so the
 prefix is stripped. Pending dialogs check the original presenter, video, overlay attachment and
 current setting before appearing. Player-view detach callbacks retire both prefetch and open demand on the main thread; an old
 attachment cannot retire its replacement. Navigation and disabling chapters retire queued/provider work;

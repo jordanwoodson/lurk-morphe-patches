@@ -18,12 +18,13 @@ import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.twitch.player.VodPlayerOverlayFingerprint
 import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.twitch.player.hookPlayerViewAttach
 import io.github.jordanwoodson.patches.twitch.player.playerPresenterClass
-import io.github.jordanwoodson.patches.twitch.player.requireNoBranchTo
 import io.github.jordanwoodson.patches.twitch.player.requireUnwritten
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 private const val VOD_MODEL = "Ltv/twitch/android/models/videos/VodModel;"
@@ -64,7 +65,7 @@ val vodChaptersPatch = bytecodePatch(
             method.returnType == "V" &&
                 method.parameterTypes.map { it.toString() } == listOf(VOD_MODEL, "I", "Ljava/lang/String;")
         } ?: throw PatchException("Twitch: the VOD load method changed")
-        load.requireNoBranchTo(0, "the VOD load method")
+        load.requireNotBranchTarget(0, "the VOD load method")
         load.addInstructions(0, invokeStatic("$VOD->vodLoaded(Ljava/lang/Object;Ljava/lang/Object;)V",
             load.parameterRegister(0), load.parameterRegister(1)))
 
@@ -76,23 +77,7 @@ val vodChaptersPatch = bytecodePatch(
                 .any { it == base.type }) {
             throw PatchException("Twitch: the VOD presenter no longer extends the player presenter")
         }
-        Fingerprint(
-            definingClass = base.type, returnType = "V", parameters = listOf("L"),
-            filters = listOf(
-                fieldAccess(definingClass = VIEW_DELEGATE, type = "Landroid/view/View;", opcode = Opcode.IGET_OBJECT),
-                methodCall(definingClass = "Landroid/view/View;", name = "addOnLayoutChangeListener"),
-            ),
-        ).twitchMatch("player view attach").let { attach ->
-            val read = attach.instructionMatches.first()
-            val view = (read.instruction as TwoRegisterInstruction).registerA
-            val self = attach.method.parameterRegister(0)
-            attach.method.requireUnwritten(self, read.index, "player presenter")
-            attach.method.requireNoBranchTo(read.index + 1, "player view attach")
-            // A non-range invoke above v15 is dropped silently, so refuse rather than lose the call.
-            if (self > 15 || view > 15) throw PatchException("Twitch: player view attach registers are too high")
-            attach.method.addInstructions(read.index + 1,
-                invokeStatic("$VOD->playerView(Ljava/lang/Object;Landroid/view/View;)V", self, view))
-        }
+        hookPlayerViewAttach()
 
         // Seek exactly as Twitch does, through the presenter's own interface method.
         vodBridge("seekVod", """
@@ -118,7 +103,7 @@ val vodChaptersPatch = bytecodePatch(
             throw PatchException("Twitch: the VOD player's settings button lookup changed")
         }
         val gear = (code[cast] as OneRegisterInstruction).registerA
-        method.requireNoBranchTo(cast + 1, "the VOD player's settings button")
+        method.requireNotBranchTarget(cast + 1, "the VOD player's settings button")
         method.addInstructions(cast + 1,
             "invoke-static/range { v$gear .. v$gear }, $VOD->bindChapters(Landroid/view/View;)V")
 

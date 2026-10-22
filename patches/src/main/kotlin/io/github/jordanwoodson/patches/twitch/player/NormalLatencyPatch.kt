@@ -11,6 +11,7 @@ import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 @Suppress("unused")
@@ -27,7 +28,7 @@ val normalLatencyPatch = bytecodePatch(
         NativePlayerLoadFingerprint.twitchMatch("native player load").let { match ->
             val read = match.instructionMatches[1]
             val player = (read.instruction as TwoRegisterInstruction).registerA
-            match.method.requireNoBranchTo(read.index + 1, "native player load")
+            match.method.requireNotBranchTarget(read.index + 1, "native player load")
             match.method.addInstructions(read.index + 1,
                 "invoke-static/range { v$player .. v$player }, $PLAYER->loadLatency(Ljava/lang/Object;)V")
         }

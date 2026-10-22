@@ -108,7 +108,7 @@ public final class UiBoundaryProbe {
    SharedPreferences preferences=(SharedPreferences)Proxy.newProxyInstance(SharedPreferences.class.getClassLoader(),new Class[]{SharedPreferences.class},(p,m,a)->prefs.getOrDefault((String)a[0],a[1]));
    Context isolated=new ContextWrapper(system.createPackageContext("com.android.shell",0)){@Override public SharedPreferences getSharedPreferences(String n,int m){return preferences;}};
    Class<?> settings=Class.forName("io.github.jordanwoodson.extension.shared.settings.Settings");Field f=settings.getDeclaredField("context");f.setAccessible(true);f.set(null,isolated);
-   f=Class.forName(ROOT+"TwitchChatKeywords").getDeclaredField("application");f.setAccessible(true);f.set(null,isolated);
+   f=Class.forName(ROOT+"TwitchContext").getDeclaredField("application");f.setAccessible(true);f.set(null,isolated);
    player=Class.forName(ROOT+"TwitchPlayer");overlay=Class.forName(ROOT+"TwitchChatOverlay");current=overlay.getDeclaredField("overlay");current.setAccessible(true);
    prefs.put("chat_overlay",true);prefs.put("swipe_controls",true);
    Screen first=new Screen(isolated),second=new Screen(isolated);

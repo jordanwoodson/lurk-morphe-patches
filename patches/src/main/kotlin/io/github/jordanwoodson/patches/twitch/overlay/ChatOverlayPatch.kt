@@ -26,6 +26,8 @@ import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
+import io.github.jordanwoodson.patches.twitch.chat.printedField
+import io.github.jordanwoodson.patches.twitch.chat.LiveChatLineFingerprint
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 private const val OVERLAY = "Lio/github/jordanwoodson/extension/shared/twitch/TwitchChatOverlay;"
@@ -42,12 +44,12 @@ val chatOverlayPatch = bytecodePatch(
     compatibleWith(COMPATIBILITY_TWITCH)
     dependsOn(twitchSettingsPatch)
     execute {
-        val message = LiveChatMessageFingerprint.twitchMatch("live chat message")
+        val message = LiveChatLineFingerprint.twitchMatch("live chat message")
         val type = message.classDef.type
         val parent = message.classDef.superclass ?: throw PatchException("Twitch: live chat message has no parent")
-        val sender = message.method.labelledField(", sender=")
-        val tokens = message.method.labelledField(", messageTokens=")
-        val tags = message.method.labelledField(", messageTags=")
+        val sender = message.method.printedField(", sender=")
+        val tokens = message.method.printedField(", messageTokens=")
+        val tags = message.method.printedField(", messageTags=")
         if (tags.type != "Ljava/util/Map;") throw PatchException("Twitch: live message tags aren't a map")
         if (tokens.type != "Ljava/util/List;") throw PatchException("Twitch: live chat message tokens aren't a list")
 
@@ -189,20 +191,3 @@ private fun BytecodePatchContext.overlayLifecycle(feeder: String) {
         invoke-static { v$a, v$b }, $OVERLAY->channel(Ljava/lang/Object;Ljava/lang/Object;)V
     """)
 }
-
-/** The field a toString prints right after [label]: the first object field read after the label's constant. */
-private fun MutableMethod.labelledField(label: String): FieldReference {
-    val instructions = implementation!!.instructions
-    val at = instructions.indexOfFirst { ((it as? ReferenceInstruction)?.reference as? StringReference)?.string == label }
-    if (at < 0) throw PatchException("Twitch: no \"$label\" in $definingClass")
-    val read = instructions.drop(at + 1).firstOrNull { it.opcode == Opcode.IGET_OBJECT }
-        ?: throw PatchException("Twitch: nothing printed after \"$label\"")
-    val field = (read as ReferenceInstruction).reference as FieldReference
-    if (field.definingClass != definingClass || (read as TwoRegisterInstruction).registerB != parameterlessThis()) {
-        throw PatchException("Twitch: \"$label\" isn't followed by its own field")
-    }
-    return field
-}
-
-/** The register of this in an instance method without parameters (toString). */
-private fun MutableMethod.parameterlessThis() = implementation!!.registerCount - 1

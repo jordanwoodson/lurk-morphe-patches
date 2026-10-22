@@ -11,14 +11,6 @@ internal object SpanGroupFingerprint : Fingerprint(
     strings = listOf("ChatMessageSpanGroup(timestampSpan=", ", badgeSpan=", ", senderSpan="),
 )
 
-// A chat line's sender: user ID, login and display name.
-internal object ChatMessageUserFingerprint : Fingerprint(
-    name = "toString",
-    returnType = "Ljava/lang/String;",
-    parameters = emptyList(),
-    strings = listOf("ChatMessageUser(userId=", ", username=", ", displayName="),
-)
-
 // One badge of a chat line: (name, image URL).
 internal object BadgeViewModelFingerprint : Fingerprint(
     name = "toString",

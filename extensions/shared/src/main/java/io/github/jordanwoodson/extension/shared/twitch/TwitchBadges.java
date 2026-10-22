@@ -18,7 +18,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
@@ -371,7 +370,6 @@ public final class TwitchBadges {
     private static final class Provider {
         final String name;
         final String setting;
-        final AtomicBoolean loading = new AtomicBoolean();
         volatile Badge[] badges = NONE;
         volatile long expires;
         TwitchThirdParty.Demand pending;
@@ -388,7 +386,6 @@ public final class TwitchBadges {
             if (pending != null) { pending.add(wanted); return; }
             pending = new TwitchThirdParty.Demand(); pending.add(wanted);
             TwitchThirdParty.Demand demand = pending;
-            loading.set(true);
             TwitchThirdParty.run(name + " badges", () -> Settings.isEnabled(setting) && demand.getAsBoolean(), () -> {
                 try {
                     badges = loader.load();
@@ -399,7 +396,7 @@ public final class TwitchBadges {
                     expires = SystemClock.elapsedRealtime() + RETRY_MS;
                     Logger.d("badges: " + name + " unavailable: " + e);
                 }
-            }, () -> { synchronized (this) { pending = null; loading.set(false); } });
+            }, () -> { synchronized (this) { pending = null; } });
         }
     }
 

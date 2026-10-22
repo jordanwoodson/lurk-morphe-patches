@@ -3,7 +3,6 @@ package io.github.jordanwoodson.extension.shared.twitch;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
-import android.content.ContextWrapper;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -105,7 +104,7 @@ public final class TwitchChatOverlay {
                 }
                 return;
             }
-            Activity activity = activity(context);
+            Activity activity = TwitchContext.activity(context);
             if (activity == null || tokens == null) return;
             Object tagged = tags == null ? null : tags.get("room-id");
             String room = tagged instanceof String && ((String) tagged).matches("[0-9]{1,12}") ? (String) tagged : "";
@@ -169,14 +168,6 @@ public final class TwitchChatOverlay {
 
     private static void detach(Owner owner) {
         MAIN.post(() -> { if (overlay != null && overlay.owner == owner) detach(); });
-    }
-
-    private static Activity activity(Context context) {
-        while (context instanceof ContextWrapper) {
-            if (context instanceof Activity) return (Activity) context;
-            context = ((ContextWrapper) context).getBaseContext();
-        }
-        return null;
     }
 
     /** Landscape and full size: not in portrait, and not in picture-in-picture or multi-window. */

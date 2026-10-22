@@ -111,7 +111,7 @@ public final class TwitchRNChat {
             user.length()>100 || body.length()>10000)return;
         if(TwitchChatKeywords.classify(user,body)==ChatFilter.HIGHLIGHT &&
             !user.equalsIgnoreCase(TwitchChatKeywords.lists().self)) {
-            ChatFilter.vibrate(TwitchChatKeywords.application(),id);
+            ChatFilter.vibrate(TwitchContext.application(),id);
         }
     }
 

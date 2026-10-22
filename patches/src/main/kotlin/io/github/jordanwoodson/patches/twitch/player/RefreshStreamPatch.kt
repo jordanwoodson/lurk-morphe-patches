@@ -21,6 +21,7 @@ import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.shared.requireLowRegisters
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 private const val VIEW_DELEGATE = "Ltv/twitch/android/core/mvp/viewdelegate/BaseViewDelegate;"
@@ -53,23 +54,7 @@ val refreshStreamPatch = bytecodePatch(
         """)
 
         // Each presenter's player view, to know which player a long-press belongs to.
-        Fingerprint(
-            definingClass = presenter.type, returnType = "V", parameters = listOf("L"),
-            filters = listOf(
-                fieldAccess(definingClass = VIEW_DELEGATE, type = "Landroid/view/View;", opcode = Opcode.IGET_OBJECT),
-                methodCall(definingClass = "Landroid/view/View;", name = "addOnLayoutChangeListener"),
-            ),
-        ).twitchMatch("player view attach").let { match ->
-            val read = match.instructionMatches.first()
-            val view = (read.instruction as TwoRegisterInstruction).registerA
-            val self = match.method.parameterRegister(0)
-            match.method.requireUnwritten(self, read.index, "player presenter")
-            match.method.requireNoBranchTo(read.index + 1, "player view attach")
-            // Mid-method, with no register proven free: fail rather than emit a call that would be dropped.
-            match.method.requireLowRegisters("player view attach", self, view)
-            match.method.addInstructions(read.index + 1,
-                invokeStatic("$PLAYER->playerView(Ljava/lang/Object;Landroid/view/View;)V", self, view))
-        }
+        hookPlayerViewAttach()
 
         // The settings gear of the classic overlays, live and VOD/clips: long-press refreshes.
         listOf(LivePlayerOverlayFingerprint to "live", VodPlayerOverlayFingerprint to "VOD").forEach { (fingerprint, what) ->
@@ -92,14 +77,14 @@ val refreshStreamPatch = bytecodePatch(
                 throw PatchException("Twitch: the $what player's settings button lookup changed")
             }
             val gear = (code[cast] as OneRegisterInstruction).registerA
-            method.requireNoBranchTo(cast + 1, "the $what player's settings button")
+            method.requireNotBranchTarget(cast + 1, "the $what player's settings button")
             method.addInstructions(cast + 1,
                 "invoke-static/range { v$gear .. v$gear }, $PLAYER->bindRefresh(Landroid/view/View;)V")
         }
 
         // Long-pressing the native player view: Twitch emits it and ignores it.
         PlayerLongPressFingerprint.twitchMatch("player long press").method.apply {
-            requireNoBranchTo(0, "the player's long press")
+            requireNotBranchTarget(0, "the player's long press")
             addInstructions(0, invokeStatic("$PLAYER->videoLongPress(Landroid/view/MotionEvent;)V", parameterRegister(1)))
         }
 

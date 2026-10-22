@@ -24,6 +24,7 @@ import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWI
 import io.github.jordanwoodson.patches.twitch.shared.hex
 import io.github.jordanwoodson.patches.twitch.shared.twitchHermes
 import io.github.jordanwoodson.patches.twitch.shared.twitchHermesPatch
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 private const val KEY = "chat_anonymous"
@@ -106,7 +107,7 @@ private fun BytecodePatchContext.anonymousIrcLogin() {
             instructions[it].fieldRef?.matches(field) == true }
         val register = (instructions[read] as TwoRegisterInstruction).registerA
         if (register > 255) throw PatchException("Twitch: IRC login register out of range")
-        login.requireUnlabelled(read + 1, "IRC login read")
+        login.requireNotBranchTarget(read + 1, "IRC login read")
         login.addInstructions(read + 1, """
             invoke-static/range { v$register .. v$register }, $CHAT->$method(Ljava/lang/String;)Ljava/lang/String;
             move-result-object v$register
@@ -147,7 +148,7 @@ private fun BytecodePatchContext.readOnlyChatInput() {
         throw PatchException("Twitch: unexpected chat restriction label")
     }
     val register = (instructions[result] as OneRegisterInstruction).registerA
-    label.requireUnlabelled(result + 1, "chat restriction label")
+    label.requireNotBranchTarget(result + 1, "chat restriction label")
     label.addInstructions(result + 1, """
         invoke-static/range { v$register .. v$register }, $CHAT->loginLabel(Ljava/lang/String;)Ljava/lang/String;
         move-result-object v$register

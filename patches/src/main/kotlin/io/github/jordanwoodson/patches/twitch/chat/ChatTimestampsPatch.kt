@@ -13,6 +13,7 @@ import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 @Suppress("unused")
@@ -69,7 +70,7 @@ private fun BytecodePatchContext.chooseTimeFormat() {
     val init = instructions[pattern + 1].methodRef
     if (instructions[pattern + 1].opcode != Opcode.INVOKE_DIRECT || init?.definingClass != "Ljava/text/SimpleDateFormat;" ||
         register > 255) throw PatchException("Twitch: unexpected chat time formatter")
-    method.requireUnlabelled(pattern + 1, "chat time formatter")
+    method.requireNotBranchTarget(pattern + 1, "chat time formatter")
     method.addInstructions(pattern + 1, """
         invoke-static/range { v$register .. v$register }, $CHAT->timestampPattern(Ljava/lang/String;)Ljava/lang/String;
         move-result-object v$register

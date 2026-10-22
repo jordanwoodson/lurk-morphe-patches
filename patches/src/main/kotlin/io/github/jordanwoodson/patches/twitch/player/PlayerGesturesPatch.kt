@@ -29,6 +29,7 @@ import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 import org.w3c.dom.Element
 
@@ -87,7 +88,7 @@ val playerGesturesPatch = bytecodePatch(
                     throw PatchException("Twitch: VOD seek buttons are no longer images")
                 }
                 val button = (code[put] as TwoRegisterInstruction).registerA
-                method.requireNoBranchTo(put + 1, "VOD seek button")
+                method.requireNotBranchTarget(put + 1, "VOD seek button")
                 method.addInstructions(put + 1,
                     "invoke-static/range { v$button .. v$button }, $PLAYER->$helper(Landroid/widget/ImageView;)V")
             }

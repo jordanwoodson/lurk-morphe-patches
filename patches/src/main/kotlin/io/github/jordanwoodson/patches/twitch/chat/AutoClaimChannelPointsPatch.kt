@@ -21,6 +21,7 @@ import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.twitch.shared.neverDereferenced
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 private const val KEY = "chat_auto_claim"
@@ -108,7 +109,7 @@ private fun BytecodePatchContext.autoClaimBonus() {
     }
     val presenterRegister = (read as TwoRegisterInstruction).registerB
     if (model > 15 || presenterRegister > 15) throw PatchException("Twitch: channel points update registers out of range")
-    update.requireUnlabelled(at, "channel points update")
+    update.requireNotBranchTarget(at, "channel points update")
     update.addInstructions(at,
         "invoke-static { v$presenterRegister, v$model }, $presenter->$helper($presenter$POINTS_MODEL)V")
 }

@@ -15,6 +15,7 @@ import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.emotes.chatImageSizePatch
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
+import io.github.jordanwoodson.patches.twitch.chat.ChatLineSenderFingerprint
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 private const val BADGES = "Lio/github/jordanwoodson/extension/shared/twitch/TwitchBadges;"
@@ -34,7 +35,7 @@ val thirdPartyBadgesPatch = bytecodePatch(
     dependsOn(twitchRNChatPatch, twitchSettingsPatch, chatImageSizePatch)
     execute {
         val spanGroup = SpanGroupFingerprint.twitchMatch("chat line span group").classDef.type
-        val user = ChatMessageUserFingerprint.twitchMatch("chat message user").classDef.type
+        val user = ChatLineSenderFingerprint.twitchMatch("chat message user").classDef.type
         val badge = BadgeViewModelFingerprint.twitchMatch("badge view model").classDef.type
         val method = ChatLineSpansFingerprint.twitchMatch("chat line span builder").method
         if (method.returnType != spanGroup || method.parameterTypes[3].toString() != user) {
