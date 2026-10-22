@@ -1,6 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.chat
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.shared.Locators
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -13,6 +14,7 @@ import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 @Suppress("unused")
@@ -28,9 +30,10 @@ val chatTimestampsPatch = bytecodePatch(
         chooseTimeFormat()
         twitchSettings.add(
             SwitchSetting("chat_timestamps", "Chat timestamps", "The time in front of each chat message.", Section.CHAT),
-            // "Chat timestamps clock" sorts right after the switch on the settings screen.
+            // Read only while the switch is on: the same formatter draws Twitch's own history timestamps,
+            // which keep their stock clock with the switch off.
             ChoiceSetting("chat_timestamp_format", "Chat timestamps clock", "", Section.CHAT, "0",
-                listOf("24-hour (13:05)" to "0", "12-hour (1:05)" to "1"), restart = true),
+                listOf("24-hour (13:05)" to "0", "12-hour (1:05)" to "1"), restart = true, parent = "chat_timestamps"),
         )
     }
 }
@@ -51,6 +54,8 @@ private fun BytecodePatchContext.showTimeOnLiveMessages() {
     if (source == null || source.fields.none { it.name == "Chat" } || source.fields.none { it.name == "Whisper" }) {
         throw PatchException("Twitch: chat line configuration has no unique message source")
     }
+    Locators.record("twitch.chat_timestamps.line_config", config.type)
+    Locators.record("twitch.chat_timestamps.message_source", source.type)
     // p3 (configuration) and p4 (show the time) are adjacent parameters. p4 is only passed on to the line's
     // span builder, so replacing it at the start changes nothing else.
     method.addInstructions(0, """
@@ -68,7 +73,7 @@ private fun BytecodePatchContext.chooseTimeFormat() {
     val init = instructions[pattern + 1].methodRef
     if (instructions[pattern + 1].opcode != Opcode.INVOKE_DIRECT || init?.definingClass != "Ljava/text/SimpleDateFormat;" ||
         register > 255) throw PatchException("Twitch: unexpected chat time formatter")
-    method.requireUnlabelled(pattern + 1, "chat time formatter")
+    method.requireNotBranchTarget(pattern + 1, "chat time formatter")
     method.addInstructions(pattern + 1, """
         invoke-static/range { v$register .. v$register }, $CHAT->timestampPattern(Ljava/lang/String;)Ljava/lang/String;
         move-result-object v$register

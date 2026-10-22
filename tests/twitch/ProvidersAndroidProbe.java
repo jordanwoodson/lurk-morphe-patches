@@ -40,6 +40,9 @@ public final class ProvidersAndroidProbe {
   check(length(bttv)==2&&field(Array.get(bttv,1),"code").equals("Shared"),"BTTV channel and shared lists");
   String[] badge=(String[])parse("TwitchBadges","parseFfzBadge","{\"id\":12,\"name\":\"Badge\",\"color\":\"#123456\",\"urls\":{\"2\":\"https://cdn.frankerfacez.com/2\",\"4\":\"https://cdn.frankerfacez.com/4\"}}");
   check(badge[0].equals("12")&&badge[2].equals("#123456")&&badge[3].endsWith("/4"),"FFZ ID color and4x preference");
+  // Badge holders are Twitch user IDs, which pass 2^31: numbers or strings, kept as 64-bit and sorted.
+  long[] ids=(long[])parse("TwitchBadges","parseIds","[\"3000000000\",12,\"x\",2147483648,\"99\"]");
+  check(Arrays.equals(ids,new long[]{12L,99L,2147483648L,3000000000L}),"badge holder IDs above 2^31: "+Arrays.toString(ids));
   Map<String,String[]> labels=new HashMap<>();labels.put("he",new String[]{"He","Him",""});labels.put("they",new String[]{"They","Them",""});labels.put("any",new String[]{"Any",null,"singular"});
   Class<?>[] labelTypes={Map.class,String.class,String.class};
   check(call("TwitchPronouns","label",labelTypes,labels,"he","they").equals("he/they"),"alternate pronoun label");

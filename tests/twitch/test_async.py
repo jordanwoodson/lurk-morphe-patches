@@ -47,4 +47,4 @@ if __name__ == '__main__':
         if (Path(__file__).resolve().parents[2]/'extensions/shared/src/main/java'/PACKAGE/'twitch'/(name+'.java')).exists():
             helpers.append('twitch/'+name+'.java')
     run('TwitchAsyncProbe', helpers, Path(__file__).with_name('TwitchAsyncProbe.java').read_text(),
-        sys.argv[1:] or ['stream-lock','stream-generation','headers','cancel-http','trickle','oversize','stale-source','first-stale','same-stale','partial-stale','all-stale','disabled','blocked-provider','cancel-provider','ad-timeout','cancel-chain','saturation'], extra=EXTRA)
+        sys.argv[1:] or ['stream-lock','stream-generation','headers','cancel-http','trickle','oversize','stale-source','first-stale','same-stale','partial-stale','all-stale','disabled','proxy','blocked-provider','cancel-provider','ad-timeout','cancel-chain','saturation'], extra=EXTRA)

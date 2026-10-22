@@ -1,12 +1,14 @@
 package io.github.jordanwoodson.patches.twitch.theatre
 
 import app.morphe.patcher.Fingerprint
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
@@ -31,10 +33,13 @@ val useNativePlayerPatch = bytecodePatch(
     execute {
         // The method has no spare registers. Its first parameter says whether the channel is live; while
         // the switch is on it reads as false, which Twitch answers with RefuseNotLiveChannel.
-        TheatreRouteDecisionFingerprint.twitchMatch("React Native theatre route decision").method.addInstructions(0, """
-            invoke-static { p0 }, Lio/github/jordanwoodson/extension/shared/twitch/TwitchPlayback;->routeLiveToReactNative(Z)Z
-            move-result p0
-        """)
+        TheatreRouteDecisionFingerprint.twitchMatch("React Native theatre route decision").method.apply {
+            addInstructions(0, """
+                ${invokeStatic("Lio/github/jordanwoodson/extension/shared/twitch/TwitchPlayback;->routeLiveToReactNative(Z)Z",
+                    parameterRegister(0))}
+                move-result p0
+            """)
+        }
         twitchSettings.add(SwitchSetting("native_player", "Use native player",
             "Open live channels in the native player, which most Lurk patches act on.", Section.PLAYBACK))
     }

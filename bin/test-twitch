@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Run the actual injected bundle loader on the scratch Android emulator.
+# Check that every injected extension call survived patching (tests/twitch/expected-hooks.txt), then run
+# the actual injected bundle loader on the scratch Android emulator.
 source "$(dirname "$0")/lib/common.sh"
 [[ $# == 1 && -f "$1" ]] || die "usage: bash bin/test-twitch <patched.apk>"
+python3 -I "$ROOT/tests/twitch/verify_hooks.py" "$1"
 serial=${ANDROID_SERIAL:-emulator-5580}
 out="$WORK/tests/twitch"
 remote=/data/local/tmp/morphe-twitch-test

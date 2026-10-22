@@ -1,7 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.chat
 
 import app.morphe.patcher.Fingerprint
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
@@ -13,8 +13,8 @@ import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstructio
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import io.github.jordanwoodson.patches.shared.settings.requireLocals
-import io.github.jordanwoodson.patches.twitch.emotes.requireKept
-import io.github.jordanwoodson.patches.twitch.emotes.requireNotBranchTarget
+import io.github.jordanwoodson.patches.twitch.shared.requireKept
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 // Hook points shared by Chat keywords and Chat appearance. Each patch adds its own calls at the same points, so

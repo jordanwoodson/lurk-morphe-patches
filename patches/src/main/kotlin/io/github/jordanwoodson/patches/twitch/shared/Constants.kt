@@ -18,4 +18,12 @@ object Constants {
             AppTarget(version = "31.7.0"),
         ),
     )
+
+    /**
+     * The Twitch version the patches are written and tested against, the single target above. Messages
+     * and checks use this, so a version bump changes one line.
+     */
+    val TWITCH_VERSION: String
+        get() = COMPATIBILITY_TWITCH.targets.single().version
+            ?: error("Twitch: the target has no version")
 }

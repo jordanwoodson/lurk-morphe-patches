@@ -64,7 +64,30 @@ public class TwitchAsyncProbe {
         if(scenario.equals("disabled")){
             Field f=TYPE.getDeclaredField("media");f.setAccessible(true);((Map)f.get(null)).put("http://own/a.m3u8",known);
             Settings.values.put("avoid_stitched_ads","false");
-            check(TwitchBackupStream.requestUrl(new Object(),"http://own/a.m3u8").equals("http://own/a.m3u8"),"disabled patch still redirects provider");return;
+            // Mid-break: the player keeps the picture-by-picture session, numbered as served, until the break
+            // is over. Its own playlist now would move the media sequence back.
+            check(TwitchBackupStream.requestUrl(new Object(),"http://own/a.m3u8").equals("http://127.0.0.1:1/current.m3u8"),
+                "switching off mid-break sent the player to its own, differently numbered playlist");
+            String during=(String)call(TYPE,"onMedia",known,current,playlist(500,"backup"));
+            check(during!=null&&during.contains("backup1.ts")&&get(stream,"current")==current,"switching off mid-break dropped the served backup");
+            // A stream this never changed is left alone, and no new break starts while off.
+            set(stream,"current",own);
+            check(TwitchBackupStream.requestUrl(new Object(),"http://own/a.m3u8").equals("http://own/a.m3u8"),"disabled patch still redirects an unchanged stream");
+            String ads=playlist(102,"own").replace(",live",",Advertisement");
+            check(call(TYPE,"onMedia",known,own,ads)==null&&get(stream,"current")==own,"a break started while switched off");
+            return;
+        }
+        if(scenario.equals("proxy")){
+            // Playlist proxy: masters come from the proxy's host (in place of usher, or with the usher URL in
+            // the query), so no stream is tracked and every playlist passes unchanged.
+            for(String url:new String[]{"https://proxy.example/api/channel/hls/a.m3u8?token=t",
+                    "https://proxy.example/playlist?url="+URLEncoder.encode("https://usher.ttvnw.net/api/channel/hls/a.m3u8","UTF-8")}){
+                check(!(Boolean)call(TYPE,"isUsherMaster",url),"proxied master taken for usher: "+url);
+                Request req=new Request(){public String getUrl(){return url;}};
+                check(!TwitchBackupStream.consume(null,req,null),"proxied master consumed");
+            }
+            check((Boolean)call(TYPE,"isUsherMaster","https://usher.ttvnw.net/api/channel/hls/a.m3u8"),"usher master not recognized");
+            return;
         }
         if(scenario.equals("first-stale")) {
             try {call(TYPE,"onMedia",known,own,playlist(90,"late"));throw new AssertionError("first retired response synthesized a playlist instead of failing");}

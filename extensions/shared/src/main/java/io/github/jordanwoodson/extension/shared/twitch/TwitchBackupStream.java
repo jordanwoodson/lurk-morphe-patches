@@ -49,13 +49,19 @@ import io.github.jordanwoodson.extension.shared.settings.Settings;
  * read, gets a new full-quality session instead, and a picture-by-picture session that stops answering
  * is dropped for the break. When no picture-by-picture session can be had in time, the stream's
  * playlist passes unchanged, with its ad cues, so "Mute stitched ads" still mutes and covers the break.
- * Streams started while the switch is off are left alone.
+ * Streams started while the switch is off are left alone. Turning it off doesn't start new breaks; a
+ * stream already switched (on a picture-by-picture session, or renumbered after one) keeps being served
+ * until it ends, so the player never sees its media sequence jump back, and a break in progress returns
+ * to the stream the usual way when it's over.
+ * <p>
+ * Only Twitch's own usher master playlists are read. A master loaded through Playlist proxy comes from
+ * the proxy's host, so its stream is never tracked: with the proxy on, this does nothing and the proxy
+ * decides what the playlists hold.
  */
 @SuppressWarnings("unused")
 public final class TwitchBackupStream {
     private static final String KEY = "avoid_stitched_ads";
     private static final String USHER_HOST = "usher.ttvnw.net";
-    private static final String CLIENT_ID = "kd1unb4b3q4t58fwlpcbzcbnm76a8fp";
     private static final String GQL = "https://gql.twitch.tv/gql";
     private static final String TOKEN_QUERY = "query StreamAccessTokenQuery($channelName: String!, "
             + "$params: PlaybackAccessTokenParams!) { streamPlaybackAccessToken(channelName: $channelName, "
@@ -184,12 +190,13 @@ public final class TwitchBackupStream {
      * goes to the session its stream is served from.
      */
     public static String requestUrl(Object request, String url) {
-        if (url == null || !url.contains(".m3u8") || !Settings.isEnabled(KEY)) return url;
+        if (url == null || !url.contains(".m3u8")) return url;
         try {
             Media known = media.get(key(url));
             if (known == null) return url;
             Stream stream = known.stream;
             synchronized (stream) {
+                if (!handled(stream)) return url;
                 Source current = stream.current;
                 if (current.backup && ++known.unanswered > MAIN_FAILURES) {
                     stream.current = stream.main;
@@ -228,7 +235,7 @@ public final class TwitchBackupStream {
             }
             master = isUsherMaster(url);
             known = master ? null : media.get(key(url));
-            if (!Settings.isEnabled(KEY) || !master && known == null) return false;
+            if (master ? !Settings.isEnabled(KEY) : known == null || !handled(known.stream)) return false;
             if ((Boolean) method(request, "isCancelled").invoke(request)) return true;
         } catch (ReflectiveOperationException | RuntimeException e) {
             return false;
@@ -238,16 +245,18 @@ public final class TwitchBackupStream {
         final Source requestSource = source;
         final Media requestMedia = known;
         final boolean isMaster = master;
+        final Stream requestStream = known == null ? null : known.stream;
         long deadline = TwitchRequest.now() + BUDGET_MS;
         byte[] body = TwitchRequest.run(deadline,
-                () -> Settings.isEnabled(KEY) && !cancelled(request), () -> read(consumer));
+                () -> handled(requestStream) && !cancelled(request), () -> read(consumer));
         if (body == null) {
-            if (Settings.isEnabled(KEY)) fail(request, callback, new IOException("Lurk: playlist read expired or unavailable"));
+            // The consumer was taken over: an expired read must still answer the player, or it waits.
+            if (!cancelled(request)) fail(request, callback, new IOException("Lurk: playlist read expired or unavailable"));
             return true;
         }
         AtomicBoolean unavailable = new AtomicBoolean();
         byte[] out = TwitchRequest.run(deadline,
-                () -> Settings.isEnabled(KEY) && !cancelled(request), () -> {
+                () -> handled(requestStream) && !cancelled(request), () -> {
             byte[] result = body;
             try {
                 boolean gzip = body.length > 2 && (body[0] & 0xff) == 0x1f && (body[1] & 0xff) == 0x8b;
@@ -272,7 +281,7 @@ public final class TwitchBackupStream {
             TwitchRequest.check();
             return result;
         });
-        if (!Settings.isEnabled(KEY) || cancelled(request)) return true;
+        if (cancelled(request)) return true;
         if (unavailable.get()) {
             fail(request, callback, new IOException("Lurk: retired playlist unavailable"));
             return true;
@@ -420,14 +429,17 @@ public final class TwitchBackupStream {
             long generation;
             boolean tryBackup;
             synchronized (stream) {
-                if (!TwitchRequest.active() || !Settings.isEnabled(KEY)) return known.lastPlaylist;
+                if (!TwitchRequest.active()) return known.lastPlaylist;
+                // Switched off before this stream was ever changed: the player keeps its own playlist.
+                if (!handled(stream)) return null;
                 current = stream.current;
                 generation = stream.generation;
                 if (source == current && source.backup) known.unanswered = 0;
                 if (source == current && !source.backup && !playlist.hasAdAfter(known.servedLast - source.offset)) {
                     return serve(known, playlist, source);
                 }
-                tryBackup = now >= stream.retryAfter;
+                // Switched off, a changed stream is still served, but no new break starts.
+                tryBackup = Settings.isEnabled(KEY) && now >= stream.retryAfter;
             }
             if (current != source) {
                 Playlist switched = redirect ? fetch(current, known, now + BUDGET_MS) : null;
@@ -443,7 +455,7 @@ public final class TwitchBackupStream {
             synchronized (stream) {
                 if (!current(stream, source, generation)) return retired(known);
                 if (tryBackup) {
-                    if (backup != null) {
+                    if (backup != null && Settings.isEnabled(KEY)) {
                         stream.main = source;
                         stream.current = backup;
                         stream.generation++;
@@ -468,8 +480,7 @@ public final class TwitchBackupStream {
 
     /** Called under the state monitor before committing any result from outside it. */
     private static boolean current(Stream stream, Source source, long generation) {
-        return TwitchRequest.active() && Settings.isEnabled(KEY)
-                && stream.current == source && stream.generation == generation;
+        return TwitchRequest.active() && stream.current == source && stream.generation == generation;
     }
 
     /** A backup refresh; network I/O never retains the state monitor used by requestUrl. */
@@ -521,11 +532,11 @@ public final class TwitchBackupStream {
             stream.freshAfter = now + FRESH_RETRY_MS;
         }
         String masterUrl = tokenValid(stream.masterUrl) ? newSession(stream.masterUrl) : newToken(stream, null, deadline);
-        String master = masterUrl == null ? null : http(masterUrl, null, deadline);
+        String master = masterUrl == null ? null : http(masterUrl, null, deadline, stream);
         if (master == null) return null;
         Map<String, Rendition> renditions = renditions(master);
         Rendition target = match(renditions, known.rendition);
-        String text = target == null ? null : http(target.url, null, deadline);
+        String text = target == null ? null : http(target.url, null, deadline, stream);
         if (text == null) return null;
         Playlist fresh = Playlist.parse(text);
         if (fresh.hasAdAfter(Long.MIN_VALUE)) return null;
@@ -595,7 +606,7 @@ public final class TwitchBackupStream {
 
     private static Playlist fetch(Source source, Media known, long deadline) {
         Rendition target = match(source.renditions, known.rendition);
-        String text = target == null ? null : http(target.url, null, deadline);
+        String text = target == null ? null : http(target.url, null, deadline, known.stream);
         return text == null ? null : Playlist.parse(text);
     }
 
@@ -606,11 +617,11 @@ public final class TwitchBackupStream {
     private static Source openBackup(Stream stream, Media known, Playlist served, long deadline) {
         for (int attempt = 0; attempt < 2 && TwitchRequest.active() && TwitchRequest.now() < deadline; attempt++) {
             String masterUrl = newToken(stream, BACKUP_TYPE, deadline);
-            String master = masterUrl == null ? null : http(masterUrl, null, deadline);
+            String master = masterUrl == null ? null : http(masterUrl, null, deadline, stream);
             if (master == null) continue;
             Map<String, Rendition> renditions = renditions(master);
             Rendition target = match(renditions, known.rendition);
-            String text = target == null ? null : http(target.url, null, deadline);
+            String text = target == null ? null : http(target.url, null, deadline, stream);
             if (text == null) continue;
             Playlist playlist = Playlist.parse(text);
             if (playlist.segments.isEmpty() || playlist.hasAdAfter(Long.MIN_VALUE)) {
@@ -689,7 +700,7 @@ public final class TwitchBackupStream {
             }
             JSONObject body = new JSONObject().put("operationName", "StreamAccessTokenQuery").put("query", TOKEN_QUERY)
                     .put("variables", new JSONObject().put("channelName", stream.channel).put("params", params));
-            String response = http(GQL, body.toString(), deadline);
+            String response = http(GQL, body.toString(), deadline, stream);
             if (response == null) return null;
             JSONObject token = new JSONObject(response).getJSONObject("data").getJSONObject("streamPlaybackAccessToken");
             return newSession(withQuery(stream.masterUrl, "token", token.getString("value"),
@@ -988,7 +999,21 @@ public final class TwitchBackupStream {
 
     /** GET [url], or POST [json] to GQL, within the time left before [deadline]. Null on any failure. */
     private static String http(String url, String json, long deadline) {
-        return TwitchRequest.http(url, json, CLIENT_ID, deadline, () -> Settings.isEnabled(KEY));
+        return http(url, json, deadline, null);
+    }
+
+    /** A request for [stream]'s work, given up when the stream is no longer handled. */
+    private static String http(String url, String json, long deadline, Stream stream) {
+        return TwitchRequest.http(url, json, TwitchRequest.CLIENT_ID, deadline, () -> handled(stream));
+    }
+
+    /**
+     * Whether [stream] is served by this class: while the switch is on, and after that for as long as
+     * the stream is on another session than its own or renumbered, since serving its own playlist as it
+     * is then would move the player's media sequence. Null (a new stream) follows the switch.
+     */
+    static boolean handled(Stream stream) {
+        return Settings.isEnabled(KEY) || stream != null && (stream.current != stream.own || stream.main != stream.own);
     }
 
     private static byte[] gunzip(byte[] body) throws IOException {

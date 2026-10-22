@@ -2,11 +2,16 @@
 """Check actual stock/patched Twitch privacy boundaries and their disabled paths.
 
 Usage: python tests/twitch/verify_privacy.py stock-apktool patched-apktool
-This checks emitted DEX, including callback completion and synthetic-branch isolation.
+This checks emitted DEX, including callback completion and synthetic-branch isolation. Obfuscated names
+come from the patched output's locators (assets/lurk/locators.json); the ones written here are Twitch
+31.7.0's, used while the output has none.
 """
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from locators import Locators  # noqa: E402
 
 SETTINGS = "Lio/github/jordanwoodson/extension/shared/settings/Settings;"
 PRIVACY = "Lio/github/jordanwoodson/extension/shared/twitch/TwitchPrivacy;"
@@ -69,8 +74,11 @@ def after_prefix(parsed, prefix):
 
 
 def verify(stock, patched):
-    # Class and method names are Twitch 31.7.0's R8 output; each one is a method a privacy hook patches.
-    core = ("jn0", "d(Ljava/lang/String;Ljava/util/LinkedHashMap;Lkx50;Z)V")
+    loc = Locators(patched)
+    print(loc.describe())
+    # Each one is a method a privacy hook patches; the fallbacks are Twitch 31.7.0's R8 names.
+    core = loc.method("twitch.match.spade_event", "jn0", "d(Ljava/lang/String;Ljava/util/LinkedHashMap;Lkx50;Z)V")
+    callback_type = re.search(r"L(\w+);Z\)V$", core[1])[1]
     before, _ = method(stock, *core)
     assert any('"branch_campaign"' in i for i in before)
     assert any('"x_untrusted_minute-watched_spade"' in i for i in before)
@@ -83,35 +91,38 @@ def verify(stock, patched):
     assert off
     end = labels[off[1]]
     assert code[4:end] == ["move-object/from16 v1, p3", code[5], "const/4 v0, 0x0",
-                           "invoke-virtual {v1, v0}, Lkx50;->K(Ljava/lang/Object;)V", "return-void"]
+                           f"invoke-virtual {{v1, v0}}, L{callback_type};->K(Ljava/lang/Object;)V", "return-void"]
     nullable = re.fullmatch(r"if-eqz v1, (:\w+)", code[5])
     assert nullable and labels[nullable[1]] == end - 1
     assert normalized(code[end:], labels, end) == normalized(before, method(stock, *core)[1])
     callback, _ = method(stock, "in0", "K(Ljava/lang/Object;)V")
     assert any("Ljava/lang/Boolean;->TRUE" in i for i in callback)
     assert any("->resumeWith(Ljava/lang/Object;)V" in i for i in callback)
-    for cls, signature in (("dn00", "a(Ljava/util/ArrayList;)V"), ("jn0", "c(Ljava/lang/String;)V")):
+    for cls, signature in (loc.method("twitch.match.spade_batch", "dn00", "a(Ljava/util/ArrayList;)V"),
+                           loc.method("twitch.match.branch_event", "jn0", "c(Ljava/lang/String;)V")):
         guarded(method(stock, cls, signature), method(patched, cls, signature),
                 "disable_analytics", ["return-void"])
-    branch = ("pc3", "<init>(Landroid/content/Context;)V")
+    branch = loc.method("twitch.match.branch_initialization", "pc3", "<init>(Landroid/content/Context;)V")
+    branch_setter = loc.method("twitch.match.branch_tracking_setter", "u2e", "b(Landroid/content/Context;Z)V")
     original, old_labels = method(stock, *branch)
     code, labels = method(patched, *branch)
     injection, = [i for i, line in enumerate(code) if "->disableBranchTracking(Z)Z" in line]
     assert code[injection:injection + 2] == [f"invoke-static/range {{v1 .. v1}}, {PRIVACY}->disableBranchTracking(Z)Z", "move-result v1"]
-    assert code[injection - 1] == "move-result v1" and code[injection + 2].startswith("iput-boolean v1, v0, Lu2e;")
+    assert code[injection - 1] == "move-result v1" and code[injection + 2].startswith(f"iput-boolean v1, v0, L{branch_setter[0]};")
     kept = code[:injection] + code[injection + 2:]
     shifted = {label: pos if pos < injection else pos - 2 for label, pos in labels.items()}
     assert normalized(kept, shifted) == normalized(original, old_labels)
-    branch_setter = ("u2e", "b(Landroid/content/Context;Z)V")
     code, labels = after_prefix(method(patched, *branch_setter), [
         f"invoke-static/range {{p2 .. p2}}, {PRIVACY}->disableBranchTracking(Z)Z", "move-result p2"])
     original, old_labels = method(stock, *branch_setter)
     assert normalized(code, labels) == normalized(original, old_labels)
-    guarded(method(stock, "wy60", "a()Z"), method(patched, "wy60", "a()Z"),
+    user_consent = loc.type("twitch.match.user_data_consent", "wy60")
+    guarded(method(stock, user_consent, "a()Z"), method(patched, user_consent, "a()Z"),
             "disable_analytics", ["const/4 v0, 0x0", "return v0"])
-    guarded(method(stock, "pf50", "o(Lwy60;Lw050;)Loy60;"),
-            method(patched, "pf50", "o(Lwy60;Lw050;)Loy60;"), "disable_analytics",
-            ["sget-object v0, Loy60;->Denied:Loy60;", "return-object v0"])
+    vendor = loc.method("twitch.match.vendor_consent", "pf50", "o(Lwy60;Lw050;)Loy60;")
+    decision = re.search(r"\)L(\w+);$", vendor[1])[1]
+    guarded(method(stock, *vendor), method(patched, *vendor), "disable_analytics",
+            [f"sget-object v0, L{decision};->Denied:L{decision};", "return-object v0"])
     sentry = ("io/sentry/android/core/SentryAndroid", "init(Landroid/content/Context;Lio/sentry/ILogger;Lio/sentry/Sentry$OptionsConfiguration;)V")
     gated = after_prefix(method(patched, *sentry), [
         f"invoke-static/range {{p0 .. p0}}, {PRIVACY}->initSettingsOnce(Landroid/content/Context;)V"])
@@ -123,13 +134,14 @@ def verify(stock, patched):
             "move-result-object v0", f"invoke-static {{v0}}, {PRIVACY}->initSettingsOnce(Landroid/content/Context;)V"])
         guarded(method(stock, provider, "onCreate()Z"), gated, "disable_analytics", ["const/4 v0, 0x1", "return v0"])
     # The app's manifest provider inherits onCreate from R8's Firebase provider base.
-    firebase = "lph"
+    firebase = loc.type("twitch.match.firebase_initialization_provider", "lph")
     code, labels = after_prefix(method(patched, firebase, "onCreate()Z"), [
         "invoke-virtual/range {p0 .. p0}, Landroid/content/ContentProvider;->getContext()Landroid/content/Context;",
         "move-result-object v0", f"invoke-static {{v0}}, {PRIVACY}->initSettingsOnce(Landroid/content/Context;)V"])
     original, old_labels = method(stock, firebase, "onCreate()Z")
     assert normalized(code, labels) == normalized(original, old_labels), "Firebase/Messaging initialization changed"
-    guarded(method(stock, "apc", "b()Z"), method(patched, "apc", "b()Z"),
+    permission = loc.method("twitch.disable_analytics.crashlytics_permission", "apc", "b()Z")
+    guarded(method(stock, *permission), method(patched, *permission),
             "disable_analytics", ["const/4 v0, 0x0", "return v0"])
     crashlytics = "com/google/firebase/crashlytics/FirebaseCrashlytics"
     for signature, prefix in (
@@ -154,23 +166,32 @@ def verify(stock, patched):
     signature = f"{store[2]}(Ljava/lang/String;Ljava/lang/String;)V"
     guarded(method(stock, store[1], signature), method(patched, store[1], signature), "disable_analytics", ["return-void"])
 
-    original, original_labels = method(stock, "ms", "h(Lio/reactivex/internal/operators/single/c;)V")
-    code, labels = method(patched, "ms", "h(Lio/reactivex/internal/operators/single/c;)V")
-    start = code.index('const-string v0, "block_client_ads"')
-    # The guard belongs to only the ad eligibility case, after its check-cast; auth/image cases survive.
-    assert code[start - 2:start] == ["check-cast p0, Los;", "check-cast v1, Lg00;"]
-    end = labels[re.fullmatch(r"if-eqz v0, (:\w+)", code[start + 3])[1]]
-    assert code[start + 4:end] == ["sget-object v0, Ljava/lang/Boolean;->FALSE:Ljava/lang/Boolean;",
-        "new-instance v2, Ltv/twitch/android/util/Optional;",
-        "invoke-direct {v2, v0}, Ltv/twitch/android/util/Optional;-><init>(Ljava/lang/Object;)V",
-        "invoke-virtual {p1, v2}, Lio/reactivex/internal/operators/single/c;->b(Ljava/lang/Object;)V",
-        "return-void"]
+    eligibility = loc.method("twitch.match.client_ad_eligibility", "ms", "h(Lio/reactivex/internal/operators/single/c;)V")
+    request = loc.type("twitch.block_client_ads.request", "os")
+    original, original_labels = method(stock, *eligibility)
+    code, labels = method(patched, *eligibility)
+    start, = [i for i, line in enumerate(code) if re.fullmatch(r'const-string (v\d+), "block_client_ads"', line)]
+    flag = code[start].split()[1].rstrip(",")
+    # The guard belongs to only the ad eligibility case, after its check-casts; auth/image cases survive.
+    assert code[start - 2].startswith("check-cast p0, L" + request + ";") and code[start - 1].startswith("check-cast ")
+    assert code[start + 1:start + 3] == [f"invoke-static/range {{{flag} .. {flag}}}, {SETTINGS}->isEnabled(Ljava/lang/String;)Z",
+                                         f"move-result {flag}"]
+    end = labels[re.fullmatch(rf"if-eqz {flag}, (:\w+)", code[start + 3])[1]]
+    decline = code[start + 4:end]
+    value = re.fullmatch(r"new-instance (v\d+), Ltv/twitch/android/util/Optional;", decline[1])[1]
+    emitter = re.fullmatch(r"move-object/from16 (v\d+), p1", decline[3])[1]
+    assert decline == [f"sget-object {flag}, Ljava/lang/Boolean;->FALSE:Ljava/lang/Boolean;",
+        f"new-instance {value}, Ltv/twitch/android/util/Optional;",
+        f"invoke-direct {{{value}, {flag}}}, Ltv/twitch/android/util/Optional;-><init>(Ljava/lang/Object;)V",
+        f"move-object/from16 {emitter}, p1",
+        f"invoke-virtual {{{emitter}, {value}}}, Lio/reactivex/internal/operators/single/c;->b(Ljava/lang/Object;)V",
+        "return-void"], decline
     kept = code[:start] + code[end:]
     adjusted = {label: pos if pos < start else pos - (end - start) for label, pos in labels.items()
                 if pos < start or pos >= end}
     assert normalized(kept, adjusted) == normalized(original, original_labels)
 
-    consent = ("u7a", "<init>(ZLi5v;ZZZZ)V")
+    consent = loc.method("twitch.block_cookie_notice.options_constructor", "u7a", "<init>(ZLi5v;ZZZZ)V")
     original, orig_labels = method(stock, *consent)
     code, labels = method(patched, *consent)
     assert code[:2] == ["invoke-static/range {p3 .. p3}, Lio/github/jordanwoodson/extension/shared/twitch/TwitchPrivacy;->showCookieNotice(Z)Z",

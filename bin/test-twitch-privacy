@@ -23,7 +23,7 @@ android="$ANDROID_HOME/platforms/android-36/android.jar"
 javac --release 17 -d "$out/stub-classes" "$out/stub-src/kx50.java" "$out/stub-src/akg.java"
 (cd "$out/stub-classes" && jar cf "$out/stubs.jar" kx50.class akg.class)
 javac --release 17 -classpath "$android:$out/stubs.jar" \
-    -d "$out/classes" "$ROOT/tests/twitch/PrivacyAdsProbe.java"
+    -d "$out/classes" "$ROOT/tests/twitch/PrivacyAdsProbe.java" "$ROOT/tests/twitch/ProbeLocators.java"
 # Compile-only stubs are classpath inputs. Only the actual probe classes enter DEX; at runtime
 # the superclass, callback error type, event dispatcher and emitter all come from the patched APK.
 "$(build_tool d8)" --min-api 29 --lib "$android" --classpath "$out/stubs.jar" \
@@ -37,4 +37,4 @@ adb -s "$serial" shell mkdir -p "$remote"
 trap 'adb -s "$serial" shell rm -rf "$remote" >/dev/null 2>&1 || true' EXIT
 adb -s "$serial" push "$1" "$remote/app.apk" >/dev/null
 adb -s "$serial" push "$out/probe.jar" "$remote/probe.jar" >/dev/null
-adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin PrivacyAdsProbe"
+adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin PrivacyAdsProbe $remote/app.apk"

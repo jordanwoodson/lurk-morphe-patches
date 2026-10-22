@@ -1,6 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.chat
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
+import io.github.jordanwoodson.patches.shared.Locators
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -22,6 +23,7 @@ import io.github.jordanwoodson.patches.twitch.shared.hex
 import io.github.jordanwoodson.patches.twitch.shared.installDelayedPredicate
 import io.github.jordanwoodson.patches.twitch.shared.twitchHermes
 import io.github.jordanwoodson.patches.twitch.shared.twitchHermesPatch
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 private const val SHOW_DELETED = "chat_show_deleted"
@@ -93,7 +95,7 @@ private fun BytecodePatchContext.keepMessagesDeletedBeforeShown() {
             throw PatchException("Twitch: the deleted message text is overwritten before the placeholder")
         }
     }
-    method.requireUnlabelled(start, "deleted message placeholder")
+    method.requireNotBranchTarget(start, "deleted message placeholder")
     // Both paths meet at :shown with the message spans in the body register, as the normal path leaves them.
     // The scratch register is the placeholder builder, which nothing after :shown reads.
     method.addInstructionsWithLabels(start, """
@@ -127,7 +129,10 @@ private fun BytecodePatchContext.keepMessagesDeletedAfterShown() {
         (next as OneRegisterInstruction).registerA != line || line > 15 || bodyStart > 15) {
         throw PatchException("Twitch: unexpected deleted line registers")
     }
-    method.requireUnlabelled(copy + 1, "deleted line placeholder")
+    method.requireNotBranchTarget(copy + 1, "deleted line placeholder")
+    // The span the line marks its sender's name with: the class the message start is found from.
+    instructions.subList(0, copy).lastOrNull { it.opcode == Opcode.CONST_CLASS }?.typeRef
+        ?.let { Locators.record("twitch.show_deleted.name_span", it) }
     method.addInstructionsWithLabels(copy + 1, """
         invoke-static { v$line, v$bodyStart }, $CHAT->deletedLine(${SPANNED}I)Landroid/text/Spanned;
         move-result-object v$line
@@ -156,6 +161,7 @@ private fun BytecodePatchContext.ignoreChatClears() {
     val event = instructions[clear].fieldRef!!.type
     if (classDefBy(event).superclass != classDefBy(userClear).superclass) throw PatchException("Twitch: unexpected chat clear event")
     val eventRegister = (instructions[clear] as OneRegisterInstruction).registerA
+    Locators.record("twitch.ignore_chat_clears.ignored_result", ignored.toString())
     // Right after it, a goto to code that sets a register before reading anything: that register is free.
     val jump = clear + 1
     if (instructions[jump].opcode != Opcode.GOTO) throw PatchException("Twitch: unexpected chat clear flow")
@@ -163,7 +169,7 @@ private fun BytecodePatchContext.ignoreChatClears() {
     if (!landing.isConstant()) throw PatchException("Twitch: no free register after the chat clear")
     val scratch = (landing as OneRegisterInstruction).registerA
     if (scratch == eventRegister || scratch > 255) throw PatchException("Twitch: no free register after the chat clear")
-    method.requireUnlabelled(jump, "chat clear jump")
+    method.requireNotBranchTarget(jump, "chat clear jump")
     method.addInstructionsWithLabels(jump, """
         invoke-static {}, $CHAT->ignoreChatClears()Z
         move-result v$scratch

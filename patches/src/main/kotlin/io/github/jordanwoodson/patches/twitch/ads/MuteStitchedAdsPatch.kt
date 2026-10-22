@@ -1,6 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.ads
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.shared.Locators
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -16,6 +17,9 @@ import com.android.tools.smali.dexlib2.immutable.ImmutableMethodParameter
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.shared.settings.requireLocals
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
+import io.github.jordanwoodson.patches.twitch.shared.lowParameters
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
@@ -40,11 +44,16 @@ val muteStitchedAdsPatch = bytecodePatch(
             it.type == IVS_MEDIA_PLAYER && !AccessFlags.STATIC.isSet(it.accessFlags)
         } ?: throw PatchException("Twitch: native player has no unique IVS player")
         val playerField = "${cue.classDef.type}->${player.name}:$IVS_MEDIA_PLAYER"
-        cue.method.requireLocals(1)
-        cue.method.addInstructions(0, """
-            iget-object v0, p0, $playerField
-            invoke-static { v0, p1 }, $ADS->onNativeCue(Ljava/lang/Object;Lorg/json/JSONObject;)V
-        """)
+        Locators.record("twitch.mute_stitched_ads.native_player", playerField)
+        cue.method.apply {
+            requireLocals(1)
+            val p = lowParameters(0, 1, firstLocal = 1)
+            addInstructions(0, """
+                ${p.prologue}
+                iget-object v0, v${p[0]}, $playerField
+                ${invokeStatic("$ADS->onNativeCue(Ljava/lang/Object;Lorg/json/JSONObject;)V", 0, p[1])}
+            """)
+        }
         // The native player keeps one IVS player for every stream it loads: a new load ends a break.
         val load = cue.classDef.methods.filter { method ->
             method.implementation?.instructions?.any {
@@ -55,8 +64,9 @@ val muteStitchedAdsPatch = bytecodePatch(
         }.singleOrNull() ?: throw PatchException("Twitch: native player has no unique stream load")
         load.requireLocals(1)
         load.addInstructions(0, """
-            iget-object v0, p0, $playerField
-            invoke-static { v0 }, $ADS->onNativeLoad(Ljava/lang/Object;)V
+            move-object/from16 v0, p0
+            iget-object v0, v0, $playerField
+            ${invokeStatic("$ADS->onNativeLoad(Ljava/lang/Object;)V", 0)}
         """)
 
         // Native cover: the full-size root of Twitch's stitched-ad overlay, while it shows an ad.
@@ -68,11 +78,14 @@ val muteStitchedAdsPatch = bytecodePatch(
         val root = classDefBy(BASE_VIEW_DELEGATE).fields.singleOrNull {
             it.type == "Landroid/view/View;" && !AccessFlags.STATIC.isSet(it.accessFlags)
         } ?: throw PatchException("Twitch: view delegate has no unique root view")
+        Locators.record("twitch.mute_stitched_ads.root_view", "$BASE_VIEW_DELEGATE->${root.name}:Landroid/view/View;")
         overlay.requireLocals(2)
         overlay.addInstructions(0, """
-            iget-object v0, p0, $BASE_VIEW_DELEGATE->${root.name}:Landroid/view/View;
-            instance-of v1, p1, $adPlaying
-            invoke-static { v0, v1 }, $ADS->coverNativeAd(Landroid/view/View;Z)V
+            move-object/from16 v0, p1
+            instance-of v1, v0, $adPlaying
+            move-object/from16 v0, p0
+            iget-object v0, v0, $BASE_VIEW_DELEGATE->${root.name}:Landroid/view/View;
+            ${invokeStatic("$ADS->coverNativeAd(Landroid/view/View;Z)V", 0, 1)}
         """)
 
         // React Native player: each player view owns one playback session, which holds the player
@@ -132,23 +145,26 @@ private fun BytecodePatchContext.hookRnPlaybackSession() {
         return-void
     """)
 
-    RnPlayerMetadataFingerprint.twitchMatch("React Native player metadata").method.addInstructions(0,
-        "invoke-static { p0, p1, p2 }, $RN_PLAYBACK_SESSION->$ON_METADATA($RN_PLAYBACK_SESSION" +
-            "Ljava/lang/String;Ljava/nio/ByteBuffer;)V")
+    RnPlayerMetadataFingerprint.twitchMatch("React Native player metadata").method.apply {
+        addInstructions(0, invokeStatic("$RN_PLAYBACK_SESSION->$ON_METADATA($RN_PLAYBACK_SESSION" +
+            "Ljava/lang/String;Ljava/nio/ByteBuffer;)V", parameterRegister(0), parameterRegister(1), parameterRegister(2)))
+    }
     RnPlayerStreamUrlFingerprint.twitchMatch("React Native player stream URL").method.apply {
         requireLocals(1)
+        val p = lowParameters(1, firstLocal = 1)
         addInstructions(0, """
-            invoke-static { p0 }, $view
+            ${p.prologue}
+            ${invokeStatic(view, parameterRegister(0))}
             move-result-object v0
-            invoke-static { v0, p1 }, $ADS->onRnStreamUrl(Landroid/view/View;Ljava/lang/String;)V
+            ${invokeStatic("$ADS->onRnStreamUrl(Landroid/view/View;Ljava/lang/String;)V", 0, p[1])}
         """)
     }
     RnPlayerReleaseFingerprint.twitchMatch("React Native player release").method.apply {
         requireLocals(1)
         addInstructions(0, """
-            invoke-static { p0 }, $view
+            ${invokeStatic(view, parameterRegister(0))}
             move-result-object v0
-            invoke-static { v0 }, $ADS->onRnRelease(Landroid/view/View;)V
+            ${invokeStatic("$ADS->onRnRelease(Landroid/view/View;)V", 0)}
         """)
     }
 }

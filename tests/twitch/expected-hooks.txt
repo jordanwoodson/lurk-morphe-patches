@@ -1,0 +1,211 @@
+# Every extension method the Twitch patches call from app code, as Class.method for
+# tests/verify_extension_calls.py. Morphe drops an injected call that doesn't compile without an error,
+# so a patch can apply and never call its extension; this list is what bin/test-twitch checks.
+#
+# "# if <key> ..." starts a group that applies when the patched APK's Lurk settings registry has any of
+# the keys (the patch that registers them was included); "# if asset:<path>" when the APK has that file.
+# "# always" starts a group that every patched APK must have. Other "#" lines are comments.
+# For a build with every patch, `grep -v '^#' tests/twitch/expected-hooks.txt` is the plain list.
+
+# always
+# Settings patch: settings and the React Native bundle loader at Application.onCreate.
+TwitchPrivacy.initSettingsOnce
+TwitchBundle.init
+
+# if asset:assets/lurk-hermes.json
+# Hermes patches: the prepared React Native bundle.
+TwitchBundle.prepare
+
+# if fix_stuck_start
+TwitchStartup.firstRoute
+TwitchStartup.watchStart
+
+# if refresh_stream vod_chapters
+# The player-view attach hook both patches share.
+TwitchPlayerViews.attached
+
+# if fix_notifications
+TwitchNotifications.firebaseHeader
+
+# if chat_timestamps chat_keywords chat_appearance chat_show_deleted emotes_7tv badges_ffz
+# React Native chat (a dependency of the chat, emote and badge patches)
+TwitchRNChat.afterFile
+TwitchRNChat.afterMain
+TwitchRNChat.dispose
+TwitchRNChat.exchange
+
+# if emotes_7tv badges_ffz
+# Chat image size (a dependency of Third-party emotes and badges)
+TwitchEmotes.sizeEmote
+
+# if disable_analytics
+TwitchPrivacy.allowAnalyticsCollection
+TwitchPrivacy.allowAnalyticsCollectionBoxed
+TwitchPrivacy.disableBranchTracking
+
+# if block_cookie_notice
+TwitchPrivacy.showCookieNotice
+
+# if block_display_ads
+TwitchAds.brandSurvey
+TwitchAds.declineRnVideoAd
+TwitchAds.rnRequestUrl
+TwitchAds.wrapAdEdge
+
+# if mute_stitched_ads
+TwitchAds.coverNativeAd
+TwitchAds.onNativeCue
+TwitchAds.onNativeLoad
+TwitchAds.onRnCue
+TwitchAds.onRnRelease
+TwitchAds.onRnStreamUrl
+
+# if avoid_stitched_ads
+TwitchBackupStream.consume
+TwitchBackupStream.requestUrl
+
+# if playlist_proxy
+TwitchAds.proxyPlaylist
+TwitchAds.proxyPlaylistUrl
+
+# if chat_anonymous
+TwitchChat.ircNick
+TwitchChat.ircToken
+TwitchChat.loginLabel
+TwitchChat.readOnly
+TwitchChat.sendBlocked
+
+# if chat_show_deleted
+TwitchChat.deletedBody
+TwitchChat.deletedLine
+TwitchChat.ignoreChatClears
+
+# if chat_timestamps
+TwitchChat.timestampPattern
+TwitchChat.timestamps
+
+# if chat_auto_claim
+TwitchChat.autoClaim
+
+# if chat_keywords
+TwitchChatKeywords.beginLine
+TwitchChatKeywords.bindRow
+TwitchChatKeywords.markLine
+TwitchChatKeywords.onLiveMessage
+
+# if chat_appearance
+TwitchChatStyle.beginLine
+TwitchChatStyle.bindRow
+TwitchChatStyle.landscapeChat
+TwitchChatStyle.landscapeChatGuide
+TwitchChatStyle.markLine
+TwitchChatStyle.onMessage
+
+# if chat_overlay
+TwitchChatOverlay.channel
+TwitchChatOverlay.dispose
+TwitchChatOverlay.onMessage
+
+# if emotes_7tv
+TwitchEmotes.clientEmotes
+TwitchEmotes.isThirdParty
+TwitchEmotes.messageTokens
+TwitchEmotes.onChatChannel
+TwitchEmotes.rnFrame
+TwitchEmotes.url
+
+# if badges_ffz
+TwitchBadges.badges
+
+# if hide_hype_train
+TwitchHighlights.celebrationsEnabled
+TwitchHighlights.celebrationsUpdate
+TwitchHighlights.hideCallout
+TwitchHighlights.hideGiftNotice
+TwitchHighlights.hideHighlight
+TwitchHighlights.hideSubscriptionNotice
+TwitchHighlights.hideWatchStreakNotice
+TwitchHighlights.leaderboardEnabled
+TwitchHighlights.pinnedCheersVisible
+
+# if hide_clip_button
+TwitchHighlights.castVisibility
+TwitchHighlights.clipButtonVisible
+TwitchHighlights.hideCastButton
+TwitchHighlights.hideShareButton
+TwitchHighlights.shareButtonVisible
+
+# if hide_home_stories
+TwitchHighlights.followingSections
+TwitchHighlights.storiesShelf
+
+# if hide_tipping
+TwitchInterface.bitsVisible
+
+# if hide_clips
+TwitchInterface.clipTabs
+TwitchInterface.homeTabs
+
+# if default_tab
+TwitchInterface.startDestination
+
+# if force_exoplayer
+TwitchLayout.forceExoPlayer
+
+# if navigation_bar
+TwitchLayout.landingInsets
+TwitchLayout.landingLayout
+
+# if tablet_layout
+TwitchLayout.navigationRail
+TwitchLayout.tablet
+
+# if clean_share_links
+TwitchLinks.cleanClipboardText
+TwitchLinks.putShareExtra
+
+# if disable_autoplay
+TwitchPlayback.autoplayDefault
+TwitchPlayback.showManualRecommendation
+
+# if background_audio
+TwitchPlayback.backgroundAudioDefault
+
+# if video_quality
+TwitchPlayback.playerQuality
+TwitchPlayback.qualityDefault
+TwitchPlayback.qualityPreferenceDefault
+TwitchPlayback.storageQualityDefault
+
+# if native_player
+TwitchPlayback.routeLiveToReactNative
+
+# if refresh_stream
+TwitchPlayer.bindRefresh
+TwitchPlayer.videoLongPress
+
+# if vod_skip_seconds
+TwitchPlayer.bindSeekBack
+TwitchPlayer.bindSeekForward
+TwitchPlayer.seekBack
+TwitchPlayer.seekBackIcon
+TwitchPlayer.seekBackMillis
+TwitchPlayer.seekForward
+TwitchPlayer.seekForwardIcon
+TwitchPlayer.seekForwardMillis
+TwitchPlayer.seekSeconds
+TwitchPlayer.swipeIntercept
+TwitchPlayer.swipeTouch
+
+# if normal_latency
+TwitchPlayer.loadLatency
+TwitchPlayer.lowLatency
+
+# if sleep_timer
+TwitchPlayer.onPlay
+TwitchPlayer.onStop
+TwitchPlayer.pauseRegistry
+
+# if vod_chapters
+TwitchVod.bindChapters
+TwitchVod.vodLoaded

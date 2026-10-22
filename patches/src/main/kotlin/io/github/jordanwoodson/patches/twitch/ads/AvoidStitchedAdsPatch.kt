@@ -1,7 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.ads
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -26,9 +26,14 @@ val avoidStitchedAdsPatch = bytecodePatch(
     description = "While Twitch's server stitches an ad break into a live stream, plays the stream instead from " +
         "a picture-by-picture session, the kind Twitch itself shows during breaks, which gets no ads: at 360p " +
         "at most, with sound, then back to the stream's own session and quality when the break is over. The " +
-        "player doesn't reload. The playback token for that session is requested without your account. When " +
-        "none can be had, the break plays, and Mute stitched ads still mutes and covers it. Native and React " +
-        "Native players; streams started while it's off are left alone.",
+        "player doesn't reload. The playback token for that session is requested without your account. If a " +
+        "break runs past 4 minutes or the stream's own playlist stops answering, the stream comes back on a " +
+        "new session instead; when your own token has under a minute left, that session's token is also " +
+        "requested without your account, and the rest of the stream plays as a signed-out viewer's (how " +
+        "that affects subscriber ad exemption, minutes watched and Drops is untested). When no " +
+        "picture-by-picture session can be had, the break plays, and Mute stitched ads still mutes and covers it. Native and React " +
+        "Native players; streams started while it's off are left alone, and turning it off during a break " +
+        "lets that break finish on picture-by-picture first. Does nothing for streams loaded through Playlist proxy.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
     dependsOn(twitchSettingsPatch)
@@ -75,7 +80,8 @@ val avoidStitchedAdsPatch = bytecodePatch(
 
         twitchSettings.add(SwitchSetting(KEY, "Avoid stitched ads",
             "During a stitched ad break, play the stream at up to 360p from a picture-by-picture session, which " +
-                "has no ads. Applies to streams started after it's turned on.",
+                "has no ads. Applies to streams started after it's turned on; turned off, a break in progress " +
+                "finishes first. Not for streams loaded through Playlist proxy.",
             Section.PLAYBACK))
     }
 }

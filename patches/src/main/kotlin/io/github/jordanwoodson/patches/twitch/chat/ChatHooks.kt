@@ -21,16 +21,6 @@ internal val Instruction.stringRef get() = ((this as? ReferenceInstruction)?.ref
 
 internal fun MutableMethod.instructionList(): List<BuilderInstruction> = implementation!!.instructions.toList()
 
-/**
- * Fails if a branch or switch lands on [index]. Code inserted there would run only on the fall-through
- * path, since the branch keeps pointing at the original instruction.
- */
-internal fun MutableMethod.requireUnlabelled(index: Int, what: String) {
-    if (implementation!!.instructions[index].location.labels.isNotEmpty()) {
-        throw PatchException("Twitch: $what is a branch target")
-    }
-}
-
 /** The instruction a branch at [index] jumps to. */
 internal fun MutableMethod.branchTarget(index: Int): BuilderInstruction {
     val branch = implementation!!.instructions[index] as? BuilderOffsetInstruction

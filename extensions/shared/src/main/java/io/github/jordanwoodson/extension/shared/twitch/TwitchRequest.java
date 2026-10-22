@@ -19,6 +19,8 @@ import java.util.function.BooleanSupplier;
 /** Bounded Twitch I/O. A caller can leave even when a platform provider ignores interruption. */
 @SuppressWarnings("deprecation") // URL(String) remains available on the pinned Android runtime.
 final class TwitchRequest {
+    /** The Android app's own Client-ID, the only identity anonymous Lurk requests to Twitch send. */
+    static final String CLIENT_ID = "kd1unb4b3q4t58fwlpcbzcbnm76a8fp";
     static final int MAX_BYTES = 1024 * 1024;
     private static final ThreadPoolExecutor IO = new ThreadPoolExecutor(3, 3, 30, TimeUnit.SECONDS,
             new ArrayBlockingQueue<>(8), runnable -> {

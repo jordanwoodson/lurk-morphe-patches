@@ -48,6 +48,17 @@
         catch (_) { return {}; }
     }
     function settings() { const c = data({op:'config'}); return c.version === 1 ? c : {}; }
+    // One native config read until something can have changed it: the native side calls invalidate()
+    // when an activity resumes (Lurk settings is its own activity), and configure() reads it afresh.
+    // Rows, bodies, timestamps and selectors then share it instead of each asking per render.
+    let configStale = true;
+    function cachedSettings() {
+        if (configStale) { config = settings(); configStale = false; }
+        return config;
+    }
+    // Keyword verdicts by line content, per config revision, so rerenders and the history selector
+    // don't classify the same line again.
+    const verdicts = new Map();
     function normal(line, masks) {
         return !!line && ['chat','firstchatter','channelpointsreward'].indexOf(line.type) >= 0 &&
             typeof line.id === 'string' && line.id.length > 0 && typeof line.user === 'string' &&
@@ -59,11 +70,15 @@
     function key(channel,line) { return channel + '\u0000' + line.id; }
     function verdict(line) {
         if (!config.keywords || !line || typeof line.body !== 'string' || typeof line.user !== 'string') return 0;
+        const id = line.id + '\u0000' + proof(line), cached = verdicts.get(id);
+        if (cached && cached.revision === config.revision) return cached.value;
         const v = data({op:'verdict',user:line.user,body:line.body,id:line.id}).verdict;
-        return v === 1 || v === 2 ? v : 0;
+        const value = v === 1 || v === 2 ? v : 0;
+        bounded(verdicts,id,{revision:config.revision,value});
+        return value;
     }
     function delayedPredicate(line,event) {
-        config = settings();
+        config = cachedSettings();
         if (!config.deleted || !normal(line) || !event || ['delete','timeout','ban'].indexOf(event.kind) < 0) return undefined;
         const matches = event.kind === 'delete' ? line.id === event.targetMsgId : line.user.toLowerCase() === event.userLogin;
         if (!matches) return false;
@@ -231,7 +246,7 @@
         return original.column(expanded,collapsed,wide,enabled);
     }
     function stage(props) {
-        config=settings();
+        config=cachedSettings();
         const active=config.appearance && props.mode==='landscape-column-chat' &&
             !props.pipFloatSettled && !props.pipCompactFrame && !props.isTheatreDocked;
         const old=columnWidth;
@@ -300,7 +315,7 @@
     }
 
     function row(props) {
-        config = settings();
+        config = cachedSettings();
         const R = owners.react;
         const context=R.useContext(overlayContext), scoped=context && overlayRow(props,context);
         if(scoped)props=scoped;
@@ -339,23 +354,23 @@
         return tree;
     }
     function body(props) {
-        config = settings();
+        config = cachedSettings();
         const next = config.appearance && config.plain && props.action ? Object.assign({},props,{action:false}) : props;
         return textTree(original.body(next),scale());
     }
     function timestamp(props) {
-        config = settings();
+        config = cachedSettings();
         let tree = original.timestamp(props);
         if (config.timestamps && config.clock === 1 && owners.react.isValidElement(tree))
             tree = owners.react.cloneElement(tree,{children:[clock(props.tmiSentTs),'\u00a0']});
         return textTree(tree,scale());
     }
     function format(ts,intl) {
-        config = settings();
+        config = cachedSettings();
         return config.timestamps && config.clock === 1 ? clock(ts) : original.format(ts,intl);
     }
     function selected(store,select) {
-        config = settings();
+        config = cachedSettings();
         const c = config.keywords;
         const wrapped = owners.react.useMemo(()=>snapshot=>{
             if (!c || !Array.isArray(snapshot.lines)) return select(snapshot);
@@ -380,7 +395,7 @@
             let active=data({op:'watch',id,channel:room}).active===true;
             if (!active) return;
             const incoming=line=>{
-                const current=settings();
+                const current=cachedSettings();
                 if (!active || !current.keywords || !current.vibrate || !normal(line) || line.deleted || line.isHistorical) return;
                 data({op:'live',id,channel:room,messageId:line.id,user:line.user,body:line.body});
             };
@@ -398,9 +413,9 @@
         owners.stage.useClassicStagePresentation=original.stage;owners.column.useColumnTrackWidth=original.column;
         owners.classicColumn.ClassicChatColumn=original.classicColumn;
         owners.overlayHost.OneChatOverlayHost=original.overlayHost;owners.theatreStore.useTheatreChatStore=original.theatreStore;
-        installed=false;received.clear();delayed.clear();catalogs.clear();stripes.clear();
+        installed=false;received.clear();delayed.clear();catalogs.clear();stripes.clear();verdicts.clear();
     }
-    const api = {configure(raw) {
+    const api = {invalidate() { configStale = true; }, configure(raw) {
         const contract = JSON.parse(raw);
         if (!owners) {
             const found = {};
@@ -422,7 +437,7 @@
                 stage:owners.stage.useClassicStagePresentation,column:owners.column.useColumnTrackWidth,
                 overlayHost:owners.overlayHost.OneChatOverlayHost,theatreStore:owners.theatreStore.useTheatreChatStore,classicColumn:owners.classicColumn.ClassicChatColumn};
         }
-        config=settings();
+        configStale=true;config=cachedSettings();
         if (!config.timestamps && !config.deleted && !config.keywords && !config.appearance && !config.providers) {restore();return;}
         if (installed) return;
         owners.row.ChatMessageRow=owners.react.memo(row);owners.body.MessageBody=body;

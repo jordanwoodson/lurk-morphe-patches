@@ -33,7 +33,7 @@ vm.runInNewContext(fs.readFileSync(source,'utf8'),global);
 const contract = Object.fromEntries(Object.keys(modules).map(k=>[k,k]));
 global.LurkTwitchChat.configure(JSON.stringify(contract));
 assert.equal(modules.row.ChatMessageRow,originals.row.ChatMessageRow,'all off preserves export identity');
-config={version:1,timestamps:true,clock:1,deleted:true,keywords:true,appearance:true,scale:115,plain:true,alternate:true};
+config={version:1,timestamps:true,clock:1,deleted:true,keywords:true,appearance:true,scale:115,plain:true,alternate:true};global.LurkTwitchChat.invalidate();
 global.LurkTwitchChat.configure(JSON.stringify(contract));
 const render = p=>{const c=modules.row.ChatMessageRow;return (c.type||c)(p);};
 const msg = {id:'m1',type:'chat',user:'viewer',body:'normal',tmiSentTs:new Date(2026,0,1,13,5).valueOf()};
@@ -75,7 +75,7 @@ render({message:delayed,channelID:'42',chatStore:store});assert.equal(rowProps.m
 for(const kind of ['timeout','ban']) {const line={...msg,id:kind};assert.equal(global[1998063107](line,{kind,userLogin:'viewer'}),false);assert.equal(line.deleted,true);}
 assert.equal(global[1998063107]({...msg,hidden:true},{kind:'delete',targetMsgId:'m1'}),undefined);
 assert.equal(global[1998063107](msg,{kind:'clear'}),undefined);
-config={version:1,keywords:true,vibrate:true};
+config={version:1,keywords:true,vibrate:true};global.LurkTwitchChat.invalidate();
 const liveHandlers=new Set();state={lines:[],_tmiClient:{lineHandlers:liveHandlers}};
 effects=[];modules.store.useChatStore('theburntpeanut_247');
 const liveCleanups=effects.map(f=>f());
@@ -86,12 +86,12 @@ providerCalls=[];emit({...msg,id:'live',body:'bright'});
 assert.equal(providerCalls.filter(q=>q.op==='live').length,1,'new live line reaches native keyword vibration gate');
 for(const extra of [{isHistorical:true},{deleted:true},{hidden:true},{isUnpublished:true},{maskedRanges:[1]}])emit({...msg,...extra,id:'protected'});
 assert.equal(providerCalls.filter(q=>q.op==='live').length,1,'history/deletion/protected events never notify');
-config={version:1,keywords:false,vibrate:true};emit({...msg,id:'off'});
+config={version:1,keywords:false,vibrate:true};global.LurkTwitchChat.invalidate();emit({...msg,id:'off'});
 assert.equal(providerCalls.filter(q=>q.op==='live').length,1,'current opt-out blocks ingress');
 liveCleanups.forEach(f=>{if(f)f();});assert.equal(liveHandlers.size,0,'navigation removes old store listener');
 for(const channel of ['bad/room','x'.repeat(26),'']){effects=[];modules.store.useChatStore(channel);effects.forEach(f=>f());assert.equal(liveHandlers.size,0,'invalid store identity is rejected');}
 effects=[];modules.store.useChatStore('42');const numericCleanups=effects.map(f=>f());assert.equal(liveHandlers.size,1,'numeric store identity remains bounded and supported');numericCleanups.forEach(f=>{if(f)f();});
-config={version:1,providers:true};
+config={version:1,providers:true};global.LurkTwitchChat.invalidate();
 const providerMessage={...msg,id:'providers',body:'😀 Kappa',emotes:[],badges:{subscriber:'1'}};
 state={lines:[{key:'providers',line:providerMessage}]};
 effects=[];render({message:providerMessage,channelID:'42',chatStore:store,badgeRegistry:{'subscriber/1':{title:'Subscriber'}}});
@@ -114,7 +114,7 @@ render({message:{...providerMessage,body:'😀 Kappa BTTV FFZ Kappa!'},channelID
 assert.deepEqual(Array.from(rowProps.message.emotes,e=>e.id),['lurk7a_a','lurkbs_b','lurkfs_c'],'all providers and animation preserve whole-token boundaries');
 modules.native.NativeModules.TwitchRNFeedSettings.getLurkChatData=nativeBridge;
 cleanups.forEach(f=>{if(f)f();});assert.ok(providerCalls.some(q=>q.op==='release'),'unmount releases row demand');
-config={version:1,appearance:true,alternate:true,width:25,opacity:50};
+config={version:1,appearance:true,alternate:true,width:25,opacity:50};global.LurkTwitchChat.invalidate();
 const first=render({message:{...msg,id:'stripe1'},channelID:'stripes',chatStore:store});
 const second=render({message:{...msg,id:'stripe2'},channelID:'stripes',chatStore:store});
 assert.equal(React.isValidElement(first),true);
@@ -152,10 +152,10 @@ afterOverride=undefined;
 for(const extra of [{mode:'landscape-one-chat'},{mode:'landscape-no-chat'},{mode:'portrait'},{pipFloatSettled:true},{pipCompactFrame:true},{isTheatreDocked:true}]){
  const v=modules.stage.useClassicStagePresentation({mode:'landscape-column-chat',...extra});assert.equal(v.beforePlayerRegion,stockStage.beforePlayerRegion,'excluded background stays original');assert.equal(v.afterPlayerRegion.props.children[0].props.style,stockStage.afterPlayerRegion.props.children[0].props.style);assert.equal(v.afterPlayerRegion.props.children[0].props.children[1].props.children.props.value,null,'excluded tree has neutral authority');
 }
-for(const change of [{appearance:false},{opacity:0}]){const old=config;config={...config,...change};const v=modules.stage.useClassicStagePresentation({mode:'landscape-column-chat'});assert.equal(v.beforePlayerRegion,stockStage.beforePlayerRegion,'off/default background stays original');assert.equal(v.afterPlayerRegion.props.children[0].props.style,stockStage.afterPlayerRegion.props.children[0].props.style);assert.equal(v.afterPlayerRegion.props.children[0].props.children[1].props.children.props.value,null);config=old;}
+for(const change of [{appearance:false},{opacity:0}]){const old=config;config={...config,...change};global.LurkTwitchChat.invalidate();const v=modules.stage.useClassicStagePresentation({mode:'landscape-column-chat'});assert.equal(v.beforePlayerRegion,stockStage.beforePlayerRegion,'off/default background stays original');assert.equal(v.afterPlayerRegion.props.children[0].props.style,stockStage.afterPlayerRegion.props.children[0].props.style);assert.equal(v.afterPlayerRegion.props.children[0].props.children[1].props.children.props.value,null);config=old;global.LurkTwitchChat.invalidate();}
 const portrait=modules.stage.useClassicStagePresentation({mode:'portrait',chat:'chat'});
 assert.deepEqual(Array.from(portrait.widths),['66.6667%','33.3333%']);
-config={version:1,providers:true};providerActive=true;
+config={version:1,providers:true};global.LurkTwitchChat.invalidate();providerActive=true;
 const mounted=[];
 for(let i=0;i<2;i++) {rowRef.current=null;effects=[];render({message:{...msg,id:'poll'+i},channelID:'42',chatStore:store});mounted.push(...effects.map(f=>f()));}
 assert.equal(timers.size,1,'multiple provider rows share one runtime timer');
@@ -167,8 +167,20 @@ mounted.forEach(f=>{if(f)f();});assert.equal(timers.size,0,'last release clears 
 rowRef.current=null;effects=[];render({message:msg,channelID:'42',chatStore:store});const disposed=effects.map(f=>f());
 providerActive=false;tick();assert.equal(timers.size,0,'native runtime disposal stops polling');disposed.forEach(f=>{if(f)f();});
 providerActive=true;rowRef.current=null;effects=[];render({message:msg,channelID:'42',chatStore:store});const optedOut=effects.map(f=>f());
-config={version:1,providers:false};tick();assert.equal(timers.size,0,'provider opt-out stops polling');optedOut.forEach(f=>{if(f)f();});
-config={version:1};
+config={version:1,providers:false};global.LurkTwitchChat.invalidate();tick();assert.equal(timers.size,0,'provider opt-out stops polling');optedOut.forEach(f=>{if(f)f();});
+// Native calls per render: one config read is shared until invalidated, and a rerendered line keeps its verdict.
+config={version:1,timestamps:true,keywords:true};global.LurkTwitchChat.invalidate();providerCalls=[];
+for(const id of ['c1','c2','c3']){render({message:{...msg,id,body:'bright'},channelID:'42',chatStore:store});
+ modules.body.MessageBody({body:'x'});modules.time.TimestampPart({tmiSentTs:msg.tmiSentTs});modules.time.formatTimestamp(msg.tmiSentTs,{});}
+assert.equal(providerCalls.filter(q=>q.op==='config').length,1,'rows, bodies and timestamps share one config read');
+assert.equal(providerCalls.filter(q=>q.op==='verdict').length,3,'one verdict per line');
+render({message:{...msg,id:'c1',body:'bright'},channelID:'42',chatStore:store});
+assert.equal(providerCalls.filter(q=>q.op==='verdict').length,3,'a rerendered line reuses its verdict');
+render({message:{...msg,id:'c1',body:'changed'},channelID:'42',chatStore:store});
+assert.equal(providerCalls.filter(q=>q.op==='verdict').length,4,'changed content is classified again');
+global.LurkTwitchChat.invalidate();render({message:{...msg,id:'c1',body:'bright'},channelID:'42',chatStore:store});
+assert.equal(providerCalls.filter(q=>q.op==='config').length,2,'invalidate reads the config again');
+config={version:1};global.LurkTwitchChat.invalidate();
 global.LurkTwitchChat.configure(JSON.stringify(contract));
 for(const k of ['row','body','time','store','stage','column']) for(const n of Object.keys(originals[k])) assert.equal(modules[k][n],originals[k][n],'off restores '+n);
 assert.equal(global[1998063107](msg,{kind:'delete',targetMsgId:'m1'}),undefined,'off predicate delegates to stock');

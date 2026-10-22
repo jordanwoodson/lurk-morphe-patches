@@ -1,7 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.ads
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.replaceInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.resourcePatch
@@ -14,6 +14,8 @@ import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 import org.w3c.dom.Element
@@ -25,10 +27,15 @@ private const val KEY = "playlist_proxy"
 val playlistProxyPatch = bytecodePatch(
     name = "Playlist proxy",
     description = "Sends live stream playlist requests to a proxy server you set in this patch's options, for " +
-        "example one that returns playlists without stitched ads. The proxy receives each request in full, " +
-        "including your signed playback token, which identifies your account: only use a proxy you trust. " +
+        "example one that returns playlists without stitched ads. The proxy sees which channel you watch and " +
+        "when, and receives each request in full, including your signed playback token, which identifies your " +
+        "account. The token is in the request's address (its query, or with {url} the whole Twitch URL), so " +
+        "the proxy's access logs can keep it. The proxy decides what the player plays and can add segments of " +
+        "its own: only use a proxy you trust. " +
         "An http:// proxy gets an exception from Twitch's HTTPS-only rule for its host alone, and the token then " +
-        "travels unencrypted. Does nothing while the proxy URL is empty. Videos and clips are not proxied.",
+        "travels unencrypted. Does nothing while the proxy URL is empty; once it's set, the patch's switch " +
+        "starts on (Lurk settings > Playback). Videos and clips are not proxied. " +
+        "Avoid stitched ads leaves proxied streams alone: the proxy decides what their playlists hold.",
     default = false,
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
@@ -98,10 +105,12 @@ val playlistProxyPatch = bytecodePatch(
 
         // React Native: the player view's stream URL and the preloader's, which must stay equal so the
         // view finds its preloaded player.
-        RnPlayerStreamUrlFingerprint.twitchMatch("React Native player stream URL").method.addInstructions(0, """
-            invoke-static { p1 }, $ADS->proxyPlaylistUrl(Ljava/lang/String;)Ljava/lang/String;
-            move-result-object p1
-        """)
+        RnPlayerStreamUrlFingerprint.twitchMatch("React Native player stream URL").method.apply {
+            addInstructions(0, """
+                ${invokeStatic("$ADS->proxyPlaylistUrl(Ljava/lang/String;)Ljava/lang/String;", parameterRegister(1))}
+                move-result-object p1
+            """)
+        }
         RnPreloadFingerprint.twitchMatch("React Native player preload").method.addInstructions(0, """
             invoke-static/range { p2 .. p2 }, $ADS->proxyPlaylistUrl(Ljava/lang/String;)Ljava/lang/String;
             move-result-object p2
@@ -109,7 +118,8 @@ val playlistProxyPatch = bytecodePatch(
 
         val host = URI(proxy.replace("{url}", "")).host
         twitchSettings.add(SwitchSetting(KEY, "Playlist proxy",
-            "Load live playlists through $host. It receives your signed playback token.", Section.PLAYBACK))
+            "Load live playlists through $host, which sees what you watch, gets your signed playback token and " +
+                "decides what plays. On once a proxy is set.", Section.PLAYBACK))
     }
 }
 

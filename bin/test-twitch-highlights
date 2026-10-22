@@ -11,7 +11,7 @@ remote=/data/local/tmp/lurk-twitch-highlights
 mkdir -p "$out/classes" "$out/dex" "$WORK/tmp"
 export TMPDIR="$WORK/tmp"
 android="$ANDROID_HOME/platforms/android-36/android.jar"
-javac --release 17 -classpath "$android" -d "$out/classes" "$ROOT/tests/twitch/HighlightsArtProbe.java"
+javac --release 17 -classpath "$android" -d "$out/classes" "$ROOT/tests/twitch/HighlightsArtProbe.java" "$ROOT/tests/twitch/ProbeLocators.java"
 "$(build_tool d8)" --min-api 29 --lib "$android" --output "$out/dex" "$out/classes/"*.class
 (cd "$out/dex" && jar cf "$out/probe.jar" classes.dex)
 if $compile_only; then
@@ -22,4 +22,4 @@ adb -s "$serial" shell mkdir -p "$remote"
 trap 'adb -s "$serial" shell rm -rf "$remote" >/dev/null 2>&1 || true' EXIT
 adb -s "$serial" push "$1" "$remote/app.apk" >/dev/null
 adb -s "$serial" push "$out/probe.jar" "$remote/probe.jar" >/dev/null
-adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin HighlightsArtProbe"
+adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin HighlightsArtProbe $remote/app.apk"

@@ -30,7 +30,7 @@ internal class HermesBundle(input: ByteArray, compiledPredicate: Boolean = false
         ensure(digest("SHA-1", bytes.copyOfRange(0, bytes.size - 20))
             .contentEquals(bytes.copyOfRange(bytes.size - 20, bytes.size)), "invalid SHA-1 footer")
         if (compiledPredicate) ensure(bytes.size <= 65536, "oversized compiled predicate")
-        else ensure(bytes.sha256() == SOURCE_SHA256, "unrecognized Twitch 31.7.0 bundle")
+        else ensure(bytes.sha256() == SOURCE_SHA256, "unrecognized bundle: the supported Twitch version's has SHA-256 $SOURCE_SHA256")
         val functionCount = u32(40)
         val stringCount = u32(52)
         val overflowCount = u32(56)
@@ -266,8 +266,135 @@ internal class HermesBundle(input: ByteArray, compiledPredicate: Boolean = false
         ensure(bytes.copyOfRange(offset, offset + before.size).contentEquals(before), "original bytes differ")
         ensure(changes.none { offset < it.offset + it.original.size && it.offset < offset + before.size },
             "overlapping Hermes edits")
+        requireSafeEdit(function, key, relative, after)
         return HermesEdit(key, offset, before.copyOf(), after.copyOf(), defaultEnabled, function.id)
             .also { changes += it }
+    }
+
+    /**
+     * Fails unless replacing [function]'s bytes at [relative] with [after] keeps its control flow intact:
+     * the edit starts and ends on instruction boundaries, [after] decodes to whole instructions whose own
+     * jumps land on instruction boundaries, and nothing outside the edit (a jump, a switch case or
+     * default, an exception range or handler) leads into its interior, unless it lands on an instruction
+     * from which the replacement is byte for byte the original. The padding the helpers use is
+     * Unreachable (0x00), which aborts the process when executed, so a jump into it must be ruled out.
+     */
+    internal fun requireSafeEdit(function: HermesFunction, key: String, relative: Int, after: ByteArray) {
+        val what = function.name.ifEmpty { "anonymous function" }
+        val code = decode(function)
+        val boundaries = code.instructions.map { it.offset }.toSet() + code.end
+        val edit = Span(this, function, relative, after, what)
+        ensure(relative in boundaries && edit.end in boundaries, "edit in $what does not start and end on instructions")
+        val entries = code.instructions.filter { it.offset < relative || it.offset >= edit.end }.flatMap { it.targets } +
+            code.exceptionOffsets
+        entries.forEach { edit.requireEntry(it, "$what jumps") }
+        edit.targets.forEach { target ->
+            ensure(edit.inside(target) || target == edit.end || target in boundaries,
+                "replacement in $what jumps off an instruction boundary")
+            ensure(!edit.inside(target) || target in edit.boundaries, "replacement in $what jumps into itself mid-instruction")
+        }
+        // Edits under one key are switched together; under different keys, in any combination.
+        changes.filter { it.functionId == function.id }.forEach { other ->
+            val span = Span(this, function, other.offset - function.offset, other.replacement, what)
+            val together = other.key == key
+            span.targets.forEach { edit.requireEntry(it, "another edit in $what jumps", together) }
+            edit.targets.forEach { span.requireEntry(it, "the edit in $what jumps", together) }
+        }
+    }
+
+    /** An edit's bytes [relative] until [end] of [function], decoded as its [replacement]. */
+    private class Span(bundle: HermesBundle, val function: HermesFunction, val relative: Int, val replacement: ByteArray,
+                       what: String) {
+        val end = relative + replacement.size
+        private val decoded = bundle.decode(replacement, replacement.size, function.offset + relative, what, inFile = false)
+        val boundaries = decoded.instructions.map { relative + it.offset }.toSet()
+        /** Where the replacement's own jumps go, from the function start. */
+        val targets = decoded.instructions.flatMap { it.targets }.map { relative + it }
+
+        init {
+            ensure(decoded.end == replacement.size, "replacement in $what does not decode to whole instructions")
+        }
+
+        fun inside(target: Int) = target > relative && target < end
+
+        /**
+         * A jump from outside to [target] is safe unless it lands inside, where it must find an instruction
+         * of the replacement from which the bytes are the original's. A jump that is itself part of an edit
+         * switched [together] with this one only runs with the replacement, so an instruction start there
+         * is enough.
+         */
+        fun requireEntry(target: Int, who: String, together: Boolean = false) {
+            if (!inside(target)) return
+            val unchanged = target in boundaries && (together || function.body.copyOfRange(target, end)
+                .contentEquals(replacement.copyOfRange(target - relative, replacement.size)))
+            ensure(unchanged, "$who into the edited bytes at ${target - relative} of ${replacement.size}")
+        }
+    }
+
+    /** [function]'s instruction offsets, each with where it can jump; for tests and diagnostics. */
+    internal fun controlFlow(function: HermesFunction): List<Pair<Int, List<Int>>> =
+        decode(function).instructions.map { it.offset to it.targets }
+
+    private class Step(val offset: Int, val opcode: Int, val targets: List<Int>)
+
+    private class Decoded(val instructions: List<Step>, val end: Int, val exceptionOffsets: List<Int>)
+
+    /** [function]'s instructions up to its first switch table, with every jump, switch and handler target. */
+    private fun decode(function: HermesFunction): Decoded {
+        val what = function.name.ifEmpty { "anonymous function" }
+        val code = decode(function.body, function.body.size, function.offset, what, inFile = true)
+        val exceptions = when {
+            function.flags and 8 == 0 -> emptyList()
+            function.largeHeader -> {
+                // The catch table follows the large header: a count, then (start, end, handler) offsets.
+                val table = align(function.headerOffset + 37)
+                val count = u32(table)
+                checkedEnd(table + 4, count, 12)
+                List(count * 3) { u32(table + 4 + it * 4) }.onEach {
+                    ensure(it in 0..function.body.size, "catch offset outside $what")
+                }
+            }
+            else -> fail("$what has exception handlers without a large header")
+        }
+        return Decoded(code.instructions, code.end, exceptions)
+    }
+
+    /**
+     * Decodes [body] with the v98 length table until [limit] or the first switch's jump table, which
+     * follows the instructions. [absolute] is the body's file offset. Only code [inFile] (a function of
+     * this bundle, not an edit's replacement) may hold a switch: its table is read from the file, where
+     * Hermes aligns it to 4 bytes.
+     */
+    private fun decode(body: ByteArray, limit: Int, absolute: Int, what: String, inFile: Boolean): Decoded {
+        val instructions = mutableListOf<Step>()
+        var end = limit
+        var offset = 0
+        while (offset < end) {
+            val opcode = body[offset].toInt() and 255
+            ensure(opcode < V98_LENGTHS.length, "unknown opcode $opcode in $what")
+            val length = V98_LENGTHS[opcode].digitToInt(36)
+            ensure(offset + length <= limit, "truncated instruction in $what")
+            fun s32(at: Int) = (0..3).fold(0) { value, i -> value or ((body[offset + at + i].toInt() and 255) shl (8 * i)) }
+            val targets = mutableListOf<Int>()
+            V98_JUMPS[opcode]?.let { (at, size) -> targets += offset + if (size == 1) body[offset + at].toInt() else s32(at) }
+            when (opcode) {
+                UINT_SWITCH -> {
+                    // The jump table: (max - min + 1) offsets from the switch, 4-byte aligned in the file. It
+                    // usually follows the instructions, but may lie past the function's recorded size.
+                    ensure(inFile, "switch in an edit's replacement of $what")
+                    val table = (absolute + offset + s32(2) + 3) and -4
+                    val count = s32(14).toLong() - s32(10).toLong() + 1
+                    ensure(count in 1..65536 && table >= absolute + offset + length && table + count * 4 <= bytes.size - 20,
+                        "switch table outside $what")
+                    for (i in 0 until count.toInt()) targets += offset + u32Bits(table + i * 4).toInt()
+                    end = minOf(end, table - absolute)
+                }
+                STRING_SWITCH -> fail("$what has a string switch, which the decoder doesn't read")
+            }
+            instructions += Step(offset, opcode, targets)
+            offset += length
+        }
+        return Decoded(instructions, offset, emptyList())
     }
 
     /** Full original function bodies make Morphe's first-match byte replacement unambiguous. */
@@ -326,6 +453,26 @@ internal class HermesBundle(input: ByteArray, compiledPredicate: Boolean = false
 
     companion object {
         const val SOURCE_SHA256 = "928f89c5766562e9cb266485282e90c058dd7947f73c9bcafa1d0fc626debf5e"
+
+        /**
+         * Byte length of each v98 instruction, by opcode, in base 36. Generated from hermes-dec 0.1.7's
+         * hbc98 definitions (BytecodeList.def at bytecode version 98).
+         */
+        private const val V98_LENGTHS =
+            "16ab238a4434433839333344444444444444444444444433445534345454522336755689686688668847476847455445" +
+                "446545565644455675747322423321136879574543636a46462222223233336443223eii573433253636368474747474" +
+                "747474747474747474747474747474"
+        private const val UINT_SWITCH = 166 // UIntSwitchImm: Reg8, table offset, default Addr32, min, max.
+        private const val STRING_SWITCH = 167 // StringSwitchImm
+
+        /** Opcode to the (byte offset, size) of its jump operand, relative to the instruction start. */
+        private val V98_JUMPS: Map<Int, Pair<Int, Int>> = buildMap {
+            put(UINT_SWITCH, 6 to 4) // The default target.
+            put(STRING_SWITCH, 10 to 4)
+            // Jmp (174) through JmpBuiltinIsNotLong (218) take the target first: an Addr8 in the short forms
+            // (2 to 4 bytes long) and an Addr32 in the long forms and JmpTypeOfIs (5 to 8 bytes).
+            for (opcode in 174..218) put(opcode, 1 to if (V98_LENGTHS[opcode].digitToInt(36) >= 5) 4 else 1)
+        }
 
         /** Byte lengths of the v98 instructions accepted in a replaced prologue (BytecodeList.def). */
         private val PROLOGUE_LENGTHS = mapOf(

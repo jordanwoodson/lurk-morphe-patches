@@ -126,10 +126,6 @@ public final class TwitchHighlights {
         if (button != null && Settings.isEnabled(SHARE_BUTTON)) button.setVisibility(View.GONE);
     }
 
-    public static boolean hideShareButton() {
-        return Settings.isEnabled(SHARE_BUTTON);
-    }
-
     public static boolean storiesShelf(boolean stock) {
         return stock && !Settings.isEnabled(HOME_STORIES);
     }

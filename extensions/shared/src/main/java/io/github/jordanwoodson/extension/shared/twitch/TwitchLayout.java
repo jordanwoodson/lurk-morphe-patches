@@ -44,7 +44,7 @@ public final class TwitchLayout {
         if (stock || !Settings.isEnabled("tablet_layout")) return stock;
         if (Settings.isEnabled("tablet_rail_portrait")) return true;
         try {
-            return application().getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+            return TwitchContext.application().getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
         } catch (RuntimeException e) {
             return false;
         }
@@ -63,7 +63,7 @@ public final class TwitchLayout {
         int choice = navigationBar();
         if (choice != 2 && choice != 3) return stock;
         try {
-            Resources resources = application().getResources();
+            Resources resources = TwitchContext.application().getResources();
             int top = resources.getIdentifier(TOP_LAYOUT, "layout", resources.getResourcePackageName(stock));
             if (top != 0) return top;
             Logger.d("navigation bar: no " + TOP_LAYOUT);
@@ -132,12 +132,4 @@ public final class TwitchLayout {
     }
 
     // ---------------------------------------------------------------------------------------------
-
-    private static Application application() {
-        try {
-            return (Application) Class.forName("android.app.ActivityThread").getMethod("currentApplication").invoke(null);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
-    }
 }

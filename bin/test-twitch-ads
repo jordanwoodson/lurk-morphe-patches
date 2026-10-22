@@ -26,7 +26,7 @@ JAVA
 javac --release 17 -d "$out/stub-classes" "$out/stub-src/com/twitchrn/player/PlaybackDisplay.java"
 (cd "$out/stub-classes" && jar cf "$out/stubs.jar" com)
 rm -rf "$out/classes"/*
-javac --release 17 -classpath "$android:$out/stubs.jar" -d "$out/classes" "$ROOT/tests/twitch/AdsProbe.java"
+javac --release 17 -classpath "$android:$out/stubs.jar" -d "$out/classes" "$ROOT/tests/twitch/AdsProbe.java" "$ROOT/tests/twitch/ProbeLocators.java"
 # Only the probe enters DEX; every Twitch class and the extension come from the patched APK.
 "$(build_tool d8)" --min-api 30 --lib "$android" --classpath "$out/stubs.jar" --output "$out/dex" "$out/classes/"*.class
 (cd "$out/dex" && jar cf "$out/probe.jar" classes.dex)
@@ -34,4 +34,4 @@ adb -s "$serial" shell mkdir -p "$remote"
 trap 'adb -s "$serial" shell rm -rf "$remote" >/dev/null 2>&1 || true' EXIT
 adb -s "$serial" push "$1" "$remote/app.apk" >/dev/null
 adb -s "$serial" push "$out/probe.jar" "$remote/probe.jar" >/dev/null
-adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin AdsProbe"
+adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin AdsProbe $remote/app.apk"

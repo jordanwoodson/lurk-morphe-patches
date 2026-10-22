@@ -1,7 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.tipping
 
 import app.morphe.patcher.Fingerprint
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import com.android.tools.smali.dexlib2.Opcode
@@ -15,6 +15,8 @@ import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.iface.reference.StringReference
+import io.github.jordanwoodson.patches.shared.Locators
+import io.github.jordanwoodson.patches.twitch.shared.matchKey
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 internal const val INTERFACE_CLASS = "Lio/github/jordanwoodson/extension/shared/twitch/TwitchInterface;"
@@ -31,6 +33,11 @@ internal fun BytecodePatchContext.filterUiFlag(fingerprint: Fingerprint, marker:
     val state = fingerprint.twitchMatch("UI state $marker").method
     val field = printedBooleanField(state, marker)
     if (field.definingClass != state.definingClass) throw PatchException("Twitch: UI flag belongs to another class")
+    // twitch.ui_flag.<state>.<flag>, for example twitch.ui_flag.chat_toolbar_state.is_bits_button_visible.
+    val flag = (Regex("(\\w+)=$").find(marker)?.groupValues?.get(1) ?: marker)
+        .replace(Regex("(?<=[a-z0-9])(?=[A-Z])"), "_").lowercase()
+    Locators.record(fingerprint.matchKey("UI state $marker").replace("twitch.match.", "twitch.ui_flag.") + ".$flag",
+        field.toString())
     val constructors = mutableClassDefBy(state.definingClass).methods.filter { it.name == "<init>" }
     var writes = 0
     constructors.forEach { method ->

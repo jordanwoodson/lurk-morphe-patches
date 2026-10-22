@@ -27,7 +27,8 @@ import org.json.JSONObject;
  * Version-pinned integration test for the chat patches: the real Twitch 31.7.0 classes with the emitted
  * hooks, run on ART with a fake settings store. Each switch is checked on and off; "off" must reach the
  * original code (its result, or the exception its empty dependencies cause).
- * The short class names and resource ID below are Twitch 31.7.0's R8 output.
+ * Obfuscated classes and methods come from the APK's locators (assets/lurk/locators.json), or the rest from
+ * them by reflection; the short names given with them are Twitch 31.7.0's, used while an APK has none.
  */
 public final class ChatArtProbe {
     private static final Map<String, Object> settings = new HashMap<>();
@@ -115,7 +116,7 @@ public final class ChatArtProbe {
         // The input restriction: Twitch's LOGIN while on; the original lookup (which needs the account) while off.
         String restrictions = "tv.twitch.android.shared.messageinput";
         Class<?> state = Class.forName(restrictions + ".impl.chatrestrictions.ChatRestrictionsState");
-        Object mapper = allocate("yn6");
+        Object mapper = allocate(ProbeLocators.type("twitch.match.chat_restriction", "yn6"));
         Method restriction = null;
         for (Method method : mapper.getClass().getMethods()) {
             if (method.getParameterTypes().length == 3 && method.getParameterTypes()[0] == state) restriction = method;
@@ -131,48 +132,75 @@ public final class ChatArtProbe {
         }
 
         // The SendChatMessage mutation: Twitch's own failure result while on.
-        Object sender = allocate("wey");
+        Object sender = allocate(ProbeLocators.type("twitch.match.chat_message_send", "wey"));
         Method send = null;
         for (Method method : sender.getClass().getMethods()) {
             Class<?>[] types = method.getParameterTypes();
-            if (method.getName().equals("t") && types.length == 5 && types[0] == String.class && types[3] == String.class) send = method;
+            if (method.getName().equals(ProbeLocators.method("twitch.match.chat_message_send", "t")) && types.length == 5 &&
+                types[0] == String.class && types[3] == String.class) send = method;
         }
         anonymous(true);
         Object result = send.invoke(sender, "123", "hello", null, null, null);
-        check(result != null && result.getClass().getName().equals("a9z") &&
-            result.toString().startsWith("Error(error=java.lang.IllegalStateException: Lurk"), "On must not send: " + result);
+        check(result != null && result.toString().startsWith("Error(error=java.lang.IllegalStateException: Lurk"),
+            "On must not send: " + result);
         anonymous(false);
         check(failure(send, sender, "123", "hello", null, null, null) != null, "Off must reach the original GraphQL send");
         anonymous(false);
     }
 
     private static void chatClears() throws Exception {
-        Class<?> logger = Class.forName("cko");
-        Object log = Proxy.newProxyInstance(logger.getClassLoader(), new Class<?>[]{logger}, (proxy, method, values) -> null);
-        Class<?> parserType = Class.forName("foa");
-        Object parser = parserType.getConstructor(logger, Class.forName("q1e"), Class.forName("qgz")).newInstance(log, null, null);
-        Method line = parserType.getMethod("N", String.class);
+        Class<?> parserType = Class.forName(ProbeLocators.type("twitch.match.irc_event_parser", "foa"));
+        String parseName = ProbeLocators.method("twitch.match.irc_event_parser", "L");
         Method parse = null;
         for (Method method : parserType.getMethods()) {
             Class<?>[] types = method.getParameterTypes();
-            if (method.getName().equals("L") && types.length == 5 && types[4] == boolean.class) parse = method;
+            if (method.getName().equals(parseName) && types.length == 5 && types[4] == boolean.class) parse = method;
         }
-        Object user = Class.forName("e4d").getMethod("l").invoke(null);
-        Object properties = allocate("mq5");
-        Object ignored = Class.forName("vjm").getField("b").get(null);
-        Class<?> event = Class.forName("f65");
+        // The parser's raw-line reader: String in, the type the event parser takes first.
+        Method line = null;
+        for (Method method : parserType.getMethods()) {
+            if (method.getParameterCount() == 1 && method.getParameterTypes()[0] == String.class &&
+                method.getReturnType() == parse.getParameterTypes()[0]) {
+                check(line == null, "Several raw IRC line readers");
+                line = method;
+            }
+        }
+        // Its constructor takes a logger interface first; the other two dependencies stay unused here.
+        java.lang.reflect.Constructor<?> constructor = null;
+        for (java.lang.reflect.Constructor<?> candidate : parserType.getConstructors()) {
+            Class<?>[] types = candidate.getParameterTypes();
+            if (types.length == 3 && types[0].isInterface()) {
+                check(constructor == null, "Several IRC parser constructors");
+                constructor = candidate;
+            }
+        }
+        Class<?> logger = constructor.getParameterTypes()[0];
+        Object log = Proxy.newProxyInstance(logger.getClassLoader(), new Class<?>[]{logger}, (proxy, method, values) -> null);
+        Object parser = constructor.newInstance(log, null, null);
+        // The signed-in user, as Twitch makes a guest: (id, login, display name, color).
+        Object user = null;
+        for (java.lang.reflect.Constructor<?> candidate : parse.getParameterTypes()[1].getDeclaredConstructors()) {
+            Class<?>[] types = candidate.getParameterTypes();
+            if (types.length == 4 && types[0] == String.class && types[1] == String.class && types[2] == String.class) {
+                candidate.setAccessible(true);
+                user = candidate.newInstance("0", "justinfan123", "justinfan123", null);
+            }
+        }
+        Object properties = allocate(parse.getParameterTypes()[2].getName());
+        Object ignored = Class.forName(ProbeLocators.type("twitch.ignore_chat_clears.ignored_result", "vjm"))
+            .getField(ProbeLocators.field("twitch.ignore_chat_clears.ignored_result", "b")).get(null);
         for (boolean enabled : new boolean[]{false, true, false}) {
             settings.put("chat_ignore_clears", enabled);
             Object clear = parse.invoke(parser, line.invoke(parser, ":tmi.twitch.tv CLEARCHAT #somechannel"), user, properties, null, false);
             if (enabled) check(clear == ignored, "On must ignore a chat clear, got " + clear);
-            else check(clear.getClass().getName().equals("sjm") && get(clear, event).getClass().getName().equals("w55"),
-                "Off must clear the chat, got " + clear);
+            else check(clear.toString().startsWith("Chat(") && !event(clear).startsWith("ChatChannelUserMessagesCleared(") &&
+                !event(clear).startsWith("ChatChannelMessageDeleted("), "Off must clear the chat, got " + clear);
             Object timeout = parse.invoke(parser, line.invoke(parser,
                 "@ban-duration=600;room-id=1;target-user-id=42 :tmi.twitch.tv CLEARCHAT #somechannel :someone"), user, properties, null, false);
-            check(get(timeout, event).getClass().getName().equals("e65"), "Timeouts must always apply, got " + timeout);
+            check(event(timeout).startsWith("ChatChannelUserMessagesCleared(clearUserId=42"), "Timeouts must always apply, got " + timeout);
             Object delete = parse.invoke(parser, line.invoke(parser,
                 "@login=someone;room-id=;target-msg-id=abc-123 :tmi.twitch.tv CLEARMSG #somechannel :hello"), user, properties, null, false);
-            check(get(delete, event).getClass().getName().equals("u55"), "Deletions must always arrive, got " + delete);
+            check(event(delete).startsWith("ChatChannelMessageDeleted(messageId=abc-123"), "Deletions must always arrive, got " + delete);
         }
     }
 
@@ -181,7 +209,7 @@ public final class ChatArtProbe {
         Class<?> struck = Class.forName(CHAT + "$DeletedSpan");
         // Shown line: name span (Twitch's own) on "viewer", then ": " and the message.
         SpannableStringBuilder text = new SpannableStringBuilder("12:00 viewer: hello there");
-        text.setSpan(allocate("je7"), 6, 12, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text.setSpan(allocate(ProbeLocators.type("twitch.show_deleted.name_span", "je7")), 6, 12, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         SpannedString line = new SpannedString(text);
         Resources system = Resources.getSystem();
         Resources resources = new Resources(system.getAssets(), new DisplayMetrics(), new Configuration()) {
@@ -193,7 +221,8 @@ public final class ChatArtProbe {
             @Override public Resources getResources() { return resources; }
         };
         Class<?> dispatcher = Class.forName("tv.twitch.android.core.mvp.viewdelegate.EventDispatcher");
-        Method render = Class.forName("r8m").getMethod("u", String.class, SpannedString.class, Context.class, dispatcher, boolean.class);
+        Method render = Class.forName(ProbeLocators.type("twitch.match.deleted_message_line", "r8m"))
+            .getMethod(ProbeLocators.method("twitch.match.deleted_message_line", "u"), String.class, SpannedString.class, Context.class, dispatcher, boolean.class);
         for (boolean enabled : new boolean[]{false, true, false}) {
             settings.put("chat_show_deleted", enabled);
             Spanned shown = (Spanned) render.invoke(null, "abc-123", line, context, null, false);
@@ -217,8 +246,8 @@ public final class ChatArtProbe {
 
     private static void timestamps() throws Exception {
         Method shown = Class.forName(CHAT).getMethod("timestamps", Object.class, boolean.class);
-        Class<?> source = Class.forName("vz90");
-        Class<?> config = Class.forName("cc6");
+        Class<?> source = Class.forName(ProbeLocators.type("twitch.chat_timestamps.message_source", "vz90"));
+        Class<?> config = Class.forName(ProbeLocators.type("twitch.chat_timestamps.line_config", "cc6"));
         Object chat = config.getConstructors()[0].newInstance(true, source.getField("Chat").get(null), null);
         Object whisper = config.getConstructors()[0].newInstance(true, source.getField("Whisper").get(null), null);
         for (boolean enabled : new boolean[]{false, true}) {
@@ -228,18 +257,23 @@ public final class ChatArtProbe {
             check((boolean) shown.invoke(null, chat, true), "History keeps its time");
         }
         Method pattern = Class.forName(CHAT).getMethod("timestampPattern", String.class);
+        settings.put("chat_timestamps", true);
         settings.put("chat_timestamp_format", "0");
         check("H:mm".equals(pattern.invoke(null, "H:mm")), "24-hour must keep Twitch's pattern");
         settings.put("chat_timestamp_format", "1");
         check("h:mm".equals(pattern.invoke(null, "H:mm")), "12-hour pattern");
+        // The formatter also draws Twitch's own history timestamps: with the switch off the clock stays stock.
+        settings.put("chat_timestamps", false);
+        check("H:mm".equals(pattern.invoke(null, "H:mm")), "Off must keep Twitch's pattern whatever the clock choice");
+        settings.remove("chat_timestamp_format");
     }
 
     private static void autoClaim() throws Exception {
         Class<?> modelType = Class.forName("tv.twitch.android.models.communitypoints.CommunityPointsModel");
-        Class<?> claimType = Class.forName("ld");
+        Class<?> claimType = modelType.getMethod("getClaim").getReturnType();
         Class<?> channel = Class.forName("tv.twitch.android.models.channel.ChannelInfo");
-        Class<?> presenterType = Class.forName("gd9");
-        Class<?> action = Class.forName("og9");
+        Class<?> presenterType = Class.forName(ProbeLocators.type("twitch.match.points_button_presenter", "gd9"));
+        Class<?> action = presenterType.getDeclaredField(ProbeLocators.field("twitch.auto_claim.action", "m")).getType();
         List<String> claims = new ArrayList<>();
         Object recorder = Proxy.newProxyInstance(action.getClassLoader(), new Class<?>[]{action}, (proxy, method, values) -> {
             Class<?>[] types = method.getParameterTypes();
@@ -251,8 +285,9 @@ public final class ChatArtProbe {
             throw new UnsupportedOperationException(method.getName());
         });
         Object presenter = allocate(presenterType.getName());
-        set(presenter, "m", recorder);
-        Object update = Class.forName("sc9").getConstructor(presenterType, int.class).newInstance(presenter, 0);
+        set(presenter, ProbeLocators.field("twitch.auto_claim.action", "m"), recorder);
+        Object update = Class.forName(ProbeLocators.type("twitch.match.channel_points_update", "sc9"))
+            .getConstructor(presenterType, int.class).newInstance(presenter, 0);
         Method invoke = update.getClass().getMethod("invoke", Object.class);
         // ChannelInfo is an interface; the claim only stores it.
         Object info = Proxy.newProxyInstance(channel.getClassLoader(), new Class<?>[]{channel}, (proxy, method, values) -> null);
@@ -338,7 +373,19 @@ public final class ChatArtProbe {
         System.out.flush();
     }
 
+    /** The chat event a parsed IRC line carries, as text. */
+    private static String event(Object parsed) throws Exception {
+        for (Field field : parsed.getClass().getDeclaredFields()) {
+            if (!java.lang.reflect.Modifier.isAbstract(field.getType().getModifiers()) || field.getType().isInterface()) continue;
+            field.setAccessible(true);
+            return String.valueOf(field.get(parsed));
+        }
+        throw new AssertionError("No chat event in " + parsed);
+    }
+
     public static void main(String[] args) throws Exception {
+        ProbeLocators.load(args[0]);
+        System.out.println(ProbeLocators.loaded() ? "names from the APK's locators" : "no locators in the APK: 31.7.0 names");
         install();
         section("anonymous chat: IRC login, read-only input, blocked send", ChatArtProbe::anonymousChat);
         section("ignore chat clears (timeouts and deletions still apply)", ChatArtProbe::chatClears);

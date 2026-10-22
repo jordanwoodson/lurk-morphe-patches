@@ -18,7 +18,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
@@ -70,7 +69,7 @@ public final class TwitchBadges {
             if (ffz) FFZ.ensure(TwitchBadges::loadFfz);
             if (chatterino) CHATTERINO.ensure(TwitchBadges::loadChatterino);
             List out = null;
-            int id = ffz || chatterino ? userId(user) : 0;
+            long id = ffz || chatterino ? userId(user) : 0;
             if (id > 0) {
                 if (ffz) out = add(out, badges, FFZ.badges, id, badgeClass);
                 if (chatterino) out = add(out, badges, CHATTERINO.badges, id, badgeClass);
@@ -98,8 +97,8 @@ public final class TwitchBadges {
 
     static List<String[]> cachedRn(String userId) {
         List<String[]> out = new ArrayList<>();
-        int id;
-        try { id = Integer.parseInt(userId); } catch (NumberFormatException e) { return out; }
+        long id;
+        try { id = Long.parseLong(userId); } catch (NumberFormatException e) { return out; }
         if (id <= 0) return out;
         for (Provider provider : new Provider[]{FFZ,CHATTERINO}) {
             if (!Settings.isRegistered(provider.setting) || !Settings.isEnabled(provider.setting)) continue;
@@ -110,7 +109,7 @@ public final class TwitchBadges {
         return out;
     }
 
-    private static List add(List out, List badges, Badge[] provider, int id, Class<?> badgeClass)
+    private static List add(List out, List badges, Badge[] provider, long id, Class<?> badgeClass)
             throws ReflectiveOperationException {
         for (Badge badge : provider) {
             if (Arrays.binarySearch(badge.users, id) < 0) continue;
@@ -123,7 +122,7 @@ public final class TwitchBadges {
     private static Object pronounModel(String label, String image, Class<?> badgeClass) throws ReflectiveOperationException {
         Badge badge = PRONOUN_MODELS.get(label);
         if (badge == null || !badge.url.equals(image)) {
-            badge = new Badge(label, image, new int[0]);
+            badge = new Badge(label, image, new long[0]);
             PRONOUN_MODELS.put(label, badge);
         }
         return badge.model(badgeClass);
@@ -155,7 +154,8 @@ public final class TwitchBadges {
         return login instanceof String ? (String) login : null;
     }
 
-    private static int userId(Object user) throws ReflectiveOperationException {
+    /** The sender's Twitch user ID, or 0. IDs are 64-bit: current ones are above 1e9 and still growing. */
+    private static long userId(Object user) throws ReflectiveOperationException {
         Field field = userIdField;
         if (field == null || userClass != user.getClass()) {
             field = null;
@@ -170,7 +170,7 @@ public final class TwitchBadges {
         Object tuid = field.get(user);
         if (tuid == null) return 0;
         try {
-            return Integer.parseInt(tuid.toString());
+            return Long.parseLong(tuid.toString());
         } catch (NumberFormatException e) {
             return 0;
         }
@@ -186,7 +186,7 @@ public final class TwitchBadges {
      */
     private static Badge[] loadFfz() throws IOException {
         Map<String, String[]> meta = new HashMap<>();
-        Map<String, int[]> users = new HashMap<>();
+        Map<String, long[]> users = new HashMap<>();
         TwitchThirdParty.getJson("https://api.frankerfacez.com/v1/badges/ids", reader -> {
             if (!TwitchThirdParty.beginObject(reader)) return null;
             while (reader.hasNext()) {
@@ -213,7 +213,7 @@ public final class TwitchBadges {
             return null;
         }, null);
         List<Badge> out = new ArrayList<>();
-        for (Map.Entry<String, int[]> entry : users.entrySet()) {
+        for (Map.Entry<String, long[]> entry : users.entrySet()) {
             String[] badge = meta.get(entry.getKey());
             if (badge == null || badge[3] == null || entry.getValue().length == 0) continue;
             String image = composeFfz(badge[3], badge[2]);
@@ -273,7 +273,7 @@ public final class TwitchBadges {
                     String tooltip = null;
                     String image = null;
                     String fallback = null;
-                    int[] users = new int[0];
+                    long[] users = new long[0];
                     while (reader.hasNext()) {
                         switch (reader.nextName()) {
                             case "tooltip":
@@ -306,16 +306,16 @@ public final class TwitchBadges {
         return out.toArray(NONE);
     }
 
-    /** A JSON array of user IDs (numbers or strings) as a sorted int array. */
-    private static int[] parseIds(JsonReader reader) throws IOException {
-        if (!TwitchThirdParty.beginArray(reader)) return new int[0];
-        int[] ids = new int[64];
+    /** A JSON array of user IDs (numbers or strings) as a sorted array. */
+    private static long[] parseIds(JsonReader reader) throws IOException {
+        if (!TwitchThirdParty.beginArray(reader)) return new long[0];
+        long[] ids = new long[64];
         int count = 0;
         while (reader.hasNext()) {
             String id = TwitchThirdParty.string(reader);
             if (id == null) continue;
             try {
-                int value = Integer.parseInt(id);
+                long value = Long.parseLong(id);
                 if (count == ids.length) ids = Arrays.copyOf(ids, count * 2);
                 ids[count++] = value;
             } catch (NumberFormatException ignored) {
@@ -370,7 +370,6 @@ public final class TwitchBadges {
     private static final class Provider {
         final String name;
         final String setting;
-        final AtomicBoolean loading = new AtomicBoolean();
         volatile Badge[] badges = NONE;
         volatile long expires;
         TwitchThirdParty.Demand pending;
@@ -387,7 +386,6 @@ public final class TwitchBadges {
             if (pending != null) { pending.add(wanted); return; }
             pending = new TwitchThirdParty.Demand(); pending.add(wanted);
             TwitchThirdParty.Demand demand = pending;
-            loading.set(true);
             TwitchThirdParty.run(name + " badges", () -> Settings.isEnabled(setting) && demand.getAsBoolean(), () -> {
                 try {
                     badges = loader.load();
@@ -398,7 +396,7 @@ public final class TwitchBadges {
                     expires = SystemClock.elapsedRealtime() + RETRY_MS;
                     Logger.d("badges: " + name + " unavailable: " + e);
                 }
-            }, () -> { synchronized (this) { pending = null; loading.set(false); } });
+            }, () -> { synchronized (this) { pending = null; } });
         }
     }
 
@@ -406,11 +404,11 @@ public final class TwitchBadges {
     private static final class Badge {
         final String name;
         final String url;
-        final int[] users;
+        final long[] users;
         private volatile Object model;
         private volatile Class<?> modelClass;
 
-        Badge(String name, String url, int[] users) {
+        Badge(String name, String url, long[] users) {
             this.name = name;
             this.url = url;
             this.users = users;

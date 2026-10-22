@@ -127,7 +127,7 @@ public final class TwitchChatKeywords {
             if (verdict == HIDE) return true;
             if (verdict == HIGHLIGHT && Settings.isEnabled(VIBRATE)
                     && !login.toLowerCase(Locale.ROOT).equals(lists().self)) {
-                ChatFilter.vibrate(application(), id);
+                ChatFilter.vibrate(TwitchContext.application(), id);
             }
         } catch (ReflectiveOperationException | RuntimeException e) {
             fail(e);
@@ -205,7 +205,7 @@ public final class TwitchChatKeywords {
         try {
             SharedPreferences preferences = userPreferences;
             if (preferences == null) {
-                Context context = application();
+                Context context = TwitchContext.application();
                 if (context == null) return "";
                 userPreferences = preferences = context.getSharedPreferences("twitch_user_prefs", Context.MODE_PRIVATE);
             }
@@ -347,22 +347,6 @@ public final class TwitchChatKeywords {
         } catch (IllegalAccessException e) {
             return null;
         }
-    }
-
-    private static volatile Context application;
-
-    static Context application() {
-        Context current = application;
-        if (current == null) {
-            try {
-                current = (Context) Class.forName("android.app.ActivityThread")
-                        .getMethod("currentApplication").invoke(null);
-                application = current;
-            } catch (ReflectiveOperationException | RuntimeException e) {
-                return null;
-            }
-        }
-        return current;
     }
 
     private static void fail(Exception e) {

@@ -47,5 +47,5 @@ for(const mismatch of [{body:'different'},{user:'other'},{userId:'2'},{sourceRoo
 }
 for(const context of [{channelID:'wrong'},{chatStore:stores.beta}]){roots=[host('alpha','44',shared,context)];settle();assert.equal(rows.get('shared').message.emotes,undefined,'explicit wrong context stays untrusted');}
 roots=[];settle();assert.equal(leases.size,0,'scope disposal releases rows');
-config={version:1};global.LurkTwitchChat.configure(contract);assert.equal(modules.overlayHost.OneChatOverlayHost,originalHost);assert.equal(modules.theatreStore.useTheatreChatStore,originalStore);
+config={version:1};global.LurkTwitchChat.invalidate();global.LurkTwitchChat.configure(contract);assert.equal(modules.overlayHost.OneChatOverlayHost,originalHost);assert.equal(modules.theatreStore.useTheatreChatStore,originalStore);
 console.log('PASS floating context commit, siblings, destination/source identity, cached providers, received/protected/actions and restoration');
