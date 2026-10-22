@@ -4,6 +4,7 @@
 //   moderatorView Show deleted messages is on. Its moderator view comes from lurk-chat-moderator.js, which runs
 //                 before the page's own scripts; this only reports whether that worked.
 //   timestamps    show each line's time; textSize the chat text size in px; compact less space between lines
+//   clock         with timestamps: 0 writes the times as 13:05, 1 as 1:05, as on Twitch
 //   ignoreClears  keep the messages when a moderator clears the chat
 //   hide          CSS selectors of chat lines to hide (subs and gifts, hosts, reward redemptions)
 //   sevenTv       show 7TV emotes. sevenTvChannel is the channel's slug and sevenTvUser its owner's Kick user ID,
@@ -60,6 +61,63 @@
         if (options.timestamps) applied.push('timestamps');
         if (look.length > (options.timestamps ? 1 : 0)) applied.push('text size ' + (options.textSize || 'Kick') +
             (options.compact ? ', compact' : ''));
+    }
+
+    if (options.timestamps && (options.clock === 0 || options.clock === 1)) {
+        clock(options.clock === 1);
+        applied.push(options.clock === 1 ? '12-hour clock' : '24-hour clock');
+    }
+
+    // Chat timestamps clock: the page writes each line's time into its .timestamp with
+    // toLocaleTimeString(locale, {hour: '2-digit', minute: '2-digit'}) in the config's locale ("01:05 PM" in English,
+    // "13:05" in German). Lurk writes it as Twitch does, 13:05 or 1:05: the hour and minute come back from the page's
+    // own text through a table of every minute of a day written the same way. Text the table doesn't know, or that
+    // two minutes share, stays as Kick wrote it.
+    function clock(twelve) {
+        let minutes = null, observer;
+        const locale = () => {
+            if (typeof window.locale === 'string' && window.locale) return window.locale;
+            try {
+                const config = JSON.parse(new URL(location.href).searchParams.get('config'));
+                if (config && typeof config.locale === 'string' && config.locale) return config.locale;
+            } catch (_) { /* The page's default below. */ }
+            return 'en';
+        };
+        const table = () => {
+            if (minutes) return minutes;
+            minutes = new Map();
+            const day = new Date(2000, 0, 1);
+            try {
+                for (let minute = 0; minute < 1440; minute++) {
+                    day.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
+                    const text = day.toLocaleTimeString(locale(), {hour: '2-digit', minute: '2-digit'});
+                    minutes.set(text, minutes.has(text) ? -1 : minute);
+                }
+            } catch (_) {
+                minutes.clear();
+            }
+            return minutes;
+        };
+        const rewrite = (stamp) => {
+            if (stamp.dataset.lurkClock) return;
+            const minute = table().get(stamp.textContent);
+            if (minute === undefined || minute < 0) return;
+            const hour = Math.floor(minute / 60), rest = minute % 60;
+            stamp.dataset.lurkClock = '1';
+            stamp.textContent = (twelve ? hour % 12 || 12 : hour) + ':' + (rest < 10 ? '0' : '') + rest;
+        };
+        whenReady((app) => {
+            app.querySelectorAll('.timestamp').forEach(rewrite);
+            observer = new MutationObserver((records) => {
+                for (const record of records) for (const node of record.addedNodes) {
+                    if (node.nodeType !== 1) continue;
+                    if (node.matches('.timestamp')) rewrite(node);
+                    node.querySelectorAll('.timestamp').forEach(rewrite);
+                }
+            });
+            observer.observe(app, {childList: true, subtree: true});
+        });
+        window.addEventListener('pagehide', () => { if (observer) observer.disconnect(); }, {once: true});
     }
 
     // The page clears chat by emptying the message list (`app.innerHTML = ""`); nothing else empties it outside

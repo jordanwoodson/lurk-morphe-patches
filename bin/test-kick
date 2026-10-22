@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Check that Kick's code calls every expected extension hook, then run the actual injected bundle loader on
-# the scratch Android emulator.
+# Check that Kick's code calls every expected extension hook, then run the actual injected bundle loader and the
+# player hooks (PlayerProbe) on the scratch Android emulator.
 source "$(dirname "$0")/lib/common.sh"
 [[ $# == 1 && -f "$1" ]] || die "usage: bash bin/test-kick <patched.apk>"
 serial=${ANDROID_SERIAL:-emulator-5580}
@@ -14,7 +14,7 @@ mapfile -t hooks < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "$ROOT/te
 python3 -I "$ROOT/tests/verify_extension_calls.py" "$1" "${hooks[@]}"
 
 javac --release 17 -classpath "$ANDROID_HOME/platforms/android-36/android.jar" \
-    -d "$out/classes" "$ROOT/tests/kick/BundleProbe.java"
+    -d "$out/classes" "$ROOT/tests/kick/BundleProbe.java" "$ROOT/tests/kick/PlayerProbe.java"
 "$(build_tool d8)" --min-api 29 --lib "$ANDROID_HOME/platforms/android-36/android.jar" \
     --output "$out/dex" "$out/classes/"*.class
 (cd "$out/dex" && jar cf "$out/probe.jar" classes.dex)
@@ -29,3 +29,10 @@ result=$(adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app
 printf '%s\n' "$result"
 [[ "$result" == *"PASS: loader defaults"* && "$result" != *"Exception"* && "$result" != *"Error"* ]] ||
     die "bundle loader probe did not pass"
+# A fresh process: the player probe prepares its own main Looper and settings.
+result=$(adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin PlayerProbe $remote/app.apk" 2>&1) ||
+    true # Its output says what failed; the check below fails the run.
+printf '%s\n' "$result"
+[[ "$result" == *"PASS: Show video stats"* || "$result" == *"SKIP: Show video stats"* ]] &&
+    [[ "$result" == *"PASS: Mute stitched live ads"* || "$result" == *"SKIP: Mute stitched live ads"* ]] &&
+    [[ "$result" != *"Exception"* && "$result" != *"Error"* ]] || die "player probe did not pass"

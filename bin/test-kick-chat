@@ -18,4 +18,7 @@ trap 'adb -s "$serial" shell rm -rf "$remote" >/dev/null 2>&1 || true' EXIT
 adb -s "$serial" push "$apk" "$remote/app.apk" >/dev/null
 adb -s "$serial" push "$out/probe.jar" "$remote/probe.jar" >/dev/null
 adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin ChatBoundaryProbe $remote/app.apk" > "$out/captures.log"
+# The probe's own results (PASS and SKIP lines); the captured page scripts go to the browser check below.
+grep -v '^CAPTURE ' "$out/captures.log" || true
+grep -q '^PASS: Kick native response-to-page options' "$out/captures.log" || die "the native chat probe did not pass"
 python3 "$ROOT/tests/kick/test_chat_page.py" --native-captures "$out/captures.log"
