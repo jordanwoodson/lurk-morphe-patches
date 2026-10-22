@@ -12,6 +12,7 @@ import android.os.Build;
 
 import java.lang.reflect.Proxy;
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicLong;
 
 import io.github.jordanwoodson.extension.shared.Logger;
 
@@ -28,6 +29,13 @@ public final class Settings {
     private static volatile Context context;
     private static volatile Registry registry;
     private static Object openAction;
+
+    private static final AtomicLong CHANGES = new AtomicLong();
+    /** SharedPreferences keeps its listeners weakly, so this one lives here. */
+    private static final SharedPreferences.OnSharedPreferenceChangeListener WATCHER =
+            (preferences, key) -> CHANGES.incrementAndGet();
+    private static volatile SharedPreferences watched;
+    private static volatile SharedPreferences unwatchable;
 
     private Settings() {
     }
@@ -70,6 +78,32 @@ public final class Settings {
     /** The application context, or null before the app has one. */
     public static Context appContext() {
         return context();
+    }
+
+    /**
+     * A number that changes whenever a Lurk setting changes in this process, so code that turns settings into
+     * something costly (patterns, lists) can keep the result until then. -1 when changes can't be watched
+     * (no context yet, or preferences that take no listeners): read the settings every time.
+     */
+    public static long changes() {
+        SharedPreferences preferences = preferences();
+        if (preferences == null) return -1;
+        if (watched != preferences) {
+            synchronized (CHANGES) {
+                if (watched != preferences) {
+                    if (unwatchable == preferences) return -1;
+                    try {
+                        preferences.registerOnSharedPreferenceChangeListener(WATCHER);
+                    } catch (RuntimeException e) {
+                        unwatchable = preferences;
+                        return -1;
+                    }
+                    CHANGES.incrementAndGet();
+                    watched = preferences;
+                }
+            }
+        }
+        return CHANGES.get();
     }
 
     /** Injection point. The value picked for the choice {@code key} as a number, or 0 if it isn't one. */

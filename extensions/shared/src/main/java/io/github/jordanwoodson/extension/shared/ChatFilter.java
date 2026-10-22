@@ -62,10 +62,14 @@ public final class ChatFilter {
         final Pattern blockedWords;
         final Pattern highlightWords;
         final Pattern mention;
-        final Set<String> blockedUsers = new HashSet<>();
+        final Set<String> blockedUsers;
+        /** {@link Settings#changes()} when the settings were read; -1 when changes can't be watched. */
+        final long changes;
 
         Lists(String blockedWords, String blockedUsers, String highlightWords, boolean mentions, String self,
-              String selfName) {
+              String selfName, long changes) {
+            this.changes = changes;
+            this.blockedUsers = new HashSet<>();
             rawBlockedWords = blockedWords;
             rawBlockedUsers = blockedUsers;
             rawHighlightWords = highlightWords;
@@ -86,6 +90,21 @@ public final class ChatFilter {
             this.mention = wordsPattern(names);
         }
 
+        /** The same lists, read again at {@code changes}: an unrelated setting changed. */
+        private Lists(Lists same, long changes) {
+            rawBlockedWords = same.rawBlockedWords;
+            rawBlockedUsers = same.rawBlockedUsers;
+            rawHighlightWords = same.rawHighlightWords;
+            mentions = same.mentions;
+            self = same.self;
+            selfName = same.selfName;
+            blockedWords = same.blockedWords;
+            highlightWords = same.highlightWords;
+            mention = same.mention;
+            blockedUsers = same.blockedUsers;
+            this.changes = changes;
+        }
+
         boolean matches(String blockedWords, String blockedUsers, String highlightWords, boolean mentions,
                         String self, String selfName) {
             return rawBlockedWords.equals(blockedWords) && rawBlockedUsers.equals(blockedUsers)
@@ -101,17 +120,26 @@ public final class ChatFilter {
 
     /**
      * The current lists for the signed-in account: {@code self} its login and {@code selfName} another name
-     * that mentions it (a display name), both lowercase, "" when signed out or unknown.
+     * that mentions it (a display name), both lowercase, "" when signed out or unknown. Called for every chat
+     * message: the settings are only read again after one of the Lurk settings changed.
      */
     public static Lists lists(String self, String selfName) {
+        long changes = Settings.changes();
+        Lists current = lists;
+        if (current != null && changes >= 0 && current.changes == changes && current.self.equals(self)
+                && current.selfName.equals(selfName)) {
+            return current;
+        }
         String blockedWords = Settings.getText(BLOCKED_WORDS);
         String blockedUsers = Settings.getText(BLOCKED_USERS);
         String highlightWords = Settings.getText(HIGHLIGHT_WORDS);
         boolean mentions = Settings.isEnabled(MENTIONS);
-        Lists current = lists;
         if (current == null || !current.matches(blockedWords, blockedUsers, highlightWords, mentions, self, selfName)) {
-            lists = current = new Lists(blockedWords, blockedUsers, highlightWords, mentions, self, selfName);
+            current = new Lists(blockedWords, blockedUsers, highlightWords, mentions, self, selfName, changes);
+        } else if (current.changes != changes) {
+            current = new Lists(current, changes);
         }
+        lists = current;
         return current;
     }
 
@@ -162,14 +190,19 @@ public final class ChatFilter {
             lastVibration = now;
         }
         if (context == null) return;
-        Vibrator vibrator;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            VibratorManager manager = context.getSystemService(VibratorManager.class);
-            vibrator = manager == null ? null : manager.getDefaultVibrator();
-        } else {
-            vibrator = context.getSystemService(Vibrator.class);
+        try {
+            Vibrator vibrator;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                VibratorManager manager = context.getSystemService(VibratorManager.class);
+                vibrator = manager == null ? null : manager.getDefaultVibrator();
+            } else {
+                vibrator = context.getSystemService(Vibrator.class);
+            }
+            if (vibrator == null || !vibrator.hasVibrator()) return;
+            vibrator.vibrate(VibrationEffect.createOneShot(120, VibrationEffect.DEFAULT_AMPLITUDE));
+        } catch (SecurityException e) {
+            // An app (or a clone) without the VIBRATE permission: highlights still show, silently.
+            Logger.d("chat keywords: can't vibrate: " + e.getMessage());
         }
-        if (vibrator == null || !vibrator.hasVibrator()) return;
-        vibrator.vibrate(VibrationEffect.createOneShot(120, VibrationEffect.DEFAULT_AMPLITUDE));
     }
 }

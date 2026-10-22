@@ -15,7 +15,9 @@ doubles (no Android SDK, APK or device) and cover:
 - Registry.parse round trip: every field Java reads equals what Python reads from the same JSON;
 - defaults, stored values and wrongly typed stored values for every registered key;
 - failing closed: a missing, malformed, partly malformed or empty registry turns every switch off
-  and every choice and text to "" (0 as a number), whatever was stored.
+  and every choice and text to "" (0 as a number), whatever was stored;
+- ChatFilter keeps its keyword lists until a Lurk setting changes (Settings.changes()), reads them
+  every time from preferences that take no listeners, and survives a vibrator that refuses.
 """
 import json
 import re
@@ -41,6 +43,8 @@ ANDROID = {
         public static int w(String t,String m){return 0;} public static int w(String t,String m,Throwable e){return 0;}
         public static int e(String t,String m){return 0;} public static int e(String t,String m,Throwable e){return 0;} }''',
     'android/os/Bundle.java': 'package android.os; public class Bundle {}',
+    'android/os/SystemClock.java': '''package android.os; public class SystemClock {public static long now=100_000;
+        public static long uptimeMillis(){return now;} public static long elapsedRealtime(){return now;} }''',
     'android/os/Build.java': '''package android.os; public class Build {
         public static final String MANUFACTURER="Google",MODEL="Pixel Test";
         public static class VERSION {public static final int SDK_INT=36; public static final String RELEASE="16";}
@@ -48,7 +52,8 @@ ANDROID = {
     'android/content/Context.java': '''package android.content; public class Context {
         public static final int MODE_PRIVATE=0; public static final String ACCESSIBILITY_SERVICE="accessibility",AUDIO_SERVICE="audio";
         public static java.util.function.Function<String,SharedPreferences> preferences;
-        public Object getSystemService(String s){return null;} public <T>T getSystemService(Class<T> c){return null;}
+        public static java.util.function.Function<Class<?>,Object> services=c->null;
+        public Object getSystemService(String s){return null;} public <T>T getSystemService(Class<T> c){return c.cast(services.apply(c));}
         public Object getContentResolver(){return null;}
         public android.content.res.Resources getResources(){return new android.content.res.Resources();}
         public SharedPreferences getSharedPreferences(String name,int mode){return preferences.apply(name);}
@@ -133,6 +138,7 @@ ANDROID = {
 PROBE = r'''
 import android.content.Context;
 import android.content.SharedPreferences;
+import io.github.jordanwoodson.extension.shared.ChatFilter;
 import io.github.jordanwoodson.extension.shared.settings.Access;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
 import java.nio.charset.StandardCharsets;
@@ -142,14 +148,15 @@ import java.util.*;
 
 public class SettingsProbe {
   /** SharedPreferences as Android implements it for the parts Settings uses: typed reads cast. */
-  static final class Preferences implements SharedPreferences {
+  static class Preferences implements SharedPreferences {
     final Map<String,Object> values=new HashMap<>();
     final List<OnSharedPreferenceChangeListener> listeners=new ArrayList<>();
+    int reads;
     public Map<String,?> getAll(){return new HashMap<>(values);}
-    public String getString(String k,String d){Object v=values.get(k);return v==null?d:(String)v;}
-    public int getInt(String k,int d){Object v=values.get(k);return v==null?d:(Integer)v;}
-    public long getLong(String k,long d){Object v=values.get(k);return v==null?d:(Long)v;}
-    public boolean getBoolean(String k,boolean d){Object v=values.get(k);return v==null?d:(Boolean)v;}
+    public String getString(String k,String d){reads++;Object v=values.get(k);return v==null?d:(String)v;}
+    public int getInt(String k,int d){reads++;Object v=values.get(k);return v==null?d:(Integer)v;}
+    public long getLong(String k,long d){reads++;Object v=values.get(k);return v==null?d:(Long)v;}
+    public boolean getBoolean(String k,boolean d){reads++;Object v=values.get(k);return v==null?d:(Boolean)v;}
     public boolean contains(String k){return values.containsKey(k);}
     public void registerOnSharedPreferenceChangeListener(OnSharedPreferenceChangeListener l){listeners.add(l);}
     public void unregisterOnSharedPreferenceChangeListener(OnSharedPreferenceChangeListener l){listeners.remove(l);}
@@ -189,6 +196,7 @@ public class SettingsProbe {
       case "stored":Access.context(new Context());stored(read(a[1]));break;
       case "nocontext":nocontext(read(a[1]));break;
       case "empty":Access.context(new Context());empty(a.length>1?read(a[1]):null);break;
+      case "chatfilter":Access.context(new Context());chatFilter();break;
       default:throw new AssertionError(args[0]);
     }
     System.out.println("PASS settings "+a[0]+(a.length>1?" "+Paths.get(a[1]).getFileName():"")+": "+checks+" checks");
@@ -292,6 +300,57 @@ public class SettingsProbe {
       }
       for(String key:keys)p.edit().putBoolean(key,true).apply();
     }
+  }
+
+  static String entry(String key,String type,String def,String parent){
+    return "{\"key\":\""+key+"\",\"type\":\""+type+"\",\"title\":\""+key+"\",\"summary\":\"\",\"section\":\"Chat\","
+      +"\"default\":\""+def+"\",\"parent\":"+(parent==null?"null":"\""+parent+"\"")+",\"restart\":false}";
+  }
+
+  /** Chat keyword lists are read once and kept until a Lurk setting changes; vibrating can't crash. */
+  static void chatFilter()throws Exception{
+    install("{\"name\":\"Lurk\",\"version\":\"1\",\"app\":\"Test\",\"settings\":["+String.join(",",
+      entry("chat_keywords","switch","true",null),entry("chat_highlight_mentions","switch","true","chat_keywords"),
+      entry("chat_highlight_words","text","","chat_keywords"),entry("chat_blocked_words","text","","chat_keywords"),
+      entry("chat_blocked_users","text","","chat_keywords"),entry("lurk_test_other","switch","false",null))+"]}");
+    Preferences p=prefs();
+    check(Settings.changes()>=0,"preferences with listeners are watched");
+    ChatFilter.Lists first=ChatFilter.lists("me","");
+    p.reads=0;
+    for(int i=0;i<100;i++)check(ChatFilter.lists("me","")==first,"lists rebuilt without a change");
+    check(p.reads==0,"cached lists still read preferences "+p.reads+" times");
+    p.edit().putString("chat_highlight_words","lurk").apply();
+    ChatFilter.Lists changed=ChatFilter.lists("me","");
+    check(changed!=first,"a changed highlight word kept the old lists");
+    check(ChatFilter.classify("x","we lurk here",changed)==ChatFilter.HIGHLIGHT,"new word not highlighted");
+    check(ChatFilter.classify("x","hi @me",changed)==ChatFilter.HIGHLIGHT,"mention not highlighted");
+    p.edit().putBoolean("lurk_test_other",true).apply();
+    ChatFilter.Lists unrelated=ChatFilter.lists("me","");
+    check(ChatFilter.classify("x","we lurk here",unrelated)==ChatFilter.HIGHLIGHT,"unrelated change lost the word");
+    p.reads=0;
+    check(ChatFilter.lists("me","")==unrelated&&p.reads==0,"lists not cached after an unrelated change");
+    check(ChatFilter.lists("you","").self.equals("you"),"another account kept the old lists");
+    p.edit().putBoolean("chat_highlight_mentions",false).apply();
+    check(ChatFilter.classify("x","hi @you",ChatFilter.lists("you",""))==ChatFilter.NONE,"mentions switched off still highlight");
+    // Preferences that take no listeners (probe doubles) are read for every message.
+    Preferences deaf=new Preferences(){
+      @Override public void registerOnSharedPreferenceChangeListener(OnSharedPreferenceChangeListener l){throw new UnsupportedOperationException();}};
+    Context.preferences=name->deaf;
+    Access.context(new Context());
+    check(Settings.changes()==-1,"unwatchable preferences reported as watched");
+    deaf.values.put("chat_highlight_words","quiet");
+    check(ChatFilter.classify("x","be quiet",ChatFilter.lists("me",""))==ChatFilter.HIGHLIGHT,"unwatched change missed");
+    deaf.values.put("chat_highlight_words","loud");
+    check(ChatFilter.classify("x","be quiet",ChatFilter.lists("me",""))==ChatFilter.NONE,"unwatched change missed twice");
+    // An app without the VIBRATE permission: the highlight stays, the vibration is skipped.
+    int[] attempts={0};
+    android.os.Vibrator vibrator=new android.os.Vibrator(){
+      @Override public boolean hasVibrator(){return true;}
+      @Override public void vibrate(android.os.VibrationEffect e){attempts[0]++;throw new SecurityException("Requires VIBRATE permission");}};
+    android.os.VibratorManager manager=new android.os.VibratorManager(){@Override public android.os.Vibrator getDefaultVibrator(){return vibrator;}};
+    Context.services=type->type==android.os.VibratorManager.class?manager:null;
+    ChatFilter.vibrate(new Context(),"message-1");
+    check(attempts[0]==1,"vibrate was not attempted");
   }
 
   static void unknownIsOff(){
@@ -407,9 +466,9 @@ def main(argv):
             fixture.write_text(text, encoding='utf-8')
             scenarios += [f'registry|{fixture}|{Path(scratch) / (app + ".dump")}', f'defaults|{fixture}',
                           f'stored|{fixture}', f'nocontext|{fixture}', f'empty|{fixture}']
-        scenarios.append('empty')
+        scenarios += ['empty', 'chatfilter']
         run('SettingsProbe', ['settings/Settings.java', 'settings/Registry.java', 'settings/ResumedActivityTracker.java',
-                              'Logger.java'], PROBE, scenarios, extra=JSON_DOUBLE | ANDROID)
+                              'Logger.java', 'ChatFilter.java'], PROBE, scenarios, extra=JSON_DOUBLE | ANDROID)
         for app, root in roots.items():
             compare_dump(app, root, Path(scratch) / f'{app}.dump')
             print(f'PASS {app}: {len(root["settings"])} settings, layout and Java/Python reading agree')

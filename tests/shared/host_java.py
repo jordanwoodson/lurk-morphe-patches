@@ -148,6 +148,7 @@ STUBS = {
         public static boolean isEnabled(String k){return Boolean.parseBoolean(values.getOrDefault(k,"false"));}
         public static int getInt(String k){try{return Integer.parseInt(values.getOrDefault(k,"0"));}catch(NumberFormatException e){return 0;}}
         public static String getText(String k){return values.getOrDefault(k,"");}
+        public static long changes(){return -1;}
         public static android.content.Context appContext(){return null;} }''',
 }
 
