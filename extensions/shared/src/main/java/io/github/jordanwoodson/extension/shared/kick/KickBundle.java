@@ -3,6 +3,7 @@ package io.github.jordanwoodson.extension.shared.kick;
 import android.content.Context;
 import android.content.res.AssetManager;
 import android.os.SystemClock;
+import android.util.Log;
 import android.util.AtomicFile;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -116,7 +117,8 @@ public final class KickBundle {
             return prepared;
         } catch (Exception e) {
             // The APK still has the validated patch-time defaults. Do not load a stale private copy.
-            Logger.d("Kick Hermes: using embedded defaults: " + e);
+            Log.w(Logger.TAG, "Kick Hermes: Lurk settings that change Kick's JavaScript can't be applied, so their "
+                    + "patch-time defaults are in effect: " + e);
             return null;
         }
     }
