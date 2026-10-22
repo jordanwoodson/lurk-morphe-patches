@@ -17,6 +17,10 @@ import io.github.jordanwoodson.patches.kick.settings.kickMatch
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
+import io.github.jordanwoodson.patches.shared.parameterRegisters
+import io.github.jordanwoodson.patches.shared.requireLowRegisters
 
 private const val COMPOSER = "Lio/github/jordanwoodson/extension/shared/kick/KickComposer;"
 
@@ -56,7 +60,9 @@ internal val kickComposerPatch = bytecodePatch {
         calls.asReversed().forEach { (index, instruction) ->
             val call = instruction as FiveRegisterInstruction
             if (call.registerC != 0 || call.registerE != 2) throw PatchException("Kick composer: loader registers changed")
-            method.addInstructions(index + 1, "invoke-static { p0, p1, p2 }, $COMPOSER->afterMain(Ljava/lang/Object;Landroid/content/res/AssetManager;Ljava/lang/String;)V")
+            method.addInstructions(index + 1, invokeStatic(
+                "$COMPOSER->afterMain(Ljava/lang/Object;Landroid/content/res/AssetManager;Ljava/lang/String;)V",
+                *method.parameterRegisters().take(3).toIntArray()))
         }
         Fingerprint(definingClass = match.classDef.type, name = "loadScriptFromFile", returnType = "V",
             parameters = listOf("Ljava/lang/String;", "Ljava/lang/String;", "Z"))
@@ -67,6 +73,8 @@ internal val kickComposerPatch = bytecodePatch {
                 } ?: throw PatchException("Kick composer: no unique file load")
                 val registers = call.value as FiveRegisterInstruction
                 if (registers.registerC != 0 || registers.registerE != 2) throw PatchException("Kick composer: file registers changed")
+                // p0 and p2 aren't adjacent, so no range form: refuse a version where either is above v15.
+                requireLowRegisters("composer file delegate", parameterRegister(0), parameterRegister(2))
                 addInstructions(call.index + 1, "invoke-static { p0, p2 }, $COMPOSER->afterFile(Ljava/lang/Object;Ljava/lang/String;)V")
             }
         Fingerprint(definingClass = "Lcom/facebook/react/runtime/ReactInstance;", name = "destroy", returnType = "V", parameters = emptyList())
@@ -74,13 +82,16 @@ internal val kickComposerPatch = bytecodePatch {
                 "invoke-static/range { p0 .. p0 }, Lio/github/jordanwoodson/extension/shared/CompiledBundle;->release(Ljava/lang/Object;)V")
         Fingerprint(definingClass = "Lcom/reactnativecommunity/webview/RNCWebView;", name = "destroy", returnType = "V", parameters = emptyList())
             .kickMatch("WebView catalog disposal").method.addInstructions(0,
-                "invoke-static { p0 }, Lio/github/jordanwoodson/extension/shared/kick/KickChat;->onPageDisposed(Landroid/webkit/WebView;)V")
+                "invoke-static/range { p0 .. p0 }, Lio/github/jordanwoodson/extension/shared/kick/KickChat;->onPageDisposed(Landroid/webkit/WebView;)V")
         Fingerprint(definingClass = "Lcom/reactnativecommunity/webview/RNCWebView;", name = "onMessage", returnType = "V",
             parameters = listOf("Ljava/lang/String;", "Ljava/lang/String;"))
             .kickMatch("WebView catalog message boundary").method.apply {
                 if (implementation!!.registerCount < 4) throw PatchException("Kick composer: no message scratch register")
+                val onMessage = invokeStatic(
+                    "Lio/github/jordanwoodson/extension/shared/kick/KickChat;->onMessage(Landroid/webkit/WebView;Ljava/lang/String;Ljava/lang/String;)Z",
+                    *parameterRegisters().toIntArray())
                 addInstructionsWithLabels(0, """
-                    invoke-static { p0, p1, p2 }, Lio/github/jordanwoodson/extension/shared/kick/KickChat;->onMessage(Landroid/webkit/WebView;Ljava/lang/String;Ljava/lang/String;)Z
+                    $onMessage
                     move-result v0
                     if-eqz v0, :stock
                     return-void

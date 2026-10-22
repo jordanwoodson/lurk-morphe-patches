@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Run the actual injected bundle loader on the scratch Android emulator.
+# Check that Kick's code calls every expected extension hook, then run the actual injected bundle loader on
+# the scratch Android emulator.
 source "$(dirname "$0")/lib/common.sh"
 [[ $# == 1 && -f "$1" ]] || die "usage: bash bin/test-kick <patched.apk>"
 serial=${ANDROID_SERIAL:-emulator-5580}
@@ -7,6 +8,11 @@ out="$WORK/tests/kick"
 remote=/data/local/tmp/morphe-kick-test
 mkdir -p "$out/classes" "$out/dex" "$WORK/tmp"
 export TMPDIR="$WORK/tmp"
+
+# The default selection's hooks (tests/kick/expected-hooks.txt): a dropped injected call fails here.
+mapfile -t hooks < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "$ROOT/tests/kick/expected-hooks.txt")
+python3 -I "$ROOT/tests/verify_extension_calls.py" "$1" "${hooks[@]}"
+
 javac --release 17 -classpath "$ANDROID_HOME/platforms/android-36/android.jar" \
     -d "$out/classes" "$ROOT/tests/kick/BundleProbe.java"
 "$(build_tool d8)" --min-api 29 --lib "$ANDROID_HOME/platforms/android-36/android.jar" \
@@ -16,4 +22,7 @@ adb -s "$serial" shell mkdir -p "$remote"
 trap 'adb -s "$serial" shell rm -rf "$remote" >/dev/null 2>&1 || true' EXIT
 adb -s "$serial" push "$1" "$remote/app.apk" >/dev/null
 adb -s "$serial" push "$out/probe.jar" "$remote/probe.jar" >/dev/null
-adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin BundleProbe $remote/app.apk $remote/cache"
+result=$(adb -s "$serial" shell "CLASSPATH=$remote/probe.jar:$remote/app.apk app_process /system/bin BundleProbe $remote/app.apk $remote/cache" 2>&1)
+printf '%s\n' "$result"
+[[ "$result" == *"PASS: loader defaults"* && "$result" != *"Exception"* && "$result" != *"Error"* ]] ||
+    die "bundle loader probe did not pass"

@@ -717,10 +717,16 @@ Verification tools retained in this repository:
 - `tests/kick/verify_literals.py`: for literal-buffer edits, decodes every function and
   requires that only the intended array/object literals read the edited bytes, and that
   every choice value keeps each literal's tags, count and length. `test_hermes.py` runs it.
-- `bin/test-kick`: executes the injected Java loader on Android, checking defaults,
-  process snapshots, independent switches, the exact bytes of each choice value and
-  exact stock restoration; invokes the two Insider job guards and checks synchronous
-  completion without SDK dispatch.
+- `bin/test-kick`: first checks with `tests/verify_extension_calls.py` that Kick's code
+  calls every extension method in `tests/kick/expected-hooks.txt` (the default selection's
+  hooks), so an injected call Morphe dropped fails the run; then executes the injected Java
+  loader on Android, checking defaults, process snapshots, independent switches, the exact
+  bytes of each choice value, exact stock restoration and the reuse of the private copy;
+  invokes the two Insider job guards and checks synchronous completion without SDK dispatch.
+  Hand-written invokes in the Kick patches either use `/range`, copy a parameter into low
+  locals first (Datadog's `initialize`, whose promise is `v11` today) or call
+  `requireLowRegisters`, so a later Kick version with more locals fails at patch time instead
+  of losing the call.
 - `tests/kick/verify_privacy.py`: production share/PAL helpers with boundary doubles;
   31 assertions, including host spoofing, functional parameters and switch isolation.
 - `tests/kick/verify_quality.py`: interprets actual reset/setter instructions to

@@ -1,0 +1,54 @@
+# Extension methods that Kick's own code must call in an APK patched with the default selection.
+# bin/test-kick passes these to tests/verify_extension_calls.py: an injected call that Morphe dropped
+# (a non-range invoke above v15) shows up as a method nobody calls. One Class.method per line; # starts
+# a comment. Patches outside the default selection (Default video quality) are listed commented out.
+
+# Lurk settings and the Hermes bundle loader
+Settings.init
+Settings.isEnabled
+KickBundle.init
+KickBundle.prepare
+
+# Chat page: Show deleted messages, Ignore chat clears, Hide chat highlights, Third-party emotes
+KickChat.onWebViewCreated
+KickChat.onPageStarted
+KickChat.onPage
+KickChat.onPageDisposed
+KickChat.onMessage
+
+# Third-party emotes
+KickHttp.withInterceptor
+KickComposer.afterMain
+KickComposer.afterFile
+CompiledBundle.release
+
+# Disable analytics
+KickPrivacy.allowAnalyticsCollection
+KickPrivacy.unavailablePalNonce
+
+# Clean share links
+KickPrivacy.putShareExtra
+
+# Background audio
+KickPlayer.onUserLeaveHint
+KickPlayer.autoEnterPip
+KickPlayer.keepAudio
+KickPlayer.onResume
+
+# Normal latency
+KickPlayer.lowLatency
+
+# Sleep timer
+KickPlayer.onPlay
+KickPlayer.onStop
+KickPlayer.onViewPlay
+SleepTimer.guardPauseOperation
+
+# Default startup tab
+KickStartup.rewriteLaunch
+
+# AMOLED black
+KickTheme.applyWindow
+
+# Default video quality (not selected by default)
+# KickPlayer.autoQualityCeiling

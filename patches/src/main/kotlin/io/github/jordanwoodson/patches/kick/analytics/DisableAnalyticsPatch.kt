@@ -10,6 +10,8 @@ import io.github.jordanwoodson.patches.kick.settings.kickMatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.settings.kickSettingsPatch
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.shared.parameterRegister
+import io.github.jordanwoodson.patches.shared.requireLowRegisters
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.shared.settings.addInstructionsIfEnabled
@@ -48,12 +50,16 @@ val disableAnalyticsPatch = bytecodePatch(
     dependsOn(kickSettingsPatch, firebaseStartsDisabledPatch)
 
     execute {
-        // Resolve the original React Native completion contract, without dispatching an event task.
-        FirebaseEventFingerprint.kickMatch("Firebase event bridge").method.addInstructionsIfEnabled(KEY, """
-            const/4 v0, 0x0
-            invoke-interface { p3, v0 }, $REACT_PROMISE->resolve(Ljava/lang/Object;)V
-            return-void
-        """)
+        // Resolve the original React Native completion contract, without dispatching an event task. The method has
+        // one local, so the promise stays in its parameter register: refuse a version where that is above v15.
+        FirebaseEventFingerprint.kickMatch("Firebase event bridge").method.apply {
+            requireLowRegisters("Firebase event bridge", parameterRegister(3))
+            addInstructionsIfEnabled(KEY, """
+                const/4 v0, 0x0
+                invoke-interface { p3, v0 }, $REACT_PROMISE->resolve(Ljava/lang/Object;)V
+                return-void
+            """)
+        }
         // No scratch registers required: only transform the existing boolean argument.
         FirebaseCollectionFingerprint.kickMatch("Firebase collection setter").method.addInstructions(0, """
             invoke-static/range { p1 .. p1 }, $PRIVACY->allowAnalyticsCollection(Z)Z
@@ -82,18 +88,23 @@ val disableAnalyticsPatch = bytecodePatch(
                 return v0
             """)
         }
+        // The promise is copied next to the value, so the call never depends on how many locals Datadog adds.
         DatadogBridgeFingerprint.kickMatch("Datadog React initialization").method.addInstructionsIfEnabled(KEY, """
-            const/4 v0, 0x0
-            invoke-interface { p2, v0 }, $REACT_PROMISE->resolve(Ljava/lang/Object;)V
+            move-object/from16 v0, p2
+            const/4 v1, 0x0
+            invoke-interface { v0, v1 }, $REACT_PROMISE->resolve(Ljava/lang/Object;)V
             return-void
-        """)
+        """, locals = 2)
         // Hermes already handles this unavailable result. An unresolved Promise blocks its playback payload.
-        PalNonceFingerprint.kickMatch("PAL nonce bridge").method.addInstructionsIfEnabled(KEY, """
-            invoke-static { }, $PRIVACY->unavailablePalNonce()Ljava/util/Map;
-            move-result-object v0
-            invoke-interface { p3, v0 }, $EXPO_PROMISE->resolve(Ljava/lang/Object;)V
-            return-void
-        """)
+        PalNonceFingerprint.kickMatch("PAL nonce bridge").method.apply {
+            requireLowRegisters("PAL nonce bridge", parameterRegister(3))
+            addInstructionsIfEnabled(KEY, """
+                invoke-static { }, $PRIVACY->unavailablePalNonce()Ljava/util/Map;
+                move-result-object v0
+                invoke-interface { p3, v0 }, $EXPO_PROMISE->resolve(Ljava/lang/Object;)V
+                return-void
+            """)
+        }
 
         val startup = AnalyticsStartupFingerprint.kickMatch("analytics startup").method
         startup.requireLocals(2)
