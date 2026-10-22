@@ -50,7 +50,7 @@ jobs:
 
       # A failed host check stops the job before any release commit, tag or publication.
       - name: Setup pinned Hermes compilers
-        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
         with:
           install_args: npm:hermes-compiler@250829098.0.19 npm:hermes-compiler@260318099.0.4
 
