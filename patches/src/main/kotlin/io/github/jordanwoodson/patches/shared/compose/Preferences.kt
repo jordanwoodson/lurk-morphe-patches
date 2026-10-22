@@ -23,6 +23,41 @@ internal fun BytecodePatchContext.preferenceDefault(
     key: String,
     unbox: String,
 ): Pair<MutableMethod, Int> {
+    val reader = preferenceReader(app, preferences, key, unbox)
+    val code = reader.implementation!!.instructions.toList()
+    val unboxIndex = code.indexOfFirst { it is ReferenceInstruction && it.reference.toString() == unbox }
+    val nullCheck = (unboxIndex downTo 0).first { code[it].opcode == Opcode.IF_EQZ }
+    return reader to (code[nullCheck] as BuilderOffsetInstruction).target.location.index
+}
+
+/**
+ * Where a DataStore preference's stored value is read, `prefs[key] as T?`: the reader (see [preferenceDefault])
+ * and the index of the check-cast of the stored value to [boxed], so code inserted after it can replace a null
+ * (nothing stored) with another value. The stored value is in that instruction's register.
+ */
+internal fun BytecodePatchContext.preferenceStoredValue(
+    app: AppCode,
+    preferences: MutableClass,
+    key: String,
+    unbox: String,
+    boxed: String,
+): Pair<MutableMethod, Int> {
+    val reader = preferenceReader(app, preferences, key, unbox)
+    val code = reader.implementation!!.instructions.toList()
+    val casts = code.indices.filter {
+        code[it].opcode == Opcode.CHECK_CAST && (code[it] as ReferenceInstruction).reference.toString() == boxed
+    }
+    val cast = casts.singleOrNull() ?: throw app.error("expected one read of the $key preference, found ${casts.size}")
+    return reader to cast
+}
+
+/** The inner class method of [preferences] that reads [key]'s DataStore value and unboxes it with [unbox]. */
+private fun BytecodePatchContext.preferenceReader(
+    app: AppCode,
+    preferences: MutableClass,
+    key: String,
+    unbox: String,
+): MutableMethod {
     val constructor = preferences.methods.single { it.name == "<init>" && key in it.constStrings() }
     val constructorCode = constructor.implementation!!.instructions.toList()
     val keyIndex = constructorCode.indexOfFirst { it.constString() == key }
@@ -44,10 +79,5 @@ internal fun BytecodePatchContext.preferenceDefault(
     }
     val (readerClass, readerMethod) = readers.singleOrNull()
         ?: throw app.error("expected one reader for the $key preference, found ${readers.size}")
-    val reader = mutableTwin(readerClass, readerMethod)
-
-    val code = reader.implementation!!.instructions.toList()
-    val unboxIndex = code.indexOfFirst { it is ReferenceInstruction && it.reference.toString() == unbox }
-    val nullCheck = (unboxIndex downTo 0).first { code[it].opcode == Opcode.IF_EQZ }
-    return reader to (code[nullCheck] as BuilderOffsetInstruction).target.location.index
+    return mutableTwin(readerClass, readerMethod)
 }

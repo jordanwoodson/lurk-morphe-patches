@@ -283,6 +283,7 @@ finds its switch off after updating, unless it was changed on the screen before.
 | Hide category rows, Hide creator rows, Hide playlist rows | `home_hide_categories`, `home_hide_creators`, `home_hide_playlists` | when Home loads again |
 | Hide Home sections by title (text) | `home_hide_titles` | when Home loads again |
 | No autoplay of the next video, No feed previews | `autoplay_next_video_off`, `feed_previews_off` | after a restart |
+| Background audio by default | `background_audio` | after a restart |
 | Unlock Premium | `unlock_premium` | after signing in again |
 
 Resource patches (Lurk icon, Remove tracking permissions, Disable tracking SDKs, Clone app, Change app
@@ -507,6 +508,21 @@ Settings > Playback still works.
 - **Feed previews:** `playbackInFeedKey ?: ALWAYS_ON` becomes `?: OFF` while `feed_previews_off` is on. Home's featured video asks its
   player builder to play even when feed playback is off; the patch clears that flag, so the featured card
   follows the setting too.
+
+## Background audio by default
+
+Settings > Playback > Background Play offers picture-in-picture (1), sound only (2) and off (3), stored as the
+DataStore Int `backgroundPlayKey`. With nothing stored, `UserPreferenceManager`'s reader picks
+picture-in-picture where the device supports it, else sound only. The patch finds that reader the way Disable
+autoplay finds its defaults (key, field, synthetic accessor, the inner class method that unboxes the Int) and
+inserts after the `check-cast` of the stored value: while `background_audio` is on and nothing is stored, the
+value becomes sound only's (read from the enum constant `SOUND` with the getter the reader itself compares
+with), and Rumble's own mapping does the rest. A choice made in Rumble's settings is stored and wins. Only the
+stored value's register is used, since it is null on the path that changes it.
+
+Checked on 2026-10-22 on the emulator, signed out, with a VOD from Home's Editor Picks: switch off, Home moves
+the video into a picture-in-picture window; switch on (and a restart), Home leaves no window and the media
+session stays PLAYING, the position moving on in the background.
 
 ## Default video quality
 

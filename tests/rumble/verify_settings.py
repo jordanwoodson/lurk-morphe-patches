@@ -29,6 +29,7 @@ DEFAULTS = {
     "video_quality": "0",
     "autoplay_next_video_off": "false",
     "feed_previews_off": "false",
+    "background_audio": "false",
     "unlock_premium": "true",
     "block_update_prompts": "true",
     "exact_counts": "false",
