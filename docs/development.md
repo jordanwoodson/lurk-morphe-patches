@@ -167,6 +167,32 @@ Two things that bite: Morphe silently drops a non-range `invoke-*` whose registe
 v15 (use `/range` forms and check with `dexdump`), and the extension must not pull the Kotlin
 standard library into the patched app (`extensions/shared/build.gradle.kts` excludes it).
 
+### Rules that keep patches working across versions
+
+[CONTRIBUTING.md](../CONTRIBUTING.md#rules) has the full list; these are the ones the tooling
+relies on:
+
+- **Injected calls**: build them with `invokeStatic(method, registers...)` or
+  `invoke(kind, method, registers...)` from `patches/shared/Registers.kt`. Below v16 they emit the
+  plain form, above it the `/range` form, and they fail with a message when the registers aren't
+  contiguous instead of emitting a call that would vanish. `parameterRegister(i)` gives a
+  parameter's v register. Guard any hand-written invoke on `p` registers with
+  `requireLowRegisters(what, registers...)` or `requireLowParameterRegisters(what)`, so a later app
+  version that adds locals fails to patch rather than losing the call.
+- **Expected hooks**: each app's `tests/<app>/expected-hooks.txt` lists the extension methods its
+  patches call (`Class.method`, `#` comments). Add new hooks to it; `bin/verify-hooks` checks a
+  patched APK against it.
+- **Locators**: record every obfuscated name a fingerprint resolves with
+  `Locators.record("<app>.<patch>.<what>", typeOrMethod)` from `patches/shared/Locators.kt`. The app's
+  settings patch writes them into the patched APK as `assets/lurk/locators.json`; probes look names up
+  there instead of pinning R8's output.
+- **Versions**: only `shared/Constants.kt` names app versions; everything else reads
+  `COMPATIBILITY_<APP>.targets` (see [Version bumps](#version-bumps)).
+- **Settings**: a new patch is selected by default with its switch off, except lockout protection,
+  privacy that stays on the phone, nags and restoring expected behavior, and a same-named patch in
+  another app takes the same defaults. Patch-time-only changes (icon, name, clone, permissions) have no
+  switch and say so. A settings key is never renamed: users' values are stored under it.
+
 ## Testing
 
 Run `bin/test-host` for offline, APK-free checks with Python 3, Git, a JDK (21 recommended),

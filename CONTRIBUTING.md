@@ -60,7 +60,34 @@ the test probes and how releases work. Read it first, then:
   version fails to patch instead of patching wrong.
 - **Every behavior patch gets a Lurk setting**, registered only when that patch is included.
   With the setting off, the app must behave exactly as unpatched. Say "applies after a
-  restart" when the value is only read at startup.
+  restart" when the value is only read at startup. Changes that can only be made while
+  patching (the icon, the app name, a clone, removed permissions) have no setting, and their
+  description says so.
+- **Defaults: selected, switched off.** A new patch is selected in Manager by default and its
+  switch starts off, so a freshly patched app behaves like the stock one until you turn
+  things on. The description ends with "Starts off. Turn it on in Lurk settings > <Section>."
+  Switches start on only for lockout protection (Block update prompts), privacy that stays on
+  the phone (Don't save searches), nags (rating prompts) and restoring behavior users expect
+  (resuming videos when signed out). A patch with the same name in another app takes the same
+  defaults.
+- **Never rename a settings key.** Users' values are stored under it, and a renamed key resets
+  them on the next update without a word. Change the title and summary as you like; the key
+  stays.
+- **Build injected calls with `invokeStatic()`.** Morphe drops a non-range `invoke-*` whose
+  register is above v15 without an error: the patch applies and the call is missing. Use
+  `invokeStatic()` (or `invoke()`) from `patches/shared/Registers.kt`, which emits the `/range`
+  form when it has to, and guard a hand-written `invoke-static { p0, p1 }` with
+  `requireLowRegisters()` or `requireLowParameterRegisters()`. List each new hook in
+  `tests/<app>/expected-hooks.txt` (`Class.method`, one per line); `bin/verify-hooks` checks
+  that a patched APK calls every one.
+- **Record what you matched.** When a fingerprint resolves an obfuscated class or method, record
+  it with `Locators.record("<app>.<patch>.<what>", ...)` from `patches/shared/Locators.kt`. The
+  app's settings patch writes the records into the patched APK as `assets/lurk/locators.json`,
+  and probes read names from there instead of hard-coding R8's, so the next app version doesn't
+  mean rewriting them.
+- **App versions live in `shared/Constants.kt` only.** Code and messages that need the version
+  read it from `COMPATIBILITY_<APP>.targets`. `bin/test-host` fails on a literal like `"31.7.0"`
+  anywhere else under `patches/src`.
 - **Describe honestly.** The patch description is what users read in Manager: say what it
   does and what it doesn't. "Blocks the requests for display ads; ads stitched into the
   stream by the server still play" beats "Blocks ads".
