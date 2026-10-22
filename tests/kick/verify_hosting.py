@@ -3,7 +3,8 @@
 
 Usage (hermes-dec Python): verify_hosting.py stock.bundle patched.apk
 Or: verify_hosting.py stock.bundle patched.bundle manifest.json
-Pinned Kick 40.32.3 (functions found by name). React hooks, JSX, scheduler and routing are boundary doubles;
+Pinned to the Kick version in kick/shared/Constants.kt (functions found by name). React hooks, JSX, scheduler
+and routing are boundary doubles;
 compiler memo caches persist across renders. Random duration is seeded at its real
 memo slot (3 seconds). This does not run React Native or a real Pusher/network event.
 """

@@ -1,6 +1,7 @@
 package io.github.jordanwoodson.patches.kick.shared
 
 import app.morphe.patcher.patch.PatchException
+import io.github.jordanwoodson.patches.kick.shared.Constants.KICK_VERSION
 import io.github.jordanwoodson.patches.kick.shared.HermesOp.GET_BY_ID
 import io.github.jordanwoodson.patches.kick.shared.HermesOp.JMP_TRUE
 import io.github.jordanwoodson.patches.kick.shared.HermesOp.LOAD_CONST_UNDEFINED
@@ -46,7 +47,7 @@ internal class HermesBundle(input: ByteArray) {
         ensure(u32(32) == bytes.size, "file length does not match header")
         ensure(digest("SHA-1", bytes.copyOfRange(0, bytes.size - 20))
             .contentEquals(bytes.copyOfRange(bytes.size - 20, bytes.size)), "invalid SHA-1 footer")
-        ensure(bytes.sha256() == SOURCE_SHA256, "unrecognized Kick 40.32.3 bundle")
+        ensure(bytes.sha256() == SOURCE_SHA256, "unrecognized Kick ${KICK_VERSION} bundle")
         val functionCount = u32(40)
         val stringCount = u32(52)
         val overflowCount = u32(56)

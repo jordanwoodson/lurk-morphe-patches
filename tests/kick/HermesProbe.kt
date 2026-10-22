@@ -40,7 +40,7 @@ fun main(args: Array<String>) {
         loads = listOf("https://chat.mobile.kick.com"))
     val literals = bundle.instructions(chatConfig).filter { it.opcode == 2 } // NewObjectWithBufferLong
     check(bundle.objectKeys(literals[0]).take(3) == listOf("chatroomId", "subscriberBadges", "userCanModerate"))
-    check(bundle.objectKeys(literals[0]).size == 12) // 40.32.3 added channelLanguage.
+    check(bundle.objectKeys(literals[0]).size == 12) // With channelLanguage, which 40.32.1 lacked.
     check(bundle.objectKeys(literals[1]) == listOf("id", "slug", "username"))
     check(bundle.objectKeys(literals[2]) == listOf("uri"))
     rejects { bundle.objectKeys(bundle.instructions(chatConfig).first()) }

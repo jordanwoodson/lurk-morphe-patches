@@ -362,7 +362,7 @@ and passes it a JSON `config` URL parameter: the chatroom and channel IDs, the v
 connection and draws every chat line, including deletions, bans, subs, gifts, hosts and
 reward redemptions. The app's own chat store has handlers for the same events
 (`handleDeleteChatMessageEvent`, `handleClearChatEvent`, `handleSubscriptionEvent` and
-others), but in 40.32.1 nothing calls most of them, and the entries it keeps are only drawn
+others), but in 40.32.1 and 40.32.3 nothing calls most of them, and the entries it keeps are only drawn
 by VOD chat replay. Chat lines are changed through that config, and through a script Lurk runs in the
 page (see [Chat page script](#chat-page-script)).
 

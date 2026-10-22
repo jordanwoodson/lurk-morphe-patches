@@ -18,4 +18,7 @@ object Constants {
             AppTarget(version = "40.32.3"),
         ),
     )
+
+    /** The one Kick version the patches target, for messages. The version is written only in [COMPATIBILITY_KICK]. */
+    val KICK_VERSION: String get() = "${COMPATIBILITY_KICK.targets.single().version}"
 }
