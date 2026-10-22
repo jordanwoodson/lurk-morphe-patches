@@ -8,7 +8,7 @@ import app.morphe.patcher.opcode
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
 
-// The Gson DTO and its field keep their names in 3.21.0; the getter is obfuscated.
+// The Gson DTO and its field keep their names; the getter is obfuscated.
 // Match the field read itself so additional boolean getters cannot select the wrong flag.
 internal object ProfilePremiumFingerprint : Fingerprint(
     definingClass = "Lcom/rumble/network/dto/profile/UserProfile;",

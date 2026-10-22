@@ -8,6 +8,7 @@ import com.android.tools.smali.dexlib2.AccessFlags
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.constructorParameterType
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.rumble.shared.unitReference
@@ -31,8 +32,9 @@ val dontSaveSearchesPatch = bytecodePatch(
         val constructor = SearchViewModelConstructorFingerprint.single("SearchViewModel constructor").method
 
         // Saving a search and updating its time return Unit, as after a write.
-        listOf("saveQueryUseCase", "updateQueryUseCase").forEach { name ->
+        listOf("saveQueryUseCase" to "save", "updateQueryUseCase" to "update").forEach { (name, locator) ->
             useCase(constructor, name).apply {
+                Locators.record("rumble.no_search_history.$locator", this)
                 addInstructionsIfEnabled(
                     KEY,
                     """
@@ -44,7 +46,9 @@ val dontSaveSearchesPatch = bytecodePatch(
         }
         // The recent searches under the search box (and the ones filtered as you type) are empty. The table
         // keeps its rows, so turning the switch off brings them back.
-        useCase(constructor, "getRecentQueriesUseCase").addInstructionsIfEnabled(
+        useCase(constructor, "getRecentQueriesUseCase").also {
+            Locators.record("rumble.no_search_history.recent", it)
+        }.addInstructionsIfEnabled(
             KEY,
             """
                 invoke-static { }, Ljava/util/Collections;->emptyList()Ljava/util/List;

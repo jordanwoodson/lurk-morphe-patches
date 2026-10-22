@@ -91,19 +91,64 @@ public final class RumblePlayer {
         if (video != null) PLAYERS.put(video, new WeakReference<>(player));
     }
 
+    /** The tap action per video, so the clickable modifier of a panel drawn again compares equal. */
+    private static final Map<Object, Object> RELOADS = Collections.synchronizedMap(new WeakHashMap<>());
+    private static Object reloadWithoutVideo;
+    /** The last panels' (modifier, video, clickable modifier), so a panel drawn again gets the same modifier. */
+    private static final int REMEMBERED = 4;
+    private static final Object[][] REFRESHABLE = new Object[REMEMBERED][];
+    private static int nextRefreshable;
+
     /**
      * Injection point: the start of the player's error panel, with its modifier and video. While Refresh
-     * stream is on, a tap on the panel reloads the video's player.
+     * stream is on, a tap on the panel reloads the video's player. The panel is drawn again on every
+     * recomposition: the same modifier and video get the same clickable modifier back, and the same video the
+     * same tap action, so Compose can skip what didn't change.
      */
     public static Object refreshable(Object modifier, Object video) {
         if (modifier == null || !Settings.isEnabled(REFRESH)) return modifier;
+        synchronized (REFRESHABLE) {
+            for (Object[] remembered : REFRESHABLE) {
+                if (remembered != null && ((WeakReference<?>) remembered[0]).get() == modifier
+                        && ((WeakReference<?>) remembered[1]).get() == video) {
+                    Object clickable = ((WeakReference<?>) remembered[2]).get();
+                    if (clickable != null) return clickable;
+                }
+            }
+        }
         try {
-            Object onClick = function("kotlin.jvm.functions.Function0", () -> reload(video));
-            Object clickable = clickable(modifier, onClick);
-            return clickable == null ? modifier : clickable;
+            Object clickable = clickable(modifier, reloadAction(video));
+            if (clickable == null) return modifier;
+            synchronized (REFRESHABLE) {
+                REFRESHABLE[nextRefreshable] = new Object[]{
+                        new WeakReference<>(modifier), new WeakReference<>(video), new WeakReference<>(clickable)};
+                nextRefreshable = (nextRefreshable + 1) % REMEMBERED;
+            }
+            return clickable;
         } catch (RuntimeException e) {
             Logger.d("refresh: " + e);
             return modifier;
+        }
+    }
+
+    /** The Function0 that reloads {@code video}'s player, made once per video. */
+    private static Object reloadAction(Object video) {
+        if (video == null) {
+            synchronized (RELOADS) {
+                if (reloadWithoutVideo == null) {
+                    reloadWithoutVideo = function("kotlin.jvm.functions.Function0", () -> reload(null));
+                }
+                return reloadWithoutVideo;
+            }
+        }
+        synchronized (RELOADS) {
+            Object action = RELOADS.get(video);
+            if (action == null) {
+                WeakReference<Object> target = new WeakReference<>(video);
+                action = function("kotlin.jvm.functions.Function0", () -> reload(target.get()));
+                RELOADS.put(video, action);
+            }
+            return action;
         }
     }
 

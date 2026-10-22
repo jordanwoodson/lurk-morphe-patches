@@ -23,6 +23,7 @@ public final class RumblePlayback {
     static final String LIVE = "video_quality_live";
     static final String MOBILE = "video_quality_mobile";
     static final String REMEMBER_SPEED = "remember_speed";
+    static final String DEFAULT_SPEED = "default_speed";
     static final String AUDIO_FOCUS = "audio_focus";
 
     /** Lurk's own state for Rumble (not user choices, which are in the settings file). */
@@ -123,29 +124,65 @@ public final class RumblePlayback {
     // ---------------------------------------------------------------------------------------------
     // Remember playback speed
 
+    /** Whether a speed was picked since Rumble last reset its speeds to 1x. */
+    private static volatile boolean pickedSinceReset;
+
     /** Injection point: a speed picked in the player (a constant of Rumble's speed enum). */
     public static void onSpeedPicked(Enum<?> speed) {
-        if (speed == null || !Settings.isEnabled(REMEMBER_SPEED)) return;
+        if (speed == null) return;
+        pickedSinceReset = true;
+        if (!on(REMEMBER_SPEED)) return;
         speedInMemory = speed.name();
         SharedPreferences state = state();
         if (state != null) state.edit().putString(SPEED, speed.name()).apply();
     }
 
+    /** Injection point: Rumble setting every speed back to 1x (its player service starting over). */
+    public static void onSpeedReset() {
+        pickedSinceReset = false;
+    }
+
     /**
-     * Injection point: the speed a player starts at. Returns the speed last picked while the switch is on,
-     * or null for Rumble's own (1x after a restart). {@code normal} is the enum's 1x constant.
+     * Injection point: the speed a player starts at. Returns the speed last picked while Remember playback speed
+     * is on; otherwise, until a speed is picked, the default playback speed; else null for Rumble's own (1x
+     * unless picked). {@code normal} is the enum's 1x constant.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static Enum<?> rememberedSpeed(Enum<?> normal) {
-        if (normal == null || !Settings.isEnabled(REMEMBER_SPEED)) return null;
-        SharedPreferences state = state();
-        String name = state != null ? state.getString(SPEED, null) : speedInMemory;
+        if (normal == null) return null;
+        String name = null;
+        if (on(REMEMBER_SPEED)) {
+            SharedPreferences state = state();
+            name = state != null ? state.getString(SPEED, null) : speedInMemory;
+        }
+        if (name == null && !pickedSinceReset) name = defaultSpeedName();
         if (name == null) return null;
         try {
             return Enum.valueOf((Class) normal.getDeclaringClass(), name);
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    /** The default playback speed as a constant name of Rumble's speed enum, or null for 1x. */
+    static String defaultSpeedName() {
+        if (!Settings.isRegistered(DEFAULT_SPEED)) return null;
+        switch (Settings.getInt(DEFAULT_SPEED)) {
+            case 25: return "SPEED_0_25";
+            case 50: return "SPEED_0_5";
+            case 75: return "SPEED_0_75";
+            case 90: return "SPEED_0_9";
+            case 125: return "SPEED_1_25";
+            case 150: return "SPEED_1_5";
+            case 175: return "SPEED_1_75";
+            case 200: return "SPEED_2";
+            default: return null;
+        }
+    }
+
+    /** Whether a switch of an included patch is on; keys of patches left out count as off. */
+    private static boolean on(String key) {
+        return Settings.isRegistered(key) && Settings.isEnabled(key);
     }
 
     private static SharedPreferences state() {
@@ -194,13 +231,39 @@ public final class RumblePlayback {
     public static void onPlayingChanged(Object listener, boolean playing) {
         if (!pauseActionSet) {
             pauseActionSet = true;
-            SleepTimer.setPauseAction(RumblePlayback::pauseByMediaKey);
+            SleepTimer.setPauseAction(RumblePlayback::pauseStarted);
         }
         if (playing) SleepTimer.onPlay(listener);
         else SleepTimer.onStop(listener);
     }
 
-    /** Pauses through Rumble's media session, as a headset's pause button would, including in the background. */
+    /**
+     * Pauses each player service whose listener reported playback, through the pause Rumble's media session
+     * uses. Only when none could be paused does it fall back to a media key, which the system sends to the
+     * active media session, possibly another app's.
+     */
+    static void pauseStarted() {
+        int paused = 0;
+        for (Object listener : SleepTimer.started()) {
+            try {
+                if (pausePlayer(listener)) paused++;
+            } catch (Throwable t) {
+                Logger.d("sleep timer: " + t);
+            }
+        }
+        if (paused > 0) {
+            Logger.d("sleep timer: paused " + paused + " player" + (paused == 1 ? "" : "s"));
+        } else {
+            pauseByMediaKey();
+        }
+    }
+
+    /** Replaced at patch time: pauses the player of a player service listener; false if it has none. */
+    private static boolean pausePlayer(Object listener) {
+        return false;
+    }
+
+    /** Fallback: a media key, as a headset's pause button would send, to the system's active media session. */
     static void pauseByMediaKey() {
         Context context = Settings.appContext();
         AudioManager audio = context == null ? null : context.getSystemService(AudioManager.class);

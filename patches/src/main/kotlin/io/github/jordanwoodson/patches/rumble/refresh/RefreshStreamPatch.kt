@@ -17,9 +17,10 @@ import io.github.jordanwoodson.patches.rumble.settings.AppInfoSectionFingerprint
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PLAYER
 import io.github.jordanwoodson.patches.shared.bridge
-import io.github.jordanwoodson.patches.rumble.shared.calls
+import io.github.jordanwoodson.patches.shared.compose.calls
 import io.github.jordanwoodson.patches.rumble.shared.clickableCall
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -101,13 +102,19 @@ val refreshStreamPatch = bytecodePatch(
         // plays which video, so the error panel of a video reloads its own player.
         val chooser = VideoSourceSelectionFingerprint.single("video source selection").method
         val chooserCall = "${chooser.definingClass}->${chooser.name}(${chooser.parameterTypes.joinToString("")})${chooser.returnType}"
-        player.methods.singleOrNull {
+        val videoLoad = player.methods.singleOrNull {
             it.parameterTypes.size == 1 && it.returnType == source && it.calls(chooserCall)
-        }?.addInstruction(0, "invoke-static/range { p0 .. p1 }, $RUMBLE_PLAYER->onVideoLoaded(Ljava/lang/Object;Ljava/lang/Object;)V")
-            ?: throw PatchException("Rumble: no video load method in the player")
+        } ?: throw PatchException("Rumble: no video load method in the player")
+        videoLoad.addInstruction(0, "invoke-static/range { p0 .. p1 }, $RUMBLE_PLAYER->onVideoLoaded(Ljava/lang/Object;Ljava/lang/Object;)V")
 
         // The error panel becomes clickable while the switch is on.
         val errorView = MobileErrorViewFingerprint.single("player error panel").method
+        Locators.record("rumble.refresh_stream.player", player.type)
+        Locators.record("rumble.refresh_stream.quality_switch", switch)
+        Locators.record("rumble.refresh_stream.video_load", videoLoad)
+        Locators.record("rumble.refresh_stream.error_view", errorView)
+        Locators.record("rumble.refresh_stream.quality_callback", callback.toString())
+        Locators.record("rumble.refresh_stream.current_source", currentSource)
         val modifier = errorView.parameterTypes[0].toString()
         val clickable = AppInfoSectionFingerprint.single("App Info settings section").method.clickableCall(modifier)
         bridge(

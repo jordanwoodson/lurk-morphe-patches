@@ -1,7 +1,7 @@
 package io.github.jordanwoodson.patches.rumble.tipping
 
 import app.morphe.patcher.Fingerprint
-import io.github.jordanwoodson.patches.rumble.shared.dtoGetterFingerprint
+import io.github.jordanwoodson.patches.shared.compose.dtoGetterFingerprint
 
 // The channel action buttons (Follow, Join, Tip, Shop), drawn from a list of the button types to show.
 internal object CreatorActionButtonsFingerprint : Fingerprint(

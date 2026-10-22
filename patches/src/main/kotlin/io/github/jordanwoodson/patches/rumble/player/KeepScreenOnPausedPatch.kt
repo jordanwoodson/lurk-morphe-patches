@@ -16,9 +16,12 @@ import com.android.tools.smali.dexlib2.iface.reference.TypeReference
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PLAYER
-import io.github.jordanwoodson.patches.rumble.shared.parameterRegister
 import io.github.jordanwoodson.patches.rumble.shared.single
+import io.github.jordanwoodson.patches.shared.compose.calls
+import io.github.jordanwoodson.patches.shared.compose.mutableTwin
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 
@@ -39,12 +42,13 @@ val keepScreenOnPausedPatch = bytecodePatch(
         val helperCall = "${helper.definingClass}->${helper.name}(Landroid/content/Context;Z)V"
         val paused = classDefByStrings("Paused(isBuffering=", StringComparisonType.EQUALS).singleOrNull()
             ?: throw PatchException("Rumble: expected one Paused player state")
+        Locators.record("rumble.keep_screen_on_paused.paused_state", paused.type)
 
         // The player's state effect turns the screen on unless it is paused or finished (outside an ad).
         val lambdas = mutableListOf<Pair<ClassDef, Method>>()
         classDefForEach { classDef ->
             classDef.methods.filter { method ->
-                method.implementation?.instructions?.any { it is ReferenceInstruction && it.reference.toString() == helperCall } == true &&
+                method.calls(helperCall) &&
                     method.implementation!!.instructions.any {
                         it.opcode == Opcode.INSTANCE_OF && ((it as ReferenceInstruction).reference as TypeReference).type == paused.type
                     }
@@ -53,10 +57,7 @@ val keepScreenOnPausedPatch = bytecodePatch(
         val (lambdaClass, lambdaMethod) = lambdas.singleOrNull()
             ?: throw PatchException("Rumble: expected one player state effect, found ${lambdas.size}")
         if (AccessFlags.STATIC.isSet(lambdaMethod.accessFlags)) throw PatchException("Rumble: unexpected state effect")
-        val method = mutableClassDefBy(lambdaClass).methods.single {
-            it.name == lambdaMethod.name && it.parameterTypes.map(CharSequence::toString) ==
-                lambdaMethod.parameterTypes.map(CharSequence::toString)
-        }
+        val method = mutableTwin(lambdaClass, lambdaMethod)
         val code = method.implementation!!.instructions.toList()
 
         // The state is read as reader(this.field) right before the Paused check.

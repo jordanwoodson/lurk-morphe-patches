@@ -6,12 +6,17 @@ import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.rumble.shared.RUMBLE
+import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PRIVACY
 import io.github.jordanwoodson.patches.rumble.shared.kotlinObject
-import io.github.jordanwoodson.patches.rumble.shared.newInstanceTypes
-import io.github.jordanwoodson.patches.rumble.shared.parameters
+import io.github.jordanwoodson.patches.shared.compose.newInstanceTypes
+import io.github.jordanwoodson.patches.shared.compose.parameters
 import io.github.jordanwoodson.patches.rumble.shared.singleMethod
-import io.github.jordanwoodson.patches.rumble.shared.staticFieldReads
+import io.github.jordanwoodson.patches.shared.compose.staticFieldReads
 import io.github.jordanwoodson.patches.rumble.shared.unitReference
+import io.github.jordanwoodson.patches.shared.Locators
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.shared.settings.addInstructionsIfEnabled
@@ -36,14 +41,15 @@ val disableAnalyticsPatch = bytecodePatch(
         key = "keepWatchProgress",
         default = false,
         title = "Keep watch progress",
-        description = "Keep sending watch progress (video, position and player state). Rumble may use it for " +
-            "your watch history and for creators' view counts. Can be changed later in Settings > Lurk.",
+        description = "Keep sending watch progress events (video, position and player state), and only those. " +
+            "They carry your user ID, advertising ID and AppsFlyer ID. Rumble may use them for your watch history " +
+            "and for creators' view counts. Can be changed later in Lurk settings > Privacy.",
     )
 
     execute {
         val repository = EventRepositoryFingerprint.matchAllOrNull()?.singleOrNull()?.classDef
             ?: throw PatchException("Rumble: expected exactly one event repository. " +
-                "This patch targets 3.21.0; recheck the analytics code before updating compatibility.")
+                "This patch targets Rumble ${RUMBLE.version}; recheck the analytics code before updating compatibility.")
 
         // send(events: List, ...6 strings, continuation): every e.rumble.com upload.
         val sendEvents = repository.singleMethod("event upload") { method ->
@@ -69,25 +75,25 @@ val disableAnalyticsPatch = bytecodePatch(
         )
         val watchProgress = WatchProgressEventToStringFingerprint.matchAllOrNull()?.singleOrNull()?.classDef?.type
             ?: throw PatchException("Rumble: expected exactly one WatchProgressEvent class")
+        Locators.record("rumble.disable_analytics.repository", repository.type)
+        Locators.record("rumble.disable_analytics.watch_progress_event", watchProgress)
 
-        // Rumble sends watch progress in its own uploads. While it's kept, let a list through when it
-        // holds any.
+        // Rumble batches watch progress with the other events. While it's kept, only the watch progress events
+        // of a batch go out; a batch without any is answered with Success. The method hands its arguments
+        // straight to a coroutine (no state machine), so replacing the list parameter is safe.
+        val events = sendEvents.parameterRegister(1)
         sendEvents.addInstructionsIfEnabled(
             KEY,
             """
                 ${isEnabled(KEEP_WATCH_PROGRESS_KEY, "v0")}
                 if-eqz v0, :skip
-                invoke-interface { p1 }, Ljava/util/List;->iterator()Ljava/util/Iterator;
+                move-object/from16 v0, p1
+                const-class v1, $watchProgress
+                ${invokeStatic("$RUMBLE_PRIVACY->watchProgressOnly(Ljava/util/List;Ljava/lang/Class;)Ljava/util/List;", 0, 1)}
                 move-result-object v0
-                :next
-                invoke-interface { v0 }, Ljava/util/Iterator;->hasNext()Z
-                move-result v1
-                if-eqz v1, :skip
-                invoke-interface { v0 }, Ljava/util/Iterator;->next()Ljava/lang/Object;
-                move-result-object v1
-                instance-of v1, v1, $watchProgress
-                if-nez v1, :lurk_off
-                goto :next
+                if-eqz v0, :skip
+                move-object/16 v$events, v0
+                goto :lurk_off
                 :skip
                 sget-object v0, $success
                 return-object v0
@@ -115,7 +121,8 @@ val disableAnalyticsPatch = bytecodePatch(
             SwitchSetting(
                 KEEP_WATCH_PROGRESS_KEY,
                 "Keep watch progress",
-                "Still send watch progress, which Rumble may use for your watch history.",
+                "Still send watch progress events, and only those, which Rumble may use for your watch history. " +
+                    "They carry your user ID, advertising ID and AppsFlyer ID.",
                 Section.PRIVACY,
                 default = keepWatchProgress == true,
                 parent = KEY,

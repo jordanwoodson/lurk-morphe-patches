@@ -37,3 +37,11 @@ internal object CachedConsentHasDecisionFingerprint : Fingerprint(
         opcode(Opcode.RETURN, MatchAfterImmediately()),
     ),
 )
+
+// Rumble's consent service hands each decision to every tracker (AppsFlyer, Firebase, Facebook, Airship).
+// Its constructor checks its parameters by name.
+internal object ConsentServiceFingerprint : Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.CONSTRUCTOR),
+    returnType = "V",
+    strings = listOf("trackers", "sendDebugLogEventUseCase", "getAdvertisingIdUseCase"),
+)

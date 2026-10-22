@@ -11,6 +11,7 @@ import app.morphe.patcher.util.smali.ExternalLabel
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.ClassDef
+import com.android.tools.smali.dexlib2.iface.Method
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
@@ -19,10 +20,15 @@ import com.android.tools.smali.dexlib2.iface.reference.TypeReference
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.enumConstant
 import io.github.jordanwoodson.patches.rumble.shared.enumWith
 import io.github.jordanwoodson.patches.rumble.shared.hideBottomTab
 import io.github.jordanwoodson.patches.rumble.shared.single
+import io.github.jordanwoodson.patches.shared.compose.mutableTwin
+import io.github.jordanwoodson.patches.shared.invoke
+import io.github.jordanwoodson.patches.shared.parameterRegister
+import io.github.jordanwoodson.patches.shared.requireLowRegisters
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.shared.settings.addInstructionsIfEnabled
@@ -34,8 +40,7 @@ private const val KEY = "hide_shorts"
 val hideShortsPatch = bytecodePatch(
     name = "Hide Shorts",
     description = "Removes Shorts from the bottom bar, Home, My Feed, channel pages, categories and search. " +
-        "Shorts links still open.",
-    default = false,
+        "Shorts links still open. Starts off. Turn it on in Lurk settings > Interface.",
 ) {
     compatibleWith(COMPATIBILITY_RUMBLE)
     dependsOn(settingsPatch)
@@ -44,25 +49,32 @@ val hideShortsPatch = bytecodePatch(
         hideBottomTab("ShortsScreen", KEY)
 
         // The Shorts row, wherever it appears.
-        ShortsListViewFingerprint.single("ShortsListView composable").method.addInstructionsIfEnabled(KEY, "return-void")
+        ShortsListViewFingerprint.single("ShortsListView composable").method
+            .also { Locators.record("rumble.hide_shorts.shorts_list_view", it) }
+            .addInstructionsIfEnabled(KEY, "return-void")
 
         // Home: treat a "shorts" section like one the server hides, so it is neither loaded nor drawn.
-        HomeSectionKindFingerprint.single("HomeSectionKind parser").method.addInstructionsIfEnabled(
-            KEY,
-            """
-                const-string v0, "shorts"
-                invoke-virtual { v0, p1 }, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
-                move-result v0
-                if-eqz v0, :lurk_off
-                sget-object v0, Lcom/rumble/network/dto/home/HomeSectionKind;->HIDE:Lcom/rumble/network/dto/home/HomeSectionKind;
-                return-object v0
-            """,
-        )
+        HomeSectionKindFingerprint.single("HomeSectionKind parser").method.apply {
+            val kind = parameterRegister(1)
+            val hide = classDefBy(returnType).enumConstant("HIDE")
+            addInstructionsIfEnabled(
+                KEY,
+                """
+                    const-string v0, "shorts"
+                    ${invoke("invoke-virtual", "Ljava/lang/String;->equals(Ljava/lang/Object;)Z", 0, kind)}
+                    move-result v0
+                    if-eqz v0, :lurk_off
+                    sget-object v0, $hide
+                    return-object v0
+                """,
+            )
+        }
 
         // Channel pages: drop the "shorts" tab, unless it is the channel's only one. The getter has
         // two registers (the list and this), so this doubles as the size and the copy.
         CreatorTabsFingerprint.single("Creator.tabs getter").method.apply {
             val list = getInstruction<OneRegisterInstruction>(0).registerA
+            requireLowRegisters("Hide Shorts", list, parameterRegister(0))
             addInstructionsWithLabels(
                 1,
                 """
@@ -92,6 +104,7 @@ val hideShortsPatch = bytecodePatch(
                 "Hide Shorts",
                 "The Shorts tab and rows, and Shorts on channels, categories and search.",
                 Section.INTERFACE,
+                default = false,
                 restart = true,
             ),
         )
@@ -103,7 +116,7 @@ private fun BytecodePatchContext.hideCategoryShortsTab() {
     val contentType = enumWith("SHORTS", "REPOSTS", "CATEGORIES", "LIVE_STREAM")
     val shorts = contentType.enumConstant("SHORTS")
 
-    val builders = mutableListOf<Pair<ClassDef, String>>()
+    val builders = mutableListOf<Pair<ClassDef, Method>>()
     classDefForEach { classDef ->
         classDef.methods.filter { method ->
             method.parameterTypes.map { it.toString() } == listOf("Z") && method.returnType == "Ljava/util/List;" &&
@@ -111,12 +124,12 @@ private fun BytecodePatchContext.hideCategoryShortsTab() {
                     it.opcode == Opcode.FILLED_NEW_ARRAY &&
                         ((it as ReferenceInstruction).reference as TypeReference).type == "[${contentType.type}"
                 } == true
-        }.forEach { builders += classDef to it.name }
+        }.forEach { builders += classDef to it }
     }
-    val (builderClass, builderName) = builders.singleOrNull()
+    val (builderClass, builder) = builders.singleOrNull()
         ?: throw PatchException("Rumble: expected one category tab builder, found ${builders.size}")
 
-    mutableClassDefBy(builderClass).methods.single { it.name == builderName && it.parameterTypes.size == 1 }.apply {
+    mutableTwin(builderClass, builder).apply {
         val instructions = implementation!!.instructions.toList()
         val array = instructions.indexOfFirst { it.opcode == Opcode.FILLED_NEW_ARRAY }
         val arrayRegisters = (instructions[array] as FiveRegisterInstruction).let {
