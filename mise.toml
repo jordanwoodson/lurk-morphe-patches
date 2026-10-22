@@ -1,5 +1,5 @@
 # Analysis tools for this workspace. `mise install` (or bin/bootstrap) fetches them.
-# The JDK is not managed here: builds use $JAVA_HOME (~/.local/opt/jdk-21 on the server).
+# The JDK (21 or newer) and the Android SDK are not managed here: builds use $JAVA_HOME and $ANDROID_HOME.
 [tools]
 "github:skylot/jadx" = "1.5.6"
 "github:EFForg/apkeep" = "1.1.0"
