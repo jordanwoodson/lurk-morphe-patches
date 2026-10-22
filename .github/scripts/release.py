@@ -557,7 +557,18 @@ def release(repo: str, branch: str, pre: str | None, head: str, dry_run: bool,
         raise
     git("tag", version.tag)
     # Atomic: the branch never gets a release commit without its tag, or the other way round.
-    git("push", "--atomic", "origin", f"HEAD:refs/heads/{branch}", f"refs/tags/{version.tag}")
+    if not git_ok("push", "--atomic", "origin", f"HEAD:refs/heads/{branch}", f"refs/tags/{version.tag}"):
+        # The branch moved while this run worked, typically a stable release's back-merge into dev.
+        # Drop the local release commit and tag, keep unrelated work, and plan again from the new tip:
+        # when it already carries a release that supersedes this one there is nothing to publish.
+        git("tag", "-d", version.tag)
+        git("reset", "--quiet", "--soft", original)
+        git("restore", f"--source={original}", "--staged", "--worktree", "--", *GENERATED)
+        git("fetch", "--quiet", "--tags", "--force", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}")
+        if plan(pre, f"origin/{branch}") is None:
+            print(f"No release: origin/{branch} moved during the release and {version.tag} is superseded")
+            return None
+        sys.exit(f"origin/{branch} moved during the release; run the workflow again from its new tip")
     finalize(repo, git("rev-parse", "HEAD"), version, text, mpp, progress)
     return mpp
 

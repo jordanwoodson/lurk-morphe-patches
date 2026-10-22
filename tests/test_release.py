@@ -424,6 +424,43 @@ class ReleaseRecoveryTests(unittest.TestCase):
         self.assertEqual(self.publications, [])
         self.assertEqual(self.builds, [])
 
+    def test_pre_release_push_rejected_by_a_stable_backmerge_is_dropped_without_failing(self):
+        # While dev's pre-release run builds, the stable release made from the same commits lands on
+        # main and is merged back into dev. The atomic push is rejected; the run must drop its release
+        # commit and tag and finish without publishing, since the stable release supersedes it.
+        self.git("checkout", "--quiet", "dev")
+        (self.root / "dev.txt").write_text("development fix\n")
+        fix = self.commit("fix: development fix", minutes=1)
+        self.git("push", "--quiet", "origin", "dev")
+        other = self.fixture / "other"
+        self.command("git", "clone", "--quiet", str(self.remote), str(other))
+
+        def build_then_move_remote(version, *tasks):
+            path = self.build(version, *tasks)
+            run = lambda *args: subprocess.run(["git", *args], cwd=other, check=True, capture_output=True,
+                                               env={**os.environ, "GIT_AUTHOR_DATE": f"@{self.started + 300} +0000",
+                                                    "GIT_COMMITTER_DATE": f"@{self.started + 300} +0000",
+                                                    "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
+                                                    "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid"})
+            run("checkout", "--quiet", "main")
+            run("merge", "--quiet", "--no-ff", "-m", "Merge dev", "origin/dev")
+            run("commit", "--quiet", "--allow-empty", "-m", "chore: Release v1.0.1 [skip ci]", "-m", "## 1.0.1\n\nStable")
+            run("tag", "v1.0.1")
+            run("push", "--quiet", "origin", "main", "--tags")
+            run("checkout", "--quiet", "-b", "dev", "origin/dev")
+            run("merge", "--quiet", "--no-ff", "-m", "chore: merge main into dev [skip ci]", "main")
+            run("push", "--quiet", "origin", "dev")
+            self.published.add("v1.0.1")
+            return path
+
+        with patch.object(release, "build", side_effect=build_then_move_remote):
+            self.invoke(branch="dev")
+        self.assertEqual(self.publications, [])
+        self.assertEqual(len(self.builds), 1)
+        self.assertNotIn("v1.0.1-dev.1", self.git("tag").split())
+        self.assertEqual(self.git("rev-parse", "HEAD"), fix)
+        self.assertEqual(self.git("status", "--porcelain"), "")
+
     def test_backmerge_fetch_failure_is_reported_for_retry(self):
         sha = self.stable()
         original = release.git_ok

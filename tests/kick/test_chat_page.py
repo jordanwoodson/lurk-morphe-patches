@@ -557,19 +557,32 @@ async def main():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
-    process = subprocess.Popen([chrome(), "--headless=new", f"--remote-debugging-port={port}",
-                                f"--user-data-dir={profile}", "--no-first-run", "about:blank"],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    command = [chrome(), "--headless=new", f"--remote-debugging-port={port}", f"--user-data-dir={profile}",
+               "--no-first-run", "--disable-gpu", "about:blank"]
+    stderr = profile / "chrome.log"
+    process = None
     try:
-        for _ in range(100):
-            try:
-                targets = json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list"))
-                url = next(t["webSocketDebuggerUrl"] for t in targets if t["type"] == "page")
+        # A loaded CI runner can take well over ten seconds to bring up headless Chrome; wait up to a
+        # minute, and launch once more if the first process dies, keeping its stderr for the message.
+        url = None
+        for attempt in range(2):
+            process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=stderr.open("ab"))
+            for _ in range(600):
+                if process.poll() is not None:
+                    break
+                try:
+                    targets = json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list"))
+                    url = next(t["webSocketDebuggerUrl"] for t in targets if t["type"] == "page")
+                    break
+                except (OSError, StopIteration):
+                    await asyncio.sleep(0.1)
+            if url:
                 break
-            except (OSError, StopIteration):
-                await asyncio.sleep(0.1)
-        else:
-            sys.exit("FAIL: Chrome didn't start")
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+        if not url:
+            sys.exit("FAIL: Chrome didn't start: " + stderr.read_text(errors="replace")[-2000:])
         async with websockets.connect(url, max_size=None) as ws:
             page = Page(ws)
             reader = asyncio.create_task(page.run())
@@ -590,8 +603,9 @@ async def main():
             finally:
                 reader.cancel()
     finally:
-        process.terminate()
-        process.wait()
+        if process is not None and process.poll() is None:
+            process.terminate()
+            process.wait()
         shutil.rmtree(profile, ignore_errors=True)
     print("PASS: chat page script")
 
