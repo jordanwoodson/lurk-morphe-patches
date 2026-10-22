@@ -261,7 +261,11 @@ players opened afterwards (`UiBoundaryProbe refresh-off`).
 Native and portal calls. On the emulator, latency rose from about 2 s to 6–7 s.
 
 Verified on the emulator, signed out, in the classic theatre. The React Native, portal and vertical
-theatres are checked statically only.
+theatres are checked statically only. `UiBoundaryProbe gesture-hook` calls the patched
+`DraggableConstraintLayout.onInterceptTouchEvent` on ART: its injected call claims a vertical edge
+swipe with the switch on and leaves it to Twitch with the switch off. `overlay-destroy-view` does the
+same for `VerticalTheatreFragment.onDestroyView`, whose injected call retires the view's chat feeder
+before Twitch's own teardown. Both fail on an APK without the hooks.
 
 ### Display ads, stitched ads and the playlist proxy
 
