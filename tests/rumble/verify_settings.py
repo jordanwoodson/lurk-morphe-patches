@@ -13,7 +13,7 @@ import re
 import sys
 from pathlib import Path
 
-SECTIONS = {"Privacy", "Interface", "Playback", "Chat", "Premium"}
+SECTIONS = {"Privacy", "Interface", "Playback", "Chat", "Premium", "Advanced"}
 
 # Where each setting starts with the patches' default options: off for new behavior, on for privacy,
 # lockout protection, nags, restoring expected behavior and the chat features that match Twitch's.
