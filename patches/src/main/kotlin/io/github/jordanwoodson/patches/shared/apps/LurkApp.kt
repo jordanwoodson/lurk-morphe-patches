@@ -14,6 +14,10 @@ internal class LurkApp(
     val slug: String,
     /** The app's `COMPATIBILITY_<APP>` from its shared/Constants.kt. */
     val compatibility: Compatibility,
+    /** The `<uses-permission>` entries Remove tracking permissions takes out. Each must be in the manifest. */
+    val trackingPermissions: Set<String>,
+    /** The `<queries>` entries Remove tracking permissions takes out with them. */
+    val trackingQueries: TrackingQueries = TrackingQueries(),
 ) {
     /** The launcher name as Constants.kt gives it ("Twitch"), for messages and the default app name. */
     val name: String = compatibility.name ?: throw IllegalArgumentException("$slug: the compatibility has no name")
