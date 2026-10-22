@@ -2,6 +2,10 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.SharedPreferences;
 import android.content.res.AssetManager;
+import android.content.res.Configuration;
+import android.os.Looper;
+import android.view.SurfaceView;
+import android.view.View;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -32,10 +36,15 @@ public final class BundleProbe {
      * fallback while the APK has no locator for it.
      */
     private static String[] locate(String name, String className, String method) {
-        String value = locators.optString("kick.disable_analytics." + name, "");
+        return locateKey("kick.disable_analytics." + name, className, method);
+    }
+
+    /** The class and method name recorded as [key], or the given fallback while the APK has no locator for it. */
+    private static String[] locateKey(String key, String className, String method) {
+        String value = locators.optString(key, "");
         if (value.isEmpty()) return new String[]{className, method};
         java.util.regex.Matcher reference = java.util.regex.Pattern.compile("L([^;]+);->([^(]+)\\(").matcher(value);
-        check(reference.lookingAt(), "Malformed locator " + name + ": " + value);
+        check(reference.lookingAt(), "Malformed locator " + key + ": " + value);
         return new String[]{reference.group(1).replace('/', '.'), reference.group(2)};
     }
 
@@ -225,6 +234,68 @@ public final class BundleProbe {
         System.out.println("PASS: Show exact counts turns Kick's " + rounded + " into " + exact);
     }
 
+    /**
+     * Fill screen: Kick's real surface transform, on a player view made without its constructor around its
+     * SurfaceView. On a 2000x900 (20:9) view a 16:9 video is pillarboxed (scale 0.8 x 1) with the switch off and
+     * fills the width, cropped top and bottom (1 x 1.25), with it on in landscape. Portrait, a vertical video and
+     * an 800x720 view next to the chat, where FIT letterboxes, keep Kick's FIT.
+     */
+    private static void verifyFill(Class<?> settings) throws Exception {
+        Method registryJson = settings.getDeclaredMethod("registryJson");
+        registryJson.setAccessible(true);
+        if (!((String) registryJson.invoke(null)).contains("\"fill_screen\"")) return;
+        if (Looper.getMainLooper() == null) Looper.prepareMainLooper();
+        Object thread = Class.forName("android.app.ActivityThread").getMethod("systemMain").invoke(null);
+        Context system = (Context) thread.getClass().getMethod("getSystemContext").invoke(thread);
+        Configuration landscape = new Configuration(system.getResources().getConfiguration());
+        landscape.orientation = Configuration.ORIENTATION_LANDSCAPE;
+        Configuration portrait = new Configuration(landscape);
+        portrait.orientation = Configuration.ORIENTATION_PORTRAIT;
+
+        String[] located = locateKey("kick.fill_screen.surface_transform",
+            "com.kick.mobile.kickivsplayerv2.KickIvsPlayerV2View", "updateSurfaceViewTransform");
+        Class<?> type = Class.forName(located[0]);
+        Method transform = type.getDeclaredMethod(located[1]);
+        transform.setAccessible(true);
+        Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
+        Object unsafe = unsafeClass.getMethod("getUnsafe").invoke(null);
+        Object player = unsafeClass.getMethod("allocateInstance", Class.class).invoke(unsafe, type);
+        SurfaceView surface = new SurfaceView(system);
+        field(type, "surfaceView").set(player, surface);
+        field(type, "resizeMode").set(player, Class.forName("com.amazonaws.ivs.player.ResizeMode").getField("FIT").get(null));
+        field(View.class, "mContext").set(player, system);
+        Field resources = field(View.class, "mResources");
+
+        Map<String, String> results = new java.util.LinkedHashMap<>();
+        Object[][] cases = {
+            // name, switch, configuration, video width and height, view width and height, expected scale
+            {"off", false, landscape, 1920, 1080, 2000, 900, "0.8x1.0"},
+            {"on", true, landscape, 1920, 1080, 2000, 900, "1.0x1.25"},
+            {"on, portrait", true, portrait, 1920, 1080, 2000, 900, "0.8x1.0"},
+            {"on, vertical video", true, landscape, 1080, 1920, 2000, 900, "0.253x1.0"},
+            {"on, next to the chat", true, landscape, 1920, 1080, 800, 720, "1.0x0.625"},
+        };
+        for (Object[] c : cases) {
+            switches.put("fill_screen", (Boolean) c[1]);
+            resources.set(player, system.createConfigurationContext((Configuration) c[2]).getResources());
+            field(type, "videoWidth").setInt(player, (Integer) c[3]);
+            field(type, "videoHeight").setInt(player, (Integer) c[4]);
+            surface.layout(0, 0, (Integer) c[5], (Integer) c[6]);
+            transform.invoke(player);
+            String scale = (Math.round(surface.getScaleX() * 1000) / 1000f) + "x" + (Math.round(surface.getScaleY() * 1000) / 1000f);
+            results.put((String) c[0], scale);
+            check(scale.equals(c[7]), "Fill screen " + c[0] + ": scale " + scale + ", expected " + c[7]);
+        }
+        switches.remove("fill_screen");
+        System.out.println("PASS: Fill screen scales Kick's surface " + results);
+    }
+
+    private static Field field(Class<?> type, String name) throws Exception {
+        Field field = type.getDeclaredField(name);
+        field.setAccessible(true);
+        return field;
+    }
+
     /** A fresh process's load: the private copy's bytes, or the embedded asset's when it uses that. */
     private static byte[] load(Method prepare, Field prepared, Field defaults, AssetManager assets, byte[] embedded)
             throws Exception {
@@ -342,5 +413,6 @@ public final class BundleProbe {
         verifyReuse(prepare, prepared, defaults, assets, embedded, directory, edits);
         verifyAnalyticsJobs(settings);
         verifyCounts(settings);
+        verifyFill(settings);
     }
 }

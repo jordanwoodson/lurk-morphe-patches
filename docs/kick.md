@@ -238,6 +238,7 @@ details and validation follow.
 | Stay on channel when it hosts | Yes | Off | The host dialog waits for Watch now instead of switching when its countdown ends. |
 | Background audio | Yes | On; a second switch for picture-in-picture, off | Audio keeps playing through Kick's own audio service when you leave the app. |
 | Normal latency | Yes | Off | Turns off low-latency mode for live streams. |
+| Fill screen | Yes | Off | In landscape, 16:9 streams fill a taller phone's screen, cropped top and bottom, instead of showing side bars. |
 | Sleep timer | Yes | Off (choice) | Pauses playback a chosen time after it last started. |
 | Default startup tab | Yes | Home (choice) | Opens Kick on Browse or Following instead. |
 | Hide Home sections | Yes | Three switches, all off | Featured, recommended streams and categories rows on Home. |
@@ -525,6 +526,30 @@ Kick's player view turns on IVS low-latency mode for every player it creates, an
 else sets it. The patch hooks the IVS SDK's `setLiveLowLatencyEnabled(boolean)`, the same
 hook Lurk uses on Twitch: with the switch on, the request becomes false. It applies to
 streams opened afterwards.
+
+### Fill screen
+
+Kick's player is its own Expo view, `KickIvsPlayerV2View`, which draws the IVS player into
+a `SurfaceView` and scales that view in `updateSurfaceViewTransform()` by an IVS
+`ResizeMode`: FIT unless React Native passes a `resizeMode`, which Kick's player store
+leaves undefined. The method checks the mode against FIT right before comparing the
+video's width / height with the view's, and the patch hooks it there:
+`KickPlayer.resizeMode` gets the mode and both ratios. While `fill_screen` is on, in
+landscape, outside picture-in-picture, it hands back FILL when FIT would leave bars at
+the sides of a video wider than tall: the video fills the width and its top and bottom
+are cropped (a 16:9 stream on a 20:9 screen loses a fifth of its height). A player next to
+the chat, which FIT letterboxes, and vertical videos keep FIT, so they aren't cut down to a
+narrow band. The view runs the method on every layout, so the switch applies the next time
+the player is laid out (rotating, showing or hiding the chat) with no restart, and portrait
+goes back to FIT. Kick's own pinch-to-zoom still works on top.
+
+Checked: `verify_player.py` (run by `bin/test-host`) covers the decision table, and `bin/test-kick`
+runs Kick's real transform on ART with a 20:9 view (16:9 video:
+0.8 x 1 with the switch off, 1 x 1.25 on; portrait, a vertical video and an 800x720 view
+keep FIT's scale). On the emulator (720x1600), signed out, a 16:9 live stream in
+fullscreen with the chat hidden showed black bars at the sides with the switch off and
+filled the screen with it on; with the chat shown next to it, the player kept FIT's
+letterbox.
 
 ### Sleep timer
 
@@ -864,8 +889,9 @@ patches record what they matched with `Locators.record` (`patches/shared/Locator
 settings patch writes the records into `assets/lurk/locators.json`. Kick records the Disable
 analytics hooks (`kick.disable_analytics.firebase_log_event`, `datadog_initialize`,
 `pal_generate_nonce`, `insider_session_upload_job`, `insider_amplification_job`,
-`fingerprintjs_visitor_data`, `fingerprintjs_visitor_id`, each a full method reference), which
-`BundleProbe` runs on ART, and the Metro module IDs the 7TV composer found
+`fingerprintjs_visitor_data`, `fingerprintjs_visitor_id`, each a full method reference) and Fill
+screen's transform (`kick.fill_screen.surface_transform`), which `BundleProbe` runs on ART, and the
+Metro module IDs the 7TV composer found
 (`kick.third_party_emotes.module_store`, `module_images`, `module_session`, `module_host`,
 `module_input`), which `bin/test-kick-modules <stock bundle> <patched.apk>` compares with a fresh
 discovery. While an APK has no locator file, both fall back to the names and IDs written in the

@@ -53,5 +53,8 @@ KickTheme.applyWindow
 # Show exact counts
 KickInterface.compactNumbers
 
+# Fill screen
+KickPlayer.resizeMode
+
 # Default video quality (not selected by default)
 # KickPlayer.autoQualityCeiling
