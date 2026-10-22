@@ -20,6 +20,7 @@ import io.github.jordanwoodson.patches.rumble.shared.singleMethod
 import io.github.jordanwoodson.patches.shared.compose.staticFieldReads
 import io.github.jordanwoodson.patches.rumble.shared.unitReference
 import io.github.jordanwoodson.patches.rumble.shorts.HomeSectionKindFingerprint
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.shared.invoke
 import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.shared.parameterRegister
@@ -50,6 +51,7 @@ val blockAdsPatch = bytecodePatch(
         classDefForEach { if (repositoryInterface in it.interfaces) implementations += it }
         val repository = mutableClassDefBy(implementations.singleOrNull()
             ?: throw PatchException("Rumble: expected one ad repository, found ${implementations.size}"))
+        Locators.record("rumble.block_ads.repository", repository.type)
 
         // fetchVideoAds(publisher, ..., width: Float, height: Float, continuation): the pre-roll and
         // mid-roll list for a video or live stream, played through Google's IMA SDK.

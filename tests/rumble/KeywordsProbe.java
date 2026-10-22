@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Chat keywords: runs Rumble 3.21.0's live chat DTO getters, a real message entity and Compose's background
+ * Chat keywords: runs Rumble's live chat DTO getters, a real message entity and Compose's background
  * modifier through the extension, with the keyword settings on and off.
  */
 public final class KeywordsProbe {
@@ -29,7 +29,8 @@ public final class KeywordsProbe {
         Object init = ProbeSupport.allocate(initType);
         ProbeSupport.set(init, "messages", messages);
         ProbeSupport.set(init, "users", users);
-        Method history = initType.getMethod("f"); // Locator for 3.21.0: the history messages getter.
+        Method history = ProbeSupport.method("rumble.chat.history_getter",
+                "Lcom/rumble/network/dto/livechat/LiveChatInitData;->f()Ljava/util/List;");
 
         Object modifier = modifierCompanion();
         Method highlight = Class.forName(CHAT).getMethod("highlight", Object.class, Object.class);
@@ -108,16 +109,21 @@ public final class KeywordsProbe {
         return user;
     }
 
+    /** A message entity with its userName and message fields, as the chat patches found them. */
     private static Object entity(String userName, String text) throws Exception {
-        Object entity = ProbeSupport.allocate(Class.forName("Ke.l"));
-        ProbeSupport.set(entity, "d", userName);
-        ProbeSupport.set(entity, "f", text);
+        Object entity = ProbeSupport.allocate(ProbeSupport.type("rumble.chat.entity", "LKe/l;"));
+        ProbeSupport.set(entity, ProbeSupport.fieldName("rumble.chat.entity_user_name", "LKe/l;->d:Ljava/lang/String;"),
+                userName);
+        ProbeSupport.set(entity, ProbeSupport.fieldName("rumble.chat.entity_message", "LKe/l;->f:Ljava/lang/String;"), text);
         return entity;
     }
 
-    /** Compose's Modifier (locator t1.o): the companion object every modifier chain starts from. */
+    /** Compose's Modifier (the message row's first parameter): the companion every modifier chain starts from. */
     private static Object modifierCompanion() throws Exception {
-        Class<?> modifier = Class.forName("t1.o");
+        Class<?> modifier = ProbeSupport.method("rumble.chat.message_row",
+                "Lic/X;->d(Lt1/o;LKe/l;Ljava/util/Map;LKe/k;Lkotlin/jvm/functions/Function1;"
+                        + "Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;"
+                        + "Lkotlin/jvm/functions/Function1;LZ0/r;II)V").getParameterTypes()[0];
         for (Field field : modifier.getDeclaredFields()) {
             if (Modifier.isStatic(field.getModifiers()) && modifier.isAssignableFrom(field.getType())) {
                 field.setAccessible(true);

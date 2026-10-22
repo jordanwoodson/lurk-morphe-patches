@@ -3,10 +3,13 @@ package io.github.jordanwoodson.patches.rumble.chat
 import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.rumble.shared.RUMBLE
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_CHAT
-import io.github.jordanwoodson.patches.shared.bridge
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.rumble.shared.toStringGetter
+import io.github.jordanwoodson.patches.shared.Locators
+import io.github.jordanwoodson.patches.shared.bridge
+import io.github.jordanwoodson.patches.shared.compose.toStringField
 
 /**
  * Gives the extension the fields of a live chat message entity it needs (text, sender, time), through
@@ -20,11 +23,13 @@ internal val chatEntityPatch = bytecodePatch(
 
     execute {
         val entity = ChatMessageEntityFingerprint.single("live chat message entity").classDef
-        mapOf(
-            "messageText" to ", message=",
-            "userName" to ", userName=",
-            "timeReceived" to ", timeReceived=",
-        ).forEach { (stub, label) ->
+        Locators.record("rumble.chat.entity", entity.type)
+        listOf(
+            Triple("messageText", ", message=", "entity_message"),
+            Triple("userName", ", userName=", "entity_user_name"),
+            Triple("timeReceived", ", timeReceived=", "entity_time_received"),
+        ).forEach { (stub, label, locator) ->
+            Locators.record("rumble.chat.$locator", entity.toStringField(RUMBLE, label).toString())
             bridge(
                 RUMBLE_CHAT,
                 stub,

@@ -19,6 +19,7 @@ import io.github.jordanwoodson.patches.rumble.refresh.QualitySwitchFingerprint
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PLAYBACK
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.shared.bridge
@@ -130,6 +131,8 @@ private fun BytecodePatchContext.addListenerPause(listener: ClassDef) {
     }
     val rumblePause = rumblePauses.singleOrNull()
         ?: throw PatchException("Rumble: expected the media session's pause to call one player method, found $rumblePauses")
+    Locators.record("rumble.sleep_timer.listener", listener.type)
+    Locators.record("rumble.sleep_timer.player_pause", "$rumblePlayer->$rumblePause()V")
 
     val serviceField = listener.fields.singleOrNull { it.type == PLAYER_SERVICE && !AccessFlags.STATIC.isSet(it.accessFlags) }
         ?: throw PatchException("Rumble: the player service listener has no service field")

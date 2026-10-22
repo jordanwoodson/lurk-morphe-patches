@@ -20,6 +20,7 @@ import com.android.tools.smali.dexlib2.iface.reference.TypeReference
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.enumConstant
 import io.github.jordanwoodson.patches.rumble.shared.enumWith
 import io.github.jordanwoodson.patches.rumble.shared.hideBottomTab
@@ -48,7 +49,9 @@ val hideShortsPatch = bytecodePatch(
         hideBottomTab("ShortsScreen", KEY)
 
         // The Shorts row, wherever it appears.
-        ShortsListViewFingerprint.single("ShortsListView composable").method.addInstructionsIfEnabled(KEY, "return-void")
+        ShortsListViewFingerprint.single("ShortsListView composable").method
+            .also { Locators.record("rumble.hide_shorts.shorts_list_view", it) }
+            .addInstructionsIfEnabled(KEY, "return-void")
 
         // Home: treat a "shorts" section like one the server hides, so it is neither loaded nor drawn.
         HomeSectionKindFingerprint.single("HomeSectionKind parser").method.apply {

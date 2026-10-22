@@ -14,6 +14,7 @@ import io.github.jordanwoodson.patches.shared.compose.parameters
 import io.github.jordanwoodson.patches.rumble.shared.singleMethod
 import io.github.jordanwoodson.patches.shared.compose.staticFieldReads
 import io.github.jordanwoodson.patches.rumble.shared.unitReference
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -74,6 +75,8 @@ val disableAnalyticsPatch = bytecodePatch(
         )
         val watchProgress = WatchProgressEventToStringFingerprint.matchAllOrNull()?.singleOrNull()?.classDef?.type
             ?: throw PatchException("Rumble: expected exactly one WatchProgressEvent class")
+        Locators.record("rumble.disable_analytics.repository", repository.type)
+        Locators.record("rumble.disable_analytics.watch_progress_event", watchProgress)
 
         // Rumble batches watch progress with the other events. While it's kept, only the watch progress events
         // of a batch go out; a batch without any is answered with Success. The method hands its arguments

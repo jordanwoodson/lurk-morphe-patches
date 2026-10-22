@@ -92,7 +92,17 @@ switched by rewriting their defaults in the registry, since there is no Context 
 decoded patched APK: unique keys, valid sections and choices, and the documented defaults. `PremiumProbe` executes the actual APK's profile
 getter and mapper on `emulator-5580` using free and paid fixtures, including absent subscription
 metadata. It also checks unrelated account state. No probe uses a Rumble account or sends API
-requests. The probes are deliberately pinned to 3.21.0 and must be re-derived for other versions.
+requests.
+
+The probes reach obfuscated classes, methods and fields through locators: while patching, each patch records
+what it matched with `Locators.record("rumble.<patch>.<what>", …)` (45 entries: classes as `Lpkg/A;`,
+methods as `Lpkg/A;->name(…)R`, fields as `Lpkg/A;->name:T`), and the settings patch writes them into the
+patched APK as `assets/lurk/locators.json`. `ProbeSupport.locate`, `type`, `method` and `fieldName` read that
+file from the APK on the probe's classpath and fall back to the names in 3.21.0 while it is absent (the stock
+APK, or a build from before the asset). A new Rumble version then needs no probe edits for anything a patch
+matches. What no patch touches (Compose state internals, ExoPlayer and Composer methods in `RefreshProbe`, the
+profile mapper in `PremiumProbe`) stays pinned to 3.21.0 and has to be re-derived; other lookups go by type or
+signature (`ProbeSupport.bySignature`, `staticOfType`).
 
 To confirm the negative control, the same probe against the original base APK must
 fail with `Profile must report premium when server is_premium=false`:

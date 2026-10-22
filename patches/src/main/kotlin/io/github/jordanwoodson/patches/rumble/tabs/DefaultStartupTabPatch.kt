@@ -7,6 +7,7 @@ import app.morphe.patcher.util.smali.ExternalLabel
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.shared.settings.ChoiceSetting
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -28,6 +29,7 @@ val defaultStartupTabPatch = bytecodePatch(
         // Rumble remembers Home (0) or My Feed (3) and opens on it. The bottom bar keeps its tab positions when
         // Hide Shorts or Hide Create tab hides a tab, so the indexes stay valid.
         StartupTabFingerprint.single("startup tab preference").method.apply {
+            Locators.record("rumble.startup_tab.getter", this)
             requireLocals(1)
             addInstructionsWithLabels(
                 0,

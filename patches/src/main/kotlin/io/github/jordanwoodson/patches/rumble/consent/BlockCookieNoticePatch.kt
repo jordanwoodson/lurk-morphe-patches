@@ -16,6 +16,7 @@ import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PRIVACY
 import io.github.jordanwoodson.patches.rumble.shared.enumConstant
 import io.github.jordanwoodson.patches.rumble.shared.enumWith
 import io.github.jordanwoodson.patches.rumble.shared.single
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
@@ -48,7 +49,9 @@ val blockCookieNoticePatch = bytecodePatch(
             KetchLoadFingerprint to "Ketch load()",
             KetchShowPreferencesFingerprint to "Ketch showPreferences()",
         ).forEach { (fingerprint, what) ->
-            fingerprint.single(what).method.addInstructionsIfEnabled(
+            fingerprint.single(what).apply {
+                Locators.record("rumble.block_cookie_notice.ketch", classDef.type)
+            }.method.addInstructionsIfEnabled(
                 KEY,
                 """
                     const/4 v0, 0x0
@@ -59,7 +62,9 @@ val blockCookieNoticePatch = bytecodePatch(
 
         // Consent recorded while the switch was off (or before this patch was included) is cached and
         // would still start the trackers on every launch. Report no cached decision while it is on.
-        CachedConsentHasDecisionFingerprint.single("cached consent decision getter").method.addInstructionsIfEnabled(
+        CachedConsentHasDecisionFingerprint.single("cached consent decision getter").apply {
+            Locators.record("rumble.block_cookie_notice.cached_consent", classDef.type)
+        }.method.addInstructionsIfEnabled(
             KEY,
             """
                 const/4 v0, 0x0
@@ -136,6 +141,10 @@ private fun BytecodePatchContext.startAirshipOnly() {
     val airship = airshipTrackers.singleOrNull()
         ?: throw PatchException("Rumble: expected one Airship consent tracker, found ${airshipTrackers.size}")
     val essential = enumWith("essential_services", "analytics", "targeted_advertising").enumConstant("essential_services")
+    Locators.record("rumble.block_cookie_notice.consent_service", service.type)
+    Locators.record("rumble.block_cookie_notice.start_loop", start)
+    Locators.record("rumble.block_cookie_notice.tracker", tracker)
+    Locators.record("rumble.block_cookie_notice.airship_tracker", airship)
 
     start.apply {
         requireLocals(4)
@@ -188,6 +197,7 @@ private fun BytecodePatchContext.startAirshipOnly() {
             val call = instructions[index] as FiveRegisterInstruction
             val features = call.registerD
             val type = ((call as ReferenceInstruction).reference as MethodReference).parameterTypes[0].toString()
+            Locators.record("rumble.block_cookie_notice.airship_feature", type.removePrefix("["))
             method.addInstructions(
                 index,
                 """

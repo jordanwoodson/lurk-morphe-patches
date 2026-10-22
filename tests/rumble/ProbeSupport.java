@@ -172,6 +172,26 @@ final class ProbeSupport {
         return m;
     }
 
+    /** The field name in the field reference recorded as {@code key} ("Lpkg/A;->name:Ltype;"). */
+    static String fieldName(String key, String fallback) {
+        String reference = locate(key, fallback);
+        return reference.substring(reference.indexOf("->") + 2, reference.indexOf(':'));
+    }
+
+    /** The value of the one static field of {@code type} whose type is {@code fieldType} (a Kotlin object's INSTANCE). */
+    static Object staticOfType(Class<?> type, Class<?> fieldType) throws Exception {
+        Object found = null;
+        for (Field f : type.getDeclaredFields()) {
+            if (java.lang.reflect.Modifier.isStatic(f.getModifiers()) && f.getType() == fieldType) {
+                if (found != null) throw new AssertionError("several " + fieldType.getName() + " fields in " + type);
+                f.setAccessible(true);
+                found = f.get(null);
+            }
+        }
+        if (found == null) throw new AssertionError("no " + fieldType.getName() + " field in " + type);
+        return found;
+    }
+
     static Class<?> typeOf(String descriptor) throws ClassNotFoundException {
         switch (descriptor) {
             case "Z": return boolean.class;

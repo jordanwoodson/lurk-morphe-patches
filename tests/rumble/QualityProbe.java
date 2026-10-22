@@ -5,7 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Default video quality: runs Rumble 3.21.0's start-source chooser with fake sources, and the extension's
+ * Default video quality: runs Rumble's start-source chooser with fake sources, and the extension's
  * cap and live defaults. Metered networks can't be faked under app_process, so the cap is checked on
  * the extension's own function.
  */
@@ -17,8 +17,12 @@ public final class QualityProbe {
     }
 
     private static void run() throws Exception {
-        // Locators for 3.21.0 only: Pg.l is a player video source, Mg.e the chooser.
-        Class<?> sourceType = Class.forName("Pg.l");
+        // The start-source chooser and a source's height getter, as the patch matched them. The source class is
+        // the chooser's return type; its constructor is (url, type, height, bitrate, label, ..., isAuto?).
+        Method choose = ProbeSupport.method("rumble.default_video_quality.chooser",
+                "LMg/e;->a(Ljava/util/List;Ljava/lang/Integer;Ljava/lang/Integer;IZZZ)LPg/l;");
+        Method resolution = ProbeSupport.method("rumble.default_video_quality.source_height", "LPg/l;->f()I");
+        Class<?> sourceType = choose.getReturnType();
         Constructor<?> source = sourceType.getConstructor(String.class, String.class, int.class, int.class,
                 String.class, String.class, boolean.class);
         List<Object> sources = new ArrayList<>();
@@ -28,11 +32,7 @@ public final class QualityProbe {
             sources.add(source.newInstance("https://example.invalid/" + height + ".mp4", "mp4", height,
                     height * 1000, height + "p", "", false));
         }
-        Class<?> chooserType = Class.forName("Mg.e");
-        Object chooser = ProbeSupport.allocate(chooserType);
-        Method choose = chooserType.getMethod("a", List.class, Integer.class, Integer.class, int.class,
-                boolean.class, boolean.class, boolean.class);
-        Method resolution = sourceType.getMethod("f");
+        Object chooser = ProbeSupport.allocate(choose.getDeclaringClass());
 
         // The choice starts at Rumble's default (the quality option's default): nothing changes until a
         // quality is chosen.

@@ -12,6 +12,7 @@ import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PLAYBACK
 import io.github.jordanwoodson.patches.shared.bridge
 import io.github.jordanwoodson.patches.rumble.shared.preferenceDefault
@@ -75,6 +76,7 @@ val defaultVideoQualityPatch = bytecodePatch(
         // While capped, live streams don't start on Auto either. Only starting a video runs the chooser: a
         // quality picked in the player plays that source directly.
         val chooser = VideoSourceSelectionFingerprint.single("video source selection").method
+        Locators.record("rumble.default_video_quality.chooser", chooser)
         chooser.apply {
             requireLocals(2)
             addInstructionsWithLabels(
@@ -101,6 +103,7 @@ val defaultVideoQualityPatch = bytecodePatch(
         }
         // The extension reads each source's height to keep a cap from rounding up.
         val source = classDefBy(chooser.returnType)
+        Locators.record("rumble.default_video_quality.source_height", source.toStringGetter(", resolution="))
         bridge(
             RUMBLE_PLAYBACK,
             "sourceHeight",

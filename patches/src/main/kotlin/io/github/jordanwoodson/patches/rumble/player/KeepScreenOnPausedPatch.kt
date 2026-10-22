@@ -16,6 +16,7 @@ import com.android.tools.smali.dexlib2.iface.reference.TypeReference
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PLAYER
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.shared.compose.calls
@@ -41,6 +42,7 @@ val keepScreenOnPausedPatch = bytecodePatch(
         val helperCall = "${helper.definingClass}->${helper.name}(Landroid/content/Context;Z)V"
         val paused = classDefByStrings("Paused(isBuffering=", StringComparisonType.EQUALS).singleOrNull()
             ?: throw PatchException("Rumble: expected one Paused player state")
+        Locators.record("rumble.keep_screen_on_paused.paused_state", paused.type)
 
         // The player's state effect turns the screen on unless it is paused or finished (outside an ad).
         val lambdas = mutableListOf<Pair<ClassDef, Method>>()

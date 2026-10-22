@@ -5,7 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Hide chat clutter, Show deleted messages and Chat timestamps: runs Rumble 3.21.0's live chat DTO getters
+ * Hide chat clutter, Show deleted messages and Chat timestamps: runs Rumble's live chat DTO getters
  * and the extension with a real message entity, with each switch on and off.
  */
 public final class ChatProbe {
@@ -25,7 +25,8 @@ public final class ChatProbe {
         Class<?> dataType = Class.forName(DTO + "LiveChatMessageData");
         Object data = ProbeSupport.allocate(dataType);
         ProbeSupport.set(data, "messages", messages);
-        Method getter = dataType.getMethod("b"); // Locator for 3.21.0: the messages getter.
+        Method getter = ProbeSupport.method("rumble.chat.messages_getter",
+                "Lcom/rumble/network/dto/livechat/LiveChatMessageData;->b()Ljava/util/List;");
 
         ProbeSupport.check(getter.invoke(data) == messages, "switches off: the same list");
         ProbeSupport.setting("chat_hide_raid_notices", "true");
@@ -39,7 +40,9 @@ public final class ChatProbe {
         Class<?> initType = Class.forName(DTO + "LiveChatInitData");
         Object init = ProbeSupport.allocate(initType);
         ProbeSupport.set(init, "messages", messages);
-        ProbeSupport.check(((List<?>) initType.getMethod("f").invoke(init)).equals(List.of(plain)), "history filtered");
+        Method history = ProbeSupport.method("rumble.chat.history_getter",
+                "Lcom/rumble/network/dto/livechat/LiveChatInitData;->f()Ljava/util/List;");
+        ProbeSupport.check(((List<?>) history.invoke(init)).equals(List.of(plain)), "history filtered");
 
         // A switch whose patch isn't included counts as off in the shared hook.
         ProbeSupport.unregister("chat_hide_raid_notices");
@@ -62,10 +65,12 @@ public final class ChatProbe {
         ProbeSupport.setting("chat_hide_all", "true");
         ProbeSupport.check(Boolean.TRUE.equals(chatDisabled.invoke(video)), "chat disabled while on");
 
-        // The message entity (locator Ke.l): f = message, k = timeReceived.
-        Object entity = ProbeSupport.allocate(Class.forName("Ke.l"));
-        ProbeSupport.set(entity, "f", "original text");
-        ProbeSupport.set(entity, "k", LocalDateTime.of(2026, 10, 16, 13, 5));
+        // The message entity and its message and timeReceived fields, as the chat patches found them.
+        Object entity = ProbeSupport.allocate(ProbeSupport.type("rumble.chat.entity", "LKe/l;"));
+        ProbeSupport.set(entity, ProbeSupport.fieldName("rumble.chat.entity_message", "LKe/l;->f:Ljava/lang/String;"),
+                "original text");
+        ProbeSupport.set(entity, ProbeSupport.fieldName("rumble.chat.entity_time_received",
+                "LKe/l;->k:Ljava/time/LocalDateTime;"), LocalDateTime.of(2026, 10, 16, 13, 5));
         Method deletedLabel = Class.forName(CHAT).getMethod("deletedLabel", String.class, Object.class);
         Method nameWithTime = Class.forName(CHAT).getMethod("nameWithTime", String.class, Object.class);
         String label = "Message was removed by moderator";

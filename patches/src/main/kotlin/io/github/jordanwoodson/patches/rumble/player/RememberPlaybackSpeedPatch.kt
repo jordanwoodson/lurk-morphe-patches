@@ -9,6 +9,7 @@ import app.morphe.patcher.util.smali.ExternalLabel
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PLAYBACK
 import io.github.jordanwoodson.patches.rumble.shared.enumConstant
 import io.github.jordanwoodson.patches.rumble.shared.enumWith
@@ -40,6 +41,8 @@ val rememberPlaybackSpeedPatch = bytecodePatch(
         val get = setMatch.classDef.methods.singleOrNull {
             it.parameterTypes.map(CharSequence::toString) == listOf(scope) && it.returnType == speed.type
         } ?: throw PatchException("Rumble: no speed store getter")
+        Locators.record("rumble.remember_speed.store_set", set)
+        Locators.record("rumble.remember_speed.store_get", get)
 
         set.addInstruction(0, "invoke-static/range { p2 .. p2 }, $RUMBLE_PLAYBACK->onSpeedPicked(Ljava/lang/Enum;)V")
         get.apply {

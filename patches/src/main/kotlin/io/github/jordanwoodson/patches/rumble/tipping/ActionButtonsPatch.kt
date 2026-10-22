@@ -4,6 +4,7 @@ import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_INTERFACE
 import io.github.jordanwoodson.patches.rumble.shared.enumConstant
 import io.github.jordanwoodson.patches.rumble.shared.enumWith
@@ -25,6 +26,7 @@ internal val actionButtonsPatch = bytecodePatch(
 
     execute {
         val types = enumWith("Follow", "Join", "Tip", "Shop")
+        Locators.record("rumble.hide_tipping.button_type", types.type)
         val (tip, join, shop) = listOf("Tip", "Join", "Shop").map { types.enumConstant(it) }
         CreatorActionButtonsFingerprint.single("creator action buttons").method.apply {
             val index = parameterTypes.indexOfFirst { it.toString() == "Ljava/util/List;" }
