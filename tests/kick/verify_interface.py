@@ -16,6 +16,8 @@ instructions fail the run. Covered, when the APK has them:
   runs its own first instruction when off.
 - AMOLED black: the Colors.surface.default object literal, built by the actual instruction from the edited value
   buffer, for each choice.
+- Hide mature-content warning: the preferences selector state => state.isOver18 returns true when on, the stored
+  value when off.
 This doesn't run React Native; the device and the on-screen result are checked separately (docs/kick.md).
 """
 import argparse
@@ -109,7 +111,7 @@ class Bundle:
             return {"null": None, "true": True, "false": False}[value]
         return ast.literal_eval(value)
 
-    def run(self, header, data, registers=None, environments=(), start=0, stop=()):
+    def run(self, header, data, registers=None, environments=(), start=0, stop=(), params=()):
         """Executes from [start] until Ret (raises Returned) or until the next instruction is in [stop] (returns its
         offset and the registers)."""
         code = self.code(header, data)
@@ -124,12 +126,16 @@ class Bundle:
             pc = i.next_pos
             if op == "GetParentEnvironment":
                 r[a[0]] = environments[a[1]]
+            elif op == "LoadParam":
+                r[a[0]] = params[a[1] - 1]
             elif op == "LoadFromEnvironment":
                 r[a[0]] = r[a[1]][a[2]]
             elif op == "LoadConstUndefined":
                 r[a[0]] = UNDEFINED
             elif op == "LoadConstNull":
                 r[a[0]] = None
+            elif op in ("LoadConstTrue", "LoadConstFalse"):
+                r[a[0]] = op == "LoadConstTrue"
             elif op in ("LoadConstString", "LoadConstStringLongIndex"):
                 r[a[0]] = self.strings[a[1]]
             elif op in ("Call1", "Call2", "Call3"):
@@ -316,6 +322,23 @@ def amoled(bundle):
         check(rest == others, f"AMOLED black {value}: the object's other values are unchanged")
 
 
+def mature(bundle):
+    """Hide mature-content warning: the preferences selector `state => state.isOver18` says true when on."""
+    key = "hide_mature_warning"
+    edit = next(e for e in bundle.manifest["edits"] if e["key"] == key)
+    found = [h for h in bundle.reader.function_headers if h.offset <= edit["offset"] < h.offset + h.bytecodeSizeInBytes]
+    check(len(found) == 1, "one function carries the mature warning edit")
+    header = found[0]
+    code = list(bundle.code(header, bundle.stock).values())
+    check([i.inst.name for i in code] == ["LoadParam", "GetById", "Ret"] and bundle.strings[code[1].arg4] == "isOver18",
+          "it is the selector state => state.isOver18")
+    on, off = bundle.state({key: "true"}), bundle.state({key: "false"})
+    for stored in (False, True):
+        state = {"isOver18": stored}
+        check(returns(bundle, header, off, params=(state,)) is stored, f"off: the selector returns the stored {stored}")
+        check(returns(bundle, header, on, params=(state,)) is True, f"on: the selector returns true over a stored {stored}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("stock", type=Path)
@@ -353,6 +376,9 @@ def main():
     if "amoled_black" in keys:
         amoled(bundle)
         covered.append("AMOLED black")
+    if "hide_mature_warning" in keys:
+        mature(bundle)
+        covered.append("Hide mature-content warning")
     assert covered, "the APK has none of the Interface patches this checks"
     print("PASS: executed " + ", ".join(dict.fromkeys(covered)))
 

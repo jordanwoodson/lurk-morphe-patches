@@ -242,6 +242,7 @@ details and validation follow.
 | Default startup tab | Yes | Home (choice) | Opens Kick on Browse or Following instead. |
 | Hide Home sections | Yes | Three switches, all off | Featured, recommended streams and categories rows on Home. |
 | Show exact counts | Yes | Off | Viewer and follower counts in full (306,112 instead of 306.1K). |
+| Hide mature-content warning | Yes | Off | Mature streams open without the 18+ warning when signed out. |
 | Seek interval | Yes | Kick's 10 seconds (choice) | 5, 15, 20 or 30-second skips in videos and rewound live streams. |
 | Don't save searches | Yes | On | New searches aren't added to the search history. |
 | AMOLED black | Yes | Off (choice) | Pure black background, optionally near-black cards and sheets. |
@@ -579,6 +580,26 @@ so the switch applies to the next count drawn, with no restart, and no JavaScrip
 Checked: `bin/test-kick` runs Kick's real formatter on ART (306112 gives "306.1K" off and "306,112"
 on, also when Kick asks for compact explicitly); on the emulator, Browse's category viewer counts
 went from "299.6K" to "297,116".
+
+### Hide mature-content warning
+
+A mature stream shows "18+ Mature Content Warning" over the player (the `MatureContent`
+component), with Cancel and "I am 18+", also signed out. "I am 18+" calls the preferences
+store's `setIsOver18(true)`. Whether the warning shows depends on `useIsOver18()`, which returns
+the signed-in account's own `is_over_18`, or else that preference, read through the selector
+`state => state.isOver18`. The patch makes only that selector return true (`returnAtEntry`,
+found as the one function reading `isOver18`, and checked to be exactly LoadParam, GetById,
+Ret): signed out, mature streams open as if you had answered "I am 18+"; signed in, the
+account's age decides as before, and Kick's age-assurance checks (`useAgeProtectedContent`) are
+not touched. The stored preference doesn't change. Restart-gated, like every Hermes switch.
+
+Checked on the emulator, signed out, with Kick's data cleared: on a mature live channel the
+warning showed with the switch off and "I am 18+" then played the stream; with the switch on and
+Kick restarted, the same stream played with no warning. `verify_interface.py` runs the edited
+selector (true when on, the stored value when off).
+
+The same channel showed Subscribe and gift buttons signed out, which also checked Hide
+subscription upsells on the device: with its switch on both disappear and Follow fills the row.
 
 ### Hide Home sections
 
