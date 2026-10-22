@@ -19,6 +19,8 @@ import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import io.github.jordanwoodson.patches.shared.settings.ChoiceSetting
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
+import io.github.jordanwoodson.patches.shared.settings.requireLocals
+import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.twitch.emotes.freeRegister
 import io.github.jordanwoodson.patches.twitch.emotes.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
@@ -118,11 +120,15 @@ private fun BytecodePatchContext.overlayLifecycle(feeder: String) {
     }.singleOrNull { it.definingClass == fragment && it.type == feeder }
         ?: throw PatchException("Twitch: viewer feeder field changed")
     Fingerprint(definingClass = fragment, name = "onDestroyView", returnType = "V", parameters = emptyList())
-        .twitchMatch("viewer overlay teardown").method.addInstructions(0, """
-            move-object/from16 v0, p0
-            iget-object v0, v0, $owner
-            invoke-static { v0 }, $OVERLAY->dispose(Ljava/lang/Object;)V
-        """)
+        .twitchMatch("viewer overlay teardown").method.apply {
+            // v0 is scratch at the method's start only while it is a local, not this.
+            requireLocals(1)
+            addInstructions(0, """
+                move-object/from16 v0, p0
+                iget-object v0, v0, $owner
+                ${invokeStatic("$OVERLAY->dispose(Ljava/lang/Object;)V", 0)}
+            """)
+        }
     val stream = "Ltv/twitch/android/models/streams/StreamModel;"
     val channel = "Ltv/twitch/android/models/channel/ChannelModel;"
     val observer = Fingerprint(name = "emit", custom = { method, classDef ->
