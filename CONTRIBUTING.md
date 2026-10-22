@@ -103,13 +103,21 @@ next person reads when the app updates and the fingerprint breaks.
 
 ```
 feat(twitch): add Chat timestamps
-fix(kick): keep the saved quality after a restart
+fix(kick): keep the Default video quality after a restart
+bump(rumble): support Rumble 3.22.0
 chore(rumble): document the tipping hooks
 ```
 
-`feat` and `fix` on `dev` publish a pre-release automatically; `chore`, `docs` and `test`
-don't. Keep the subject under about 70 characters and explain the why in the body when the
-diff doesn't.
+`feat`, `fix` and `bump` on `dev` publish a pre-release automatically; `chore`, `docs` and
+`test` don't. Use `bump(<app>): support <App> <version>` for a commit that moves an app to a
+new version: it gets its own "Updated App Support" section in the release notes.
+
+The subjects become the release notes Manager shows, grouped by the app in the scope (no
+scope, or a scope that isn't an app, lands under "Shared"). Write them for users: say what
+changed, not how. Name the patch the way Manager shows it when the change is about one patch,
+either in the sentence (`keep the Sleep timer running in picture-in-picture`) or as a label
+(`Sleep timer: keep running in picture-in-picture`); the notes set it in bold. Keep the
+subject under about 70 characters and explain the why in the body when the diff doesn't.
 
 ## Releases
 

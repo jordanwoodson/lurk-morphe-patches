@@ -529,6 +529,82 @@ class ReleaseRecoveryTests(unittest.TestCase):
         self.assertEqual(self.publications, [])
 
 
+class ReleaseNotesTests(unittest.TestCase):
+    CATALOG = {
+        "twitch": release.App("Twitch", ("Sleep timer", "Third-party emotes", "Hide chat clutter")),
+        "kick": release.App("Kick", ("Sleep timer", "Hide rating prompt")),
+    }
+
+    @staticmethod
+    def commit(header, sha, body=""):
+        kind, scope, bang, text = release.HEADER.fullmatch(header).groups()
+        footer = release.BREAKING.search(body)
+        breaking = footer.group(1).strip() if footer else (text if bang else "")
+        return release.Commit(sha * 40, kind, scope or "", text, breaking)
+
+    def notes(self, *commits):
+        return release.notes(release.Version(1, 2, 0), release.Version(1, 1, 0), list(commits), "2026-10-22",
+                             "owner/repo", self.CATALOG)
+
+    def test_entries_are_grouped_by_app_then_section_with_shared_last(self):
+        text = self.notes(self.commit("fix(twitch): keep the sleep timer running in picture-in-picture", "a"),
+                          self.commit("feat(kick): hide rating prompt", "b"),
+                          self.commit("bump(twitch): support Twitch 31.8.0", "c"),
+                          self.commit("fix: serialize sleep dispatch", "d"),
+                          self.commit("fix(tooling): isolate patch inputs", "e"),
+                          self.commit("feat(twitch): Third-party emotes: show emotes in the picker", "f"),
+                          self.commit("chore(twitch): document the hooks", "0"))
+        headings = [line for line in text.splitlines() if line.startswith("#")]
+        self.assertEqual(headings, [
+            "## [1.2.0](https://github.com/owner/repo/compare/v1.1.0...v1.2.0) (2026-10-22)",
+            "### Kick", "#### ✨ New Features",
+            "### Twitch", "#### ✨ New Features", "#### 🚀 Updated App Support", "#### 🐛 Bug Fixes",
+            "### Shared", "#### 🐛 Bug Fixes",
+        ])
+        self.assertIn("* **Hide rating prompt** ([bbbbbbb](https://github.com/owner/repo/commit/" + "b" * 40 + "))", text)
+        self.assertIn("* **Third-party emotes:** show emotes in the picker (", text)
+        self.assertIn("* keep the **sleep timer** running in picture-in-picture (", text)
+        self.assertIn("* support Twitch 31.8.0 (", text)
+        self.assertIn("* **tooling:** isolate patch inputs (", text)
+        self.assertIn("* serialize sleep dispatch (", text)
+        self.assertNotIn("document the hooks", text)
+
+    def test_a_scope_naming_several_apps_lists_the_commit_under_each(self):
+        text = self.notes(self.commit("fix(kick,twitch): keep the Sleep timer after a restart", "a"))
+        self.assertEqual(text.count("keep the **Sleep timer** after a restart"), 2)
+        self.assertNotIn("### Shared", text)
+
+    def test_breaking_changes_come_first_and_keep_their_scope(self):
+        text = self.notes(self.commit("feat(kick)!: drop Kick 40.31", "a"),
+                          self.commit("fix(twitch): rename a key", "b", "BREAKING CHANGE: switches start off again"))
+        lines = text.splitlines()
+        self.assertEqual(lines[2], "### ⚠ BREAKING CHANGES")
+        self.assertEqual(lines[4:6], ["* **kick:** drop Kick 40.31", "* **twitch:** switches start off again"])
+
+    def test_manager_description_drops_commit_links_only(self):
+        text = self.notes(self.commit("fix(twitch): close #12 for the Sleep timer", "a"))
+        description = release.manager_description(text)
+        self.assertNotIn("/commit/", description)
+        self.assertIn("* close [#12](https://github.com/owner/repo/issues/12) for the **Sleep timer**", description)
+        self.assertIn("/compare/v1.1.0...v1.2.0", description)
+
+    def test_app_catalog_reads_names_and_patches_from_the_sources(self):
+        scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "release-tests"
+        scratch.mkdir(parents=True, exist_ok=True)
+        fixture = Path(tempfile.mkdtemp(prefix="catalog-", dir=scratch))
+        self.addCleanup(shutil.rmtree, fixture)
+        source = fixture / release.PATCHES_SRC
+        (source / "kick/shared").mkdir(parents=True)
+        (source / "kick/shared/Constants.kt").write_text('val COMPATIBILITY_KICK = Compatibility(\n    name = "Kick",\n)\n')
+        (source / "kick/timer").mkdir()
+        (source / "kick/timer/SleepTimerPatch.kt").write_text(
+            'val sleepTimerPatch = bytecodePatch(\n    name = "Sleep timer",\n    description = "x",\n)\n'
+            'val helper = bytecodePatch(description = "no name")\n')
+        (source / "shared").mkdir()
+        with patch.object(release, "ROOT", fixture):
+            self.assertEqual(release.apps(), {"kick": release.App("Kick", ("Sleep timer",))})
+
+
 class HostGateTests(unittest.TestCase):
     def test_every_registered_failure_fails_the_gate_and_all_checks_still_run(self):
         scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "host-gate-tests"

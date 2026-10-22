@@ -225,13 +225,26 @@ worth pinning, and say in the pull request what you ran.
   `BREAKING CHANGE:` footer a major one; `dev` adds `-dev.N`. The script writes the generated files,
   builds the bundle, pushes the release commit and its tag together, then creates the GitHub release with
   the `.mpp`. If that last step fails, the next run (or "Run workflow" on the Release workflow) publishes
-  the missing release. A stable release is merged back into `dev`; reruns also finish a failed backmerge
-  after successful publication, without publishing again or creating duplicate merges. Published asset
-  outputs survive later failures so the workflow can still attest them. To preview the next release and its
-  notes: `git fetch && python3 .github/scripts/release.py --dry-run --branch dev`.
+  the missing release. Recovery looks for the newest release commit of the branch's own kind, so a newer
+  pre-release merged into `main`, or a stable release merged back into `dev`, doesn't hide it; a
+  pre-release that a newer stable release already contains is left unpublished. A stable release is merged
+  back into `dev`; reruns also finish a failed backmerge after successful publication, without publishing
+  again or creating duplicate merges. Published asset outputs survive later failures so the workflow can
+  still attest them. To preview the next release and its notes:
+  `git fetch && python3 .github/scripts/release.py --dry-run --branch dev`.
+- The release notes are the changelog entry, the GitHub release text and the description Manager shows
+  (without commit links there). They group commits by app, from the scope, with everything else under
+  "Shared", then by type: New Features, Updated App Support (`bump`), Bug Fixes, Improvements (`perf`).
+  A patch name in the subject is set in bold, and a subject that starts with `<Patch name>:` gets it as
+  a label. Patch and app names are read from the sources, so new patches are recognized in the release
+  that adds them.
+- Moving an app to a new version is a `bump(<app>): support <App> <version>` commit (see
+  [Version bumps](#version-bumps)).
 - Non-dry release runs require an index with no staged changes, including recovery of an older release.
   Commit or stash staged work first; the script rejects it before changing the checkout or publishing.
-- Use semantic commit messages: `feat(twitch): ...`, `fix(kick): ...`, `chore: ...`.
+- Use semantic commit messages: `feat(twitch): ...`, `fix(kick): ...`, `bump(rumble): ...`, `chore: ...`.
+  [CONTRIBUTING.md](../CONTRIBUTING.md#commit-messages) says how to write subjects that read well as
+  release notes.
 - Don't hand-edit generated files: `patches-list.json`, `patches-bundle.json`, `CHANGELOG.md`, or
   the patch list in `README.md` (written by `.github/scripts/generate_patches_readme.py`). Don't
   create releases or tags by hand.

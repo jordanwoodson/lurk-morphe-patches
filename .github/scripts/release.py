@@ -7,6 +7,10 @@ the conventional commits since the last release reachable from the branch: a bre
 a `BREAKING CHANGE:` footer) is major, `feat` minor, `fix`, `perf`, `bump` and `revert` patch. Without any
 of those there is no release.
 
+The release notes group the commits by app (the commit scope: `fix(twitch): ...`), with commits for no
+app under Shared, and point out the patch a subject names. `bump(<app>): support <App> <version>` lists
+under Updated App Support. Manager shows the notes without the commit links.
+
 A release sets the version, writes CHANGELOG.md, patches-bundle.json, patches-list.json and the README
 patch list, builds the bundle, pushes the release commit and its tag together (both or neither), then
 creates the GitHub release with the .mpp. If that last step fails, the next run (or "Run workflow" on the
@@ -47,13 +51,18 @@ AS_BOT = ["-c", "user.name=github-actions[bot]",
 
 PATCH, MINOR, MAJOR = 1, 2, 3
 LEVELS = {"feat": MINOR, "fix": PATCH, "perf": PATCH, "bump": PATCH, "revert": PATCH}
-# Release note sections in order. Commits of other types are left out of the notes.
+# Release note sections in order, within each app. Commits of other types are left out of the notes.
 SECTIONS = [
-    ("fix", "🐛 Bug Fixes"),
     ("feat", "✨ New Features"),
     ("bump", "🚀 Updated App Support"),
+    ("fix", "🐛 Bug Fixes"),
     ("perf", "🔧 Improvements"),
 ]
+# Commits whose scope is no app (or that have none) are listed under this heading, after the apps.
+SHARED = "Shared"
+PATCHES_SRC = Path("patches/src/main/kotlin/io/github/jordanwoodson/patches")
+PATCH_DECLARATION = re.compile(r"=\s*(?:bytecodePatch|resourcePatch|rawResourcePatch|hermesPatch)\(\s*name\s*=\s*\"([^\"]+)\"")
+APP_NAME = re.compile(r"Compatibility\(\s*name\s*=\s*\"([^\"]+)\"")
 
 TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z]+)\.(\d+))?")
 HEADER = re.compile(r"(\w+)(?:\(([^()]*)\))?(!)?: (.+)")
@@ -116,6 +125,11 @@ class Plan(NamedTuple):
     version: Version
     previous: Version | None
     commits: list[Commit]
+
+
+class App(NamedTuple):
+    name: str  # as Manager shows it: "Twitch"
+    patches: tuple[str, ...]  # the patch names, as Manager shows them
 
 
 class Progress:
@@ -234,16 +248,56 @@ def plan(pre: str | None, head: str, visible: set[Version] | None = None) -> Pla
     return Plan(version, previous, found)
 
 
-def notes(version: Version, previous: Version | None, found: list[Commit], date: str, repo: str) -> str:
-    """Release notes in the changelog's format, without a trailing newline."""
+def apps() -> dict[str, App]:
+    """The bundle's apps by slug (the folders with a shared/Constants.kt) with their patch names."""
+    source = ROOT / PATCHES_SRC
+    found = {}
+    for constants in sorted(source.glob("*/shared/Constants.kt")):
+        slug = constants.parent.parent.name
+        named = APP_NAME.search(constants.read_text(encoding="utf-8"))
+        patches = {name for path in (source / slug).rglob("*.kt")
+                   for name in PATCH_DECLARATION.findall(path.read_text(encoding="utf-8"))}
+        found[slug] = App(named.group(1) if named else slug.title(), tuple(sorted(patches)))
+    return found
+
+
+def highlight(text: str, patches: tuple[str, ...]) -> str:
+    """
+    Point out the patch a commit is about. A subject that starts with a patch name and a colon
+    ("Sleep timer: keep counting in picture-in-picture") gets it as a label; otherwise the longest patch
+    name the subject mentions is set in bold.
+    """
+    longest_first = sorted(patches, key=len, reverse=True)
+    for name in longest_first:
+        if text.casefold().startswith(f"{name.casefold()}:"):
+            return f"**{name}:**{text[len(name) + 1:]}"
+    for name in longest_first:
+        match = re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", text, re.I)
+        if match:
+            # A subject that is only the name ("hide rating prompt") shows it as Manager does.
+            shown = name if match.group(0) == text else match.group(0)
+            return f"{text[:match.start()]}**{shown}**{text[match.end():]}"
+    return text
+
+
+def notes(version: Version, previous: Version | None, found: list[Commit], date: str, repo: str,
+          catalog: dict[str, App] | None = None) -> str:
+    """
+    Release notes in the changelog's format, without a trailing newline: breaking changes first, then
+    one heading per app (by the commit's scope) and a Shared one, each with its sections. Patch names in
+    the subjects are pointed out, so the notes read as what changed in which patch.
+    """
+    catalog = apps() if catalog is None else catalog
     url = f"https://github.com/{repo}"
     title = f"[{version}]({url}/compare/{previous.tag}...{version.tag})" if previous else str(version)
     lines = [f"## {title} ({date})"]
 
+    def linked(text: str) -> str:
+        return re.sub(r"(?<![\w/\[])#(\d+)\b", lambda m: f"[#{m[1]}]({url}/issues/{m[1]})", text)
+
     def scoped(commit: Commit, text: str) -> str:
         scope = f"**{commit.scope}:** " if commit.scope else ""
-        linked = re.sub(r"(?<![\w/\[])#(\d+)\b", lambda m: f"[#{m[1]}]({url}/issues/{m[1]})", text)
-        return f"* {scope}{linked}"
+        return f"* {scope}{linked(text)}"
 
     # As the changelog always has: by scope (a commit without one by its subject in its place), then text.
     def order(commit: Commit, text: str) -> tuple:
@@ -252,12 +306,35 @@ def notes(version: Version, previous: Version | None, found: list[Commit], date:
     breaking = sorted((c for c in found if c.breaking), key=lambda c: order(c, c.breaking))
     if breaking:
         lines += ["", "### ⚠ BREAKING CHANGES", ""] + [scoped(c, c.breaking) for c in breaking]
-    for kind, heading in SECTIONS:
-        entries = sorted((c for c in found if c.type == kind), key=lambda c: order(c, c.subject))
-        if entries:
-            lines += ["", f"### {heading}", ""]
-            lines += [f"{scoped(c, c.subject)} ([{c.sha[:7]}]({url}/commit/{c.sha}))" for c in entries]
+
+    # Each commit goes under every app its scope names ("fix(kick,twitch): ..."), else under Shared.
+    groups: dict[str, list[Commit]] = {slug: [] for slug in sorted(catalog, key=lambda s: collate(catalog[s].name))}
+    groups[SHARED] = []
+    for commit in found:
+        slugs = [s for s in (part.strip().lower() for part in commit.scope.split(",")) if s in catalog]
+        for slug in slugs or [SHARED]:
+            groups[slug].append(commit)
+
+    every_patch = tuple(sorted({name for app in catalog.values() for name in app.patches}))
+    for slug, commits in groups.items():
+        app = catalog.get(slug)
+        sections = [(heading, [c for c in commits if c.type == kind]) for kind, heading in SECTIONS]
+        sections = [(heading, entries) for heading, entries in sections if entries]
+        if not sections:
+            continue
+        lines += ["", f"### {app.name if app else SHARED}"]
+        for heading, entries in sections:
+            lines += ["", f"#### {heading}", ""]
+            for c in sorted(entries, key=lambda c: collate(c.subject) if app else order(c, c.subject)):
+                text = highlight(c.subject, app.patches if app else every_patch)
+                entry = f"* {linked(text)}" if app else scoped(c, text)
+                lines.append(f"{entry} ([{c.sha[:7]}]({url}/commit/{c.sha}))")
     return "\n".join(lines)
+
+
+def manager_description(text: str) -> str:
+    """The release notes as Manager shows them: without the commit links, which mean nothing there."""
+    return re.sub(r" \(\[[0-9a-f]{7,}\]\([^)\s]*/commit/[0-9a-f]+\)\)", "", text)
 
 
 def collate(text: str) -> tuple[str, str]:
@@ -398,7 +475,7 @@ def write_files(repo: str, version: Version, text: str) -> None:
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     write_json(ROOT / "patches-bundle.json", {
         "created_at": now,
-        "description": text,
+        "description": manager_description(text),
         "download_url": f"https://github.com/{repo}/releases/download/{version.tag}/patches-{version}.mpp",
         "signature_download_url": "",
         "version": str(version),
