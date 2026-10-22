@@ -641,9 +641,10 @@ The page independently fetches globals and the channel owner's set from 7tv.io. 
 request has a 10-second header/body deadline, a 2 MiB response limit and at most three
 transient attempts; 429 honors a capped Retry-After. Successful globals render while
 owner lookup stalls. Failed or malformed refreshes retain the last valid catalog. Authoritative no-set responses
-and omitted empty emote vectors clear the removed entries and reconcile set subscriptions. When needed, the
-owner lookup uses `kick.com/api/v2/channels/<slug>` without credentials. Native channel
-lookup maps hold at most 256 entries. A channel not yet observed gets globals only.
+and omitted empty emote vectors clear the removed entries and reconcile set subscriptions. The owner's Kick
+user ID comes from the same Kick response the app already received for the channel (`KickHttp`), so the page
+never asks Kick itself; a channel whose owner the app hasn't seen gets globals only. Native channel lookup maps
+hold at most 256 entries.
 
 Active-set and emote-data zero-width flags layer over the adjacent emote, including a
 native Kick image; layers never cross text, links, newlines or messages. A standalone
@@ -739,16 +740,19 @@ The edit helpers, all equal-length and fail-closed:
   instruction. `returnAtEntry` takes any prologue of environment, global, parameter and
   property loads, decoded with the v99 instruction lengths; both refuse a function that
   branches into the replaced bytes.
-- `trueProperty` / `falseProperty`: the function's single `GetById` of a property loads
-  a constant instead, in the same general register.
 - `skipGuard`: a handler's opening `if (!event) return;` jump becomes a `Mov` of the
   tested register onto itself, so the handler always returns before doing anything.
-- `dataEdit` / `dataChoice`: values in the literal buffer that array and object literals
-  read, as a switch or a choice. Hermes shares value bytes between literals, so each edit
+- `dataChoice`: values in the literal buffer that array and object literals read, as a
+  choice. Hermes shares value bytes between literals, so each edit
   names the literals allowed to read its bytes and fails if any other literal does. Their
   replacement window is grown until its original bytes are unique in the bundle.
 - `functionUsing`: selects an anonymous function by the properties it reads and the
   strings it loads, rather than by bytes that embed build-local string IDs.
+- Edits only one patch needs live in that patch: Disable autoplay rewrites
+  `preferencesSettingsSlice` with `replaceBody` (its body size and offsets are pinned, so any
+  change fails the patch), and Hide subscription upsells finds `ChannelSubButton`'s unsubscribed
+  path with `sequence` (the `subscription` read, the forward `JmpTrueLong` on it, the next
+  `GetByIndex`). Opcodes are named in `HermesOp`.
 - `objectKeys`: an object literal's property names, read from the bundle's shape table in
   slot order, so an edit can find the slot a named property is stored in.
 - `literals` / `slotArrays`: every array and object literal instruction with the value
@@ -796,8 +800,8 @@ Verification tools retained in this repository:
   stock, including unchanged instructions, branches and exception handlers when off.
 - `tests/kick/test_chat_page.py`: the chat page script in headless Chrome, offline, on a copy
   of the page's structure: host guard, one application per page, hidden lines, ignored
-  clears (with a control), 7TV words in old and new messages, the owner lookup, and no
-  referrer or cookies on its requests (with a control).
+  clears (with a control), 7TV words in old and new messages, global emotes only without a known
+  owner (and no request to Kick), and no referrer or cookies on its requests (with a control).
 - `tests/kick/verify_player.py`: production `KickPlayer` with boundary doubles: the
   mobile-data ceiling's decision table (with and without a Default video quality
   height), normal latency and the background audio decisions.

@@ -26,8 +26,8 @@ fun main(args: Array<String>) {
         bundle.returnNull(name, "hide_buttons")
     }
     rejects { bundle.returnNull("KicksShopButton", "overlap") }
-    val preview = bundle.previewDefault("disable_previews")
-    check(preview.original.size == 97 && preview.replacement.size == 97)
+    // A whole-body replacement must keep the body's length (Disable autoplay's edit; test_hermes.py checks it).
+    rejects { bundle.replaceBody("preferencesSettingsSlice", "invalid", ByteArray(96)) }
 
     // The decoder walks every function body exactly, including ones with switch tables.
     val decoded = bundle.instructions(bundle.function("handleBanUserEvent"))
@@ -56,15 +56,8 @@ fun main(args: Array<String>) {
         byteArrayOf(0x93.toByte(), general, 0x76, general, 0, 0, 0, 0)))
     rejects { bundle.returnAtEntry("handleSubscriptionEvent", "invalid") } // JmpTrue isn't a prologue.
 
-    // One GetById becomes `true`; a function reading the property twice, or not at all, is rejected.
-    val deleted = bundle.functionUsing("delete message", reads = listOf("userCanModerate"), loads = listOf("user_deleted"))
-    bundle.trueProperty(deleted, "userCanModerate", "chat_show_deleted")
-    check(bundle.edits.last().original.contentEquals(hex("45 03 03 06")
-        + byteArrayOf(bundle.stringId("userCanModerate").toByte(), (bundle.stringId("userCanModerate") ushr 8).toByte())))
-    check(bundle.edits.last().replacement.contentEquals(hex("95 03 95 03 95 03")))
-    bundle.trueProperty(bundle.function("handleBanUserEvent"), "userCanModerate", "chat_show_deleted")
-    rejects { bundle.trueProperty(bundle.function("handleBanUserEvent"), "Date", "invalid") } // TryGetById, twice.
-    rejects { bundle.trueProperty(bundle.function("handleClearChatEvent"), "userCanModerate", "invalid") }
+    // An anonymous function is selected by what it reads and loads; no match is rejected.
+    bundle.functionUsing("delete message", reads = listOf("userCanModerate"), loads = listOf("user_deleted"))
     rejects { bundle.functionUsing("missing", reads = listOf("userCanModerate"), loads = listOf("clear-")) }
 
     // Both guard shapes; a function without one, or with another JmpTrue first, is rejected.
@@ -115,13 +108,14 @@ fun main(args: Array<String>) {
     // The live edge array [60] shares its value with an unrelated object: editing it is refused.
     val live = slots.getValue(0)
     check(bundle.literalsReading(live.start, live.end).size > 1)
-    rejects { bundle.dataEdit(live.start, "invalid", bundle.literal(live.start, 5), hex("71 3d000000"), listOf(live)) }
+    rejects { bundle.dataChoice(live.start, "invalid", bundle.literal(live.start, 5), mapOf("1" to hex("71 3d000000")),
+        listOf(live)) }
 
     // Literal edits: exact original bytes, only their own readers, unique windows, choices with their own bytes.
     val skip = vod.start
     check(bundle.literal(skip, 13).contentEquals(hex("73 0a000000 0a000000 0a000000")))
-    rejects { bundle.dataEdit(skip, "invalid", hex("73 0b000000"), hex("73 0c000000"), skipReaders) }
-    rejects { bundle.dataEdit(-1, "invalid", hex("00"), hex("01"), skipReaders) }
+    rejects { bundle.dataChoice(skip, "invalid", hex("73 0b000000"), mapOf("1" to hex("73 0c000000")), skipReaders) }
+    rejects { bundle.dataChoice(-1, "invalid", hex("00"), mapOf("1" to hex("01")), skipReaders) }
     rejects { bundle.dataChoice(skip, "vod_skip_seconds", hex("73 0a000000 0a000000 0a000000"),
         mapOf("5" to hex("73 05000000 05000000 05000000")), readers = listOf(vod)) } // A reader left out.
     val choice = bundle.dataChoice(skip, "vod_skip_seconds", hex("73 0a000000 0a000000 0a000000"),
@@ -136,7 +130,8 @@ fun main(args: Array<String>) {
     }
     val lowest = surface.start + 5
     val base = surface.start + 3
-    rejects { bundle.dataEdit(lowest, "vod_skip_seconds", id("#090A0B"), id("#000000"), listOf(surface)) } // Mixed kinds.
+    rejects { bundle.dataChoice(lowest, "vod_skip_seconds", id("#090A0B"), mapOf("1" to id("#000000")), listOf(surface),
+        defaultValue = "1") } // One key, two defaults.
     bundle.dataChoice(lowest, "amoled_black", id("#090A0B"), mapOf("1" to id("#000000"), "2" to id("#000000")),
         readers = listOf(surface))
     bundle.dataChoice(base, "amoled_black", id("#141517"), mapOf("2" to id("#0B0B0C")), readers = listOf(surface))
@@ -171,8 +166,8 @@ fun main(args: Array<String>) {
     check(manifest.contains("\"values\":{\"1\":\"$black\",\"2\":\"$black\"},\"default\":\"0\""))
     File(args[1]).writeBytes(patched)
     File(args[2]).writeText(manifest)
-    println("PASS: actual v99 headers, fail-closed checks, ${bundle.edits.size} edits (entry returns, property " +
-        "reads, guards, literal choices), footer, unique windows and exact disabled restoration")
+    println("PASS: actual v99 headers, fail-closed checks, ${bundle.edits.size} edits (entry returns, guards, " +
+        "literal choices), footer, unique windows and exact disabled restoration")
 }
 
 /**
