@@ -8,10 +8,10 @@ import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PRIVACY
 import io.github.jordanwoodson.patches.rumble.shared.kotlinObject
-import io.github.jordanwoodson.patches.rumble.shared.newInstanceTypes
-import io.github.jordanwoodson.patches.rumble.shared.parameters
+import io.github.jordanwoodson.patches.shared.compose.newInstanceTypes
+import io.github.jordanwoodson.patches.shared.compose.parameters
 import io.github.jordanwoodson.patches.rumble.shared.singleMethod
-import io.github.jordanwoodson.patches.rumble.shared.staticFieldReads
+import io.github.jordanwoodson.patches.shared.compose.staticFieldReads
 import io.github.jordanwoodson.patches.rumble.shared.unitReference
 import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.shared.parameterRegister

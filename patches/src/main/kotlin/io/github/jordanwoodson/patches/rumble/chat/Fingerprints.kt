@@ -4,7 +4,7 @@ import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.resource.ResourceType
 import app.morphe.patcher.resourceLiteral
 import io.github.jordanwoodson.patches.rumble.shared.composableFingerprint
-import io.github.jordanwoodson.patches.rumble.shared.dtoGetterFingerprint
+import io.github.jordanwoodson.patches.shared.compose.dtoGetterFingerprint
 
 private const val LIVE_CHAT = "Lcom/rumble/network/dto/livechat"
 

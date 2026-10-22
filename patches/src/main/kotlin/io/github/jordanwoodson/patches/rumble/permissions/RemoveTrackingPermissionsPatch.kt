@@ -3,7 +3,7 @@ package io.github.jordanwoodson.patches.rumble.permissions
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.resourcePatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
-import org.w3c.dom.Element
+import io.github.jordanwoodson.patches.rumble.shared.childElements
 
 // Permissions only trackers use. Without AD_ID, Google Play services hands every SDK, and Rumble's own
 // requests (ad_device_id, watch progress), the all-zero advertising ID on Android 13 and newer (API 33, where
@@ -59,8 +59,3 @@ val removeTrackingPermissionsPatch = resourcePatch(
         }
     }
 }
-
-private fun Element.childElements(tag: String? = null): List<Element> =
-    (0 until childNodes.length).map { childNodes.item(it) }
-        .filterIsInstance<Element>()
-        .filter { tag == null || it.tagName == tag }

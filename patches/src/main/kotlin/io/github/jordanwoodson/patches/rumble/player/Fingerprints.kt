@@ -2,14 +2,9 @@ package io.github.jordanwoodson.patches.rumble.player
 
 import app.morphe.patcher.Fingerprint
 import com.android.tools.smali.dexlib2.AccessFlags
-import com.android.tools.smali.dexlib2.iface.Method
-import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import io.github.jordanwoodson.patches.shared.compose.calls
 
 internal const val PLAYER_SERVICE = "Lcom/rumble/videoplayer/player/RumblePlayerService;"
-
-private fun Method.callsMethod(reference: String) = implementation?.instructions?.any {
-    it is ReferenceInstruction && it.reference.toString() == reference
-} == true
 
 // The player's speed per scope (video page or elsewhere): set(videoScope, speed), named in its null checks.
 internal object SpeedStoreSetFingerprint : Fingerprint(
@@ -41,7 +36,6 @@ internal object KeepScreenOnFingerprint : Fingerprint(
     returnType = "V",
     parameters = listOf("Landroid/content/Context;", "Z"),
     custom = { method, _ ->
-        method.callsMethod("Landroid/view/Window;->addFlags(I)V") &&
-            method.callsMethod("Landroid/view/Window;->clearFlags(I)V")
+        method.calls("Landroid/view/Window;->addFlags(I)V") && method.calls("Landroid/view/Window;->clearFlags(I)V")
     },
 )

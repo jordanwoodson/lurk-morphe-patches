@@ -328,8 +328,11 @@ R8 renames Rumble's classes and methods, so the patches below find code through 
   matched without the line number.
 - Gson DTOs in `com.rumble.network.dto` keep their class and field names; only the getters are renamed.
 
-`shared/Bytecode.kt` has the helpers for these. Each patch fails with a message rather than guess when a
-lookup doesn't find exactly one match.
+The helpers for these are app-agnostic and live in `patches/shared/compose/` (`Lookups.kt`, `Compose.kt`,
+`ToString.kt`, `Dataflow.kt`, `Preferences.kt`, `Loops.kt`), each taking an `AppCode` built from the app's
+`Compatibility` for its error messages; `rumble/shared/` keeps thin wrappers with Rumble's name (`RUMBLE`) and
+the Rumble-only fingerprints. Each patch fails with a message rather than guess when a lookup doesn't find
+exactly one match, naming the version the patches target (taken from `COMPATIBILITY_RUMBLE`).
 
 Two of these could break many patches at once:
 

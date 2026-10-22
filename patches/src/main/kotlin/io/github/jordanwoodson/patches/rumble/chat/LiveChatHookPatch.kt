@@ -9,7 +9,7 @@ import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_CHAT
-import io.github.jordanwoodson.patches.rumble.shared.parameterRegister
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.rumble.shared.single
 
 /**

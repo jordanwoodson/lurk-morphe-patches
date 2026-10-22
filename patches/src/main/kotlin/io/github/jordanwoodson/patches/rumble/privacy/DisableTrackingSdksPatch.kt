@@ -3,6 +3,7 @@ package io.github.jordanwoodson.patches.rumble.privacy
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.resourcePatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.rumble.shared.childElements
 import org.w3c.dom.Element
 
 /**
@@ -39,10 +40,7 @@ val disableTrackingSdksPatch = resourcePatch(
         document("AndroidManifest.xml").use { document ->
             val application = document.getElementsByTagName("application").item(0) as? Element
                 ?: throw PatchException("Rumble: the manifest has no application element")
-            val existing = (0 until application.childNodes.length).map { application.childNodes.item(it) }
-                .filterIsInstance<Element>()
-                .filter { it.tagName == "meta-data" }
-                .associateBy { it.getAttribute("android:name") }
+            val existing = application.childElements("meta-data").associateBy { it.getAttribute("android:name") }
             META_DATA.forEach { (name, value) ->
                 val element = existing[name] ?: document.createElement("meta-data").also {
                     it.setAttribute("android:name", name)

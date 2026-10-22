@@ -2,7 +2,7 @@ package io.github.jordanwoodson.patches.rumble.ads
 
 import app.morphe.patcher.Fingerprint
 import com.android.tools.smali.dexlib2.AccessFlags
-import io.github.jordanwoodson.patches.rumble.shared.dtoGetterFingerprint
+import io.github.jordanwoodson.patches.shared.compose.dtoGetterFingerprint
 
 // The video ad use case. Its constructor takes Rumble's ad repository (an interface) first and checks
 // its parameters by name; the repository's single implementation is what the patch changes.

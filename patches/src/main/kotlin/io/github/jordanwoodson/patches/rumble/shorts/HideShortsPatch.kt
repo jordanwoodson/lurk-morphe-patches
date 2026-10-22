@@ -11,6 +11,7 @@ import app.morphe.patcher.util.smali.ExternalLabel
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.ClassDef
+import com.android.tools.smali.dexlib2.iface.Method
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
@@ -23,6 +24,7 @@ import io.github.jordanwoodson.patches.rumble.shared.enumConstant
 import io.github.jordanwoodson.patches.rumble.shared.enumWith
 import io.github.jordanwoodson.patches.rumble.shared.hideBottomTab
 import io.github.jordanwoodson.patches.rumble.shared.single
+import io.github.jordanwoodson.patches.shared.compose.mutableTwin
 import io.github.jordanwoodson.patches.shared.invoke
 import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.shared.requireLowRegisters
@@ -111,7 +113,7 @@ private fun BytecodePatchContext.hideCategoryShortsTab() {
     val contentType = enumWith("SHORTS", "REPOSTS", "CATEGORIES", "LIVE_STREAM")
     val shorts = contentType.enumConstant("SHORTS")
 
-    val builders = mutableListOf<Pair<ClassDef, String>>()
+    val builders = mutableListOf<Pair<ClassDef, Method>>()
     classDefForEach { classDef ->
         classDef.methods.filter { method ->
             method.parameterTypes.map { it.toString() } == listOf("Z") && method.returnType == "Ljava/util/List;" &&
@@ -119,12 +121,12 @@ private fun BytecodePatchContext.hideCategoryShortsTab() {
                     it.opcode == Opcode.FILLED_NEW_ARRAY &&
                         ((it as ReferenceInstruction).reference as TypeReference).type == "[${contentType.type}"
                 } == true
-        }.forEach { builders += classDef to it.name }
+        }.forEach { builders += classDef to it }
     }
-    val (builderClass, builderName) = builders.singleOrNull()
+    val (builderClass, builder) = builders.singleOrNull()
         ?: throw PatchException("Rumble: expected one category tab builder, found ${builders.size}")
 
-    mutableClassDefBy(builderClass).methods.single { it.name == builderName && it.parameterTypes.size == 1 }.apply {
+    mutableTwin(builderClass, builder).apply {
         val instructions = implementation!!.instructions.toList()
         val array = instructions.indexOfFirst { it.opcode == Opcode.FILLED_NEW_ARRAY }
         val arrayRegisters = (instructions[array] as FiveRegisterInstruction).let {
