@@ -452,6 +452,21 @@ case. Blocked live messages are dropped at the chat list feeder, before the Chat
 History and VOD replay lines are marked by the shared line builder (`ChatMessageSpanGroup`) and
 collapsed by the row binders.
 
+*Compact chat* adds two switches, both off by default. *Hide badges* (`chat_hide_badges`) empties the badge
+span right before the line builder puts a line's spans together (`ChatMessageSpanGroup`), after Twitch's and
+the third-party badges went into it. *Emotes as text* (`chat_text_emotes`) makes the emote span builder (the
+one the third-party emote click hook also uses) return the emote's code as a plain `SpannableString`, the same
+code field Twitch writes into its own span, so no image span and no image load happen. *Highlight first-time
+chatters* (`chat_first_chatters`, a patch of its own, off by default) uses the `first-msg=1` tag Twitch's chat
+server puts on a chatter's first message in a channel. Native chat splits every IRC line into
+`IrcEventComponents(messageTags=…)`; a hook at the start of its constructor keeps the `id` of such messages (512
+at most). The line builder notes each line's message ID at its start and, at its end, marks the sender span
+of a remembered one; the row binders (the same hook Chat keywords uses) tint that row green unless Twitch
+shows it selected. All three cover native live chat; the first two also chat history and VOD replay, which
+carry no `first-msg` tag. React Native chat is unchanged. Verified on the emulator, signed out, on a busy live
+channel: no badges on any line, `LUL` and channel emotes shown as text, and a row tinted green right after
+the log said `chat: first message <id>`.
+
 *Chat appearance* sets:
 - chat text size;
 - alternating row shading, numbered by arrival and skipping hidden lines;

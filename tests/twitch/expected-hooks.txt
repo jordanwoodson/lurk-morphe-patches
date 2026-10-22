@@ -87,6 +87,15 @@ TwitchChat.timestamps
 # if chat_auto_claim
 TwitchChat.autoClaim
 
+# if chat_hide_badges
+TwitchChatCompact.badges
+
+# if chat_first_chatters
+TwitchChatCompact.beginLine
+TwitchChatCompact.bindRow
+TwitchChatCompact.ircTags
+TwitchChatCompact.markLine
+
 # if chat_keywords
 TwitchChatKeywords.beginLine
 TwitchChatKeywords.bindRow
