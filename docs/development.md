@@ -158,10 +158,19 @@ otherwise, so a new app version fails to patch instead of patching the wrong met
 [fingerprinting guide](https://github.com/MorpheApp/morphe-patcher/blob/main/docs/2_2_1_fingerprinting.md).
 
 Patches with runtime behavior depend on the app's settings patch and register their switches
-and choices on the app's `SettingsScreen`; the Lurk settings activity in `extensions/shared`
-shows only the settings of the patches that were included. Code that runs inside the app is
-plain Java in `extensions/shared/`, called from injected smali; `Logger.d(...)` (tag `lurk`) is
-the quickest way to confirm a hook fires.
+and choices on the app's `SettingsScreen` (`patches/.../shared/settings/Settings.kt`) at the end of
+`execute`. A key can be registered once, and a setting's `parent` must be a top-level setting of the
+same section (under a switch, it applies only while the switch is on). The settings patch writes the registrations as JSON into the extension, and the Lurk
+settings activity (`extensions/shared/.../settings/`) builds its screen from that: only the
+included patches' settings, grouped by section, with search, Pause Lurk, export and import, a bug
+report link and a restart bar for `restart = true` settings. It is plain framework Java: views and
+drawables made in code, no resources, AppCompat or Kotlin. Injected code reads a value with
+`Settings.isEnabled(key)` or `getInt(key)`. Lurk fails closed: a key that isn't registered reads
+as off (a choice as 0), and so does every key if the registry can't be read; Pause Lurk turns
+every switch off except those registered with `keepWhenPaused` (lockout protection such as Block
+update prompts). Code that runs inside the app is plain Java in `extensions/shared/`, called
+from injected smali; `Logger.d(...)` (tag `lurk`) is the quickest way to confirm a hook fires,
+once Lurk settings > Advanced > Debug logging is on. `Logger.i`, `w` and `blocked` always write.
 
 Two things that bite: Morphe silently drops a non-range `invoke-*` whose register is above
 v15 (use `/range` forms and check with `dexdump`), and the extension must not pull the Kotlin
@@ -234,6 +243,12 @@ bash bin/test-twitch-privacy "$MORPHE_WORK/out/twitch-31.7.0-patched.apk"
 - `bin/test-<app>` and the other `bin/test-twitch-*` scripts compile a probe from `tests/<app>/`
   with the Android SDK, push it with the patched APK and run it with `app_process`, so the
   probe calls the app's real, patched methods on ART. Several accept `--compile-only`.
+- Every patched APK carries `assets/lurk/locators.json`: the obfuscated classes and methods the
+  patches matched, as a JSON object keyed `<app>.<patch>.<what>` (for example
+  `rumble.settings.app_info_section`) with smali descriptors as values. A patch adds an entry with
+  `Locators.record(...)` (`patches/shared/Locators.kt`); the app's settings patch writes the file
+  after every other patch has finished. Probes read it from the APK's assets instead of pinning R8
+  names, so they keep working when the app is rebuilt.
 - `tests/<app>/verify_*.py` and `test_*.py` are standalone Python scripts: they diff stock and
   patched apktool output, decode Hermes bundles, or compile an extension helper against small
   stubs and run it on the JVM. Each docstring gives the usage. They honor `MORPHE_WORK` and

@@ -1,6 +1,11 @@
 """Small JVM platform boundaries for production helper tests (no Android SDK/APK).
 
 The handler clock is driven explicitly by each probe; it executes production callbacks.
+
+Helpers that only read settings get the small Settings double below, whose `values` map a probe
+fills directly. It follows the production rules: a key that isn't in `values` is unregistered, so
+a switch reads as off and a choice as 0. tests/shared/test_settings.py runs the real Settings and
+Registry instead (pass `extra={path: None}` to drop a double and compile the production class).
 """
 import os
 from pathlib import Path
@@ -134,15 +139,19 @@ STUBS = {
         public KeyEvent(long a,long b,int c,int d,int e){} }''',
     'android/text/format/DateFormat.java': '''package android.text.format; public class DateFormat {
         public static boolean is24HourFormat(android.content.Context c){return true;} }''',
-    PACKAGE + 'Logger.java': 'package io.github.jordanwoodson.extension.shared; public class Logger {public static void d(String s){} }',
+    PACKAGE + 'Logger.java': '''package io.github.jordanwoodson.extension.shared; public class Logger {
+        public static void d(String s){} public static void i(String s){} public static void w(String s){}
+        public static void w(String s,Throwable t){} public static void blocked(String s){} public static void refresh(){}
+        public static boolean debug(){return false;} }''',
     PACKAGE + 'Network.java': '''package io.github.jordanwoodson.extension.shared; public class Network {
         public static boolean isMetered(android.content.Context c){return false;} }''',
     PACKAGE + 'settings/Settings.java': '''package io.github.jordanwoodson.extension.shared.settings;
         public class Settings {public static final java.util.Map<String,String> values=new java.util.HashMap<>();
         public static boolean isRegistered(String k){return values.containsKey(k);}
         public static boolean isEnabled(String k){return Boolean.parseBoolean(values.getOrDefault(k,"false"));}
-        public static int getInt(String k){return Integer.parseInt(values.getOrDefault(k,"0"));}
+        public static int getInt(String k){try{return Integer.parseInt(values.getOrDefault(k,"0"));}catch(NumberFormatException e){return 0;}}
         public static String getText(String k){return values.getOrDefault(k,"");}
+        public static long changes(){return -1;}
         public static android.content.Context appContext(){return null;} }''',
 }
 
@@ -154,6 +163,8 @@ def run(name, helpers, probe, args=(), extra=None):
     try:
         sources = []
         for path, content in (STUBS | (extra or {}) | {name + '.java': probe}).items():
+            if content is None:
+                continue
             target = output / path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content)

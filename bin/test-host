@@ -13,6 +13,7 @@ checks=(
     tests/twitch/test_providers.py
     tests/twitch/test_rn_chat.py
     tests/shared/test_sleep_timer.py
+    tests/shared/test_settings.py
     tests/rumble/test_state_transitions.py
     tests/kick/verify_player.py
     tests/kick/verify_privacy.py

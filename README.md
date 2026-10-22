@@ -84,8 +84,25 @@ updates, wait for a Lurk release that lists the new version.
 
 Patched apps get a **Lurk** settings screen that turns included patches off and on without
 patching again. Long-press the app icon › **Lurk settings**; Rumble also has Settings › App info ›
-Lurk. Kick's and Twitch's JavaScript settings apply after a restart, which the screen offers. See the [Kick notes](docs/kick.md) for the experimental VOD option and the
-[Twitch notes](docs/twitch.md) for coverage and testing limits.
+Lurk. It has:
+
+- **Search** across every setting, with switches you can flip right in the results.
+- **Pause Lurk**: every switch off from the next start, to see whether Lurk causes a problem. Your
+  settings are kept, and lockout protection (Block update prompts) stays on. If the app stops three
+  times in a row within a minute of starting, Lurk pauses itself and says so on the screen.
+- **Restart** bar: settings the app reads at startup (Kick's and Twitch's JavaScript ones, for
+  example) apply after a restart, which the bar at the top does for you.
+- **Export settings** and **Import settings**: a JSON file through the system file picker.
+  Importing lists what would change before anything is applied.
+- **Report a problem**: opens the GitHub bug report with the app, its version, the Lurk version and
+  which switches are on filled in. Nothing is sent until you submit it; word and user lists are
+  never included.
+- **Debug logging** (Advanced, off by default): detailed lines for bug reports, read with
+  `adb logcat -s lurk`.
+
+If the settings can't be read, every patch is off and the screen says so. See the
+[Kick notes](docs/kick.md) for the experimental VOD option and the [Twitch notes](docs/twitch.md)
+for coverage and testing limits.
 
 ## Patches
 

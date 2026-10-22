@@ -23,9 +23,12 @@ import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUM
 import io.github.jordanwoodson.patches.rumble.shared.clickableCall
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.rumble.shared.staticRangeCalls
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.shared.SHARED_EXTENSION
+import io.github.jordanwoodson.patches.shared.settings.writeLocators
 import io.github.jordanwoodson.patches.shared.settings.SETTINGS_CLASS
 import io.github.jordanwoodson.patches.shared.settings.SettingsScreen
+import io.github.jordanwoodson.patches.shared.settings.debugLoggingSetting
 import org.w3c.dom.Element
 
 private const val SETTINGS_ACTIVITY = "io.github.jordanwoodson.extension.shared.settings.SettingsActivity"
@@ -48,6 +51,7 @@ val settingsPatch = bytecodePatch(
     dependsOn(
         resourcePatch {
             execute {
+                Locators.clear()
                 document("AndroidManifest.xml").use { document ->
                     val application = document.getElementsByTagName("application").item(0) as Element
                     application.appendChild(
@@ -58,17 +62,20 @@ val settingsPatch = bytecodePatch(
                             // Launched from the launcher shortcut, it gets a task of its own instead of
                             // joining Rumble's, which may be a picture-in-picture window.
                             setAttribute("android:taskAffinity", "")
-                            // Only for the window shown while it starts; the activity picks a day/night theme.
-                            setAttribute("android:theme", "@android:style/Theme.DeviceDefault.Light.NoActionBar")
+                            // Only for the window shown while it starts (dark, like the apps); the activity picks dark or light.
+                            setAttribute("android:theme", "@android:style/Theme.DeviceDefault.NoActionBar")
                         },
                     )
                 }
             }
+            // Finalized after every other patch, so everything they matched is recorded.
+            finalize { writeLocators("rumble") }
         },
     )
 
     execute {
         rumbleSettings.clear()
+        rumbleSettings.add(debugLoggingSetting)
 
         // The extension's context, before any of Rumble's own startup.
         ApplicationOnCreateFingerprint.single("RumbleApplication.onCreate").method.addInstruction(
@@ -117,6 +124,8 @@ private fun BytecodePatchContext.addLurkRow() {
     if (row == null || rows.size != 3) {
         throw PatchException("Rumble: expected three rows from one composable in App Info, found ${rows.size}")
     }
+    Locators.record("rumble.settings.app_info_section", section)
+    Locators.record("rumble.settings.row", rows.first().second)
     val rowParameters = rows.first().second.parameters()
     val modifier = rowParameters[0]
     val composer = rowParameters[4]

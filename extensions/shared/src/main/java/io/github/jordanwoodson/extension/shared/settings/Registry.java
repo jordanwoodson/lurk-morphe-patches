@@ -28,6 +28,11 @@ final class Registry {
     /** The patched app's name, such as "Rumble". */
     final String app;
     final List<Entry> entries;
+    /**
+     * False when the patches' JSON was missing, couldn't be parsed or listed nothing. The registry is then
+     * empty, so every switch reads as off.
+     */
+    final boolean readable;
     private final Map<String, Entry> byKey = new HashMap<>();
 
     static final class Entry {
@@ -42,6 +47,8 @@ final class Registry {
         final String defaultValue;
         /** Whether the app has to restart before a change applies. */
         final boolean restart;
+        /** A switch that Pause Lurk leaves as it is (lockout protection, Debug logging). */
+        final boolean keepWhenPaused;
         final String[] choiceLabels;
         final String[] choiceValues;
 
@@ -54,6 +61,7 @@ final class Registry {
             parent = json.isNull("parent") ? null : json.optString("parent", null);
             defaultValue = json.getString("default");
             restart = json.optBoolean("restart");
+            keepWhenPaused = json.optBoolean("keep");
             JSONArray choices = json.optJSONArray("choices");
             int count = choices == null ? 0 : choices.length();
             choiceLabels = new String[count];
@@ -71,16 +79,32 @@ final class Registry {
             }
             return value;
         }
+
+        boolean hasChoice(String value) {
+            for (String choice : choiceValues) {
+                if (choice.equals(value)) return true;
+            }
+            return false;
+        }
+
+        boolean isSwitch() {
+            return SWITCH.equals(type);
+        }
     }
 
-    private Registry(String name, String version, String app, List<Entry> entries) {
+    private Registry(String name, String version, String app, List<Entry> entries, boolean readable) {
         this.name = name;
         this.version = version;
         this.app = app;
         this.entries = Collections.unmodifiableList(entries);
+        this.readable = readable;
         for (Entry entry : entries) byKey.put(entry.key, entry);
     }
 
+    /**
+     * The registry in {@code json}. All or nothing: when any part of it can't be read the result is empty and
+     * not {@link #readable}, so no switch is on.
+     */
     static Registry parse(String json) {
         if (json != null) {
             try {
@@ -89,12 +113,14 @@ final class Registry {
                 List<Entry> entries = new ArrayList<>(settings.length());
                 for (int i = 0; i < settings.length(); i++) entries.add(new Entry(settings.getJSONObject(i)));
                 return new Registry(root.optString("name", "Lurk"), root.optString("version"),
-                        root.optString("app", "the app"), entries);
+                        root.optString("app", "the app"), entries, !entries.isEmpty());
             } catch (JSONException e) {
-                Logger.d("settings: unreadable registry: " + e);
+                Logger.w("settings: unreadable registry, every patch is off: " + e.getClass().getSimpleName());
             }
+        } else {
+            Logger.w("settings: no registry, every patch is off");
         }
-        return new Registry("Lurk", "", "the app", new ArrayList<>());
+        return new Registry("Lurk", "", "the app", new ArrayList<>(), false);
     }
 
     Entry get(String key) {
