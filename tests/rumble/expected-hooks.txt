@@ -21,6 +21,7 @@ exact_counts  RumbleInterface.exactCount
 hide_tipping|hide_join_button|hide_shop_button  RumbleInterface.actionButtons
 home_hide_categories  RumbleInterface.homeSectionKind
 startup_tab  Settings.getInt
+amoled_black  RumbleInterface.amoledSurface
 
 chat_hide_raid_notices|chat_keywords  RumbleChat.messages
 chat_keywords  RumbleChat.currentUserId

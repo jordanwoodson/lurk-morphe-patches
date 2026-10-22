@@ -79,8 +79,7 @@ bash bin/test-rumble ~/build/lurk-morphe-patches/out/rumble-3.21.0-patched.apk
 | `HideProbe` | Hide Shorts (parser, channel tabs, `ShortsListView`), Hide Premium upsells, Hide tipping and Rants |
 | `PlaybackProbe` | Fill screen (Media3's real `AspectRatioFrameLayout` measured in landscape and portrait), Seek interval, the sleep timer's pause through the listener |
 | `ChatProbe`, `KeywordsProbe` | Hide chat clutter, Show deleted messages, Chat timestamps, Chat keywords |
-| `CountProbe`, `InterfaceProbe`, `SearchProbe`, `UpdateProbe` | Show exact counts, startup tab and Home sections, Don't save searches, Block update prompts |
-| `PlayerProbe`, `QualityProbe`, `RefreshProbe` | Remember speed, audio focus, keep screen on; Default video quality; Refresh stream |
+| `CountProbe`, `InterfaceProbe`, `SearchProbe`, `UpdateProbe` | Show exact counts, startup tab and Home sections, Don't save searches, Block update prompts || `PlayerProbe`, `QualityProbe`, `RefreshProbe` | Remember speed, audio focus, keep screen on; Default video quality; Refresh stream |
 | `PremiumProbe` | Unlock Premium's getter and mapper |
 
 Disable autoplay changes DataStore defaults inside coroutine readers that can't run under `app_process`;
@@ -95,9 +94,9 @@ metadata. It also checks unrelated account state. No probe uses a Rumble account
 requests.
 
 The probes reach obfuscated classes, methods and fields through locators: while patching, each patch records
-what it matched with `Locators.record("rumble.<patch>.<what>", …)` (45 entries: classes as `Lpkg/A;`,
-methods as `Lpkg/A;->name(…)R`, fields as `Lpkg/A;->name:T`), and the settings patch writes them into the
-patched APK as `assets/lurk/locators.json`. `ProbeSupport.locate`, `type`, `method` and `fieldName` read that
+what it matched with `Locators.record("rumble.<patch>.<what>", …)` (50 entries with the default patches:
+classes as `Lpkg/A;`, methods as `Lpkg/A;->name(…)R`, fields as `Lpkg/A;->name:T`), and the settings patch
+writes them into the patched APK as `assets/lurk/locators.json`. `ProbeSupport.locate`, `type`, `method` and `fieldName` read that
 file from the APK on the probe's classpath and fall back to the names in 3.21.0 while it is absent (the stock
 APK, or a build from before the asset). A new Rumble version then needs no probe edits for anything a patch
 matches. What no patch touches (Compose state internals, ExoPlayer and Composer methods in `RefreshProbe`, the
@@ -287,6 +286,7 @@ finds its switch off after updating, unless it was changed on the screen before.
 | Hide Create tab | `hide_create_tab` | after a restart |
 | Hide category rows, Hide creator rows, Hide playlist rows | `home_hide_categories`, `home_hide_creators`, `home_hide_playlists` | when Home loads again |
 | Hide Home sections by title (text) | `home_hide_titles` | when Home loads again |
+| AMOLED black, Near-black surfaces | `amoled_black`, `amoled_near_black` | after a restart |
 | No autoplay of the next video, No feed previews | `autoplay_next_video_off`, `feed_previews_off` | after a restart |
 | Background audio by default | `background_audio` | after a restart |
 | Unlock Premium | `unlock_premium` | after signing in again |
@@ -778,6 +778,37 @@ whose switch is on, or a section whose `title` (read by its field name) matches 
 `InterfaceProbe` runs the real startup tab getter (with a stored My Feed) and the section `kind` getter with
 each setting.
 
+### AMOLED black
+
+`RumbleTheme` (`com.rumble.theme.RumbleTheme`) wraps Material's theme, whose dark colors already use `#000000`
+for background and surface, and provides Rumble's own color set (`RumbleColors`, one instance per theme) through a
+CompositionLocal. In dark mode pages, sheets and dialogs are drawn black. Raised surfaces use one dark grey,
+`#1B2127`: the floating bottom bar, search fields, chips and tags, loading placeholders and some cards (profile
+rows, featured channels, the wallet views). Dividers, the Join button and dialog buttons use a lighter grey,
+`#283139`, which marks the edges.
+
+Rumble builds `#1B2127` with Compose's `Color(Long)` in exactly two places, each found by that literal going
+straight into a static `(J)J` call:
+
+- the color set's `(Z)V` constructor (its argument is "light"): the dark set's surface. The light set uses
+  `#F6F7F9` from another field, so light mode keeps it.
+- the palette's static initializer, Rumble's named colors as static constants: the same grey for surfaces that
+  stay dark in both themes (the bottom bar over Shorts, Premium banners, the wallet and promo code views) and,
+  translucent, for the scrims behind sheets and over the player.
+
+The patch passes the ARGB value through `RumbleInterface.amoledSurface` before that call: black while
+`amoled_black` is on, `#0B0B0C` (the near-black of Kick's AMOLED black) while Near-black surfaces
+(`amoled_near_black`) is on too, else Rumble's grey. Both are built once per process, so the switches apply after
+a restart. What stays: the `#283139` dividers and button backgrounds, Material's elevation tint on a few raised
+buttons (`#121212`, such as Cancel under the video menu), thumbnails and the player's controls. In light mode only
+the always-dark surfaces change. Each lookup needs exactly one match and the literal must reach the color call
+unchanged, so a version that drops or moves the grey fails to patch instead of patching something else.
+
+Checked on 2026-10-22 on the emulator in dark mode, after Restart Rumble: the bottom bar (Home and Shorts) and
+the search field go from `#1B2127` to `#000000`, and to `#0B0B0C` with Near-black surfaces; the video menu's
+dividers stay `#283139`. In light mode with both switches on, Home's bar stays `#F6F7F9` and the Shorts bar is
+near-black.
+
 ## Player
 
 ### Remember playback speed
@@ -913,14 +944,6 @@ chosen. At "15 seconds (Rumble's)" the buttons and icons are Rumble's own.
 
 `PlayerProbe` runs the real speed store with the switch on and off, and the focus and keep-screen-on
 decisions. `RefreshProbe` checks the clickable panel modifier and the silent callback.
-
-## AMOLED black (not built)
-
-`RumbleTheme` (`com.rumble.theme.RumbleTheme`) wraps Material's theme, whose dark colors already use
-`#000000` for background and surface, and a CompositionLocal of Rumble's own colors. In dark mode those draw the
-screens black too; only the floating bottom bar, sheets and some cards use dark greys (`#1B2127`, `#283139`) to
-stand out from the black. Checked on 2026-10-22 with the emulator in dark mode: Home's background is black. A
-patch would only blacken those raised surfaces, which would hide their edges, so none was built.
 
 ## Live chat
 

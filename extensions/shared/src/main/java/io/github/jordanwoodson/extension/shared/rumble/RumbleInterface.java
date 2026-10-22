@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 
 import io.github.jordanwoodson.extension.shared.ChatFilter;
+import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
 
 /** Interface settings for Rumble. With a setting off, each hook returns Rumble's own value. */
@@ -163,5 +164,26 @@ public final class RumbleInterface {
             return kind;
         }
         return kind;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // AMOLED black
+
+    static final String AMOLED_BLACK = "amoled_black";
+    static final String AMOLED_NEAR_BLACK = "amoled_near_black";
+    static final long BLACK = 0xFF000000L;
+    /** Near-black surfaces: one step above black, the near-black of Kick's AMOLED black. */
+    static final long NEAR_BLACK = 0xFF0B0B0CL;
+
+    /**
+     * Injection point: Rumble's dark grey for raised surfaces (ARGB, #1B2127) on its way into Compose's
+     * Color(Long), where the theme's color set and the palette are built, once per process. Black while
+     * AMOLED black is on, near-black with Near-black surfaces, else Rumble's grey.
+     */
+    public static long amoledSurface(long argb) {
+        if (!on(AMOLED_BLACK)) return argb;
+        long surface = on(AMOLED_NEAR_BLACK) ? NEAR_BLACK : BLACK;
+        Logger.d("amoled black: surfaces " + Long.toHexString(surface));
+        return surface;
     }
 }
