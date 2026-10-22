@@ -70,5 +70,9 @@ public class RumbleStateProbe {
 '''
 
 if __name__ == '__main__':
+    # The source checks run here too, so bin/test-host covers them.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import test_sources
+    test_sources.main()
     run('RumbleStateProbe', ['SleepTimer.java', 'ChatFilter.java', 'rumble/RumbleChat.java',
                             'rumble/RumblePlayback.java'], PROBE, ['empty', 'off', 'account', 'speed'])

@@ -10,6 +10,7 @@ import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.rumble.shared.RUMBLE
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PRIVACY
 import io.github.jordanwoodson.patches.rumble.shared.enumConstant
 import io.github.jordanwoodson.patches.rumble.shared.kotlinObject
@@ -42,7 +43,7 @@ val blockAdsPatch = bytecodePatch(
     execute {
         val useCase = VideoAdUseCaseFingerprint.matchAllOrNull()?.singleOrNull()
             ?: throw PatchException("Rumble: expected exactly one video ad use case. " +
-                "This patch targets 3.21.0; recheck the ad code before updating compatibility.")
+                "This patch targets Rumble ${RUMBLE.version}; recheck the ad code before updating compatibility.")
         val repositoryInterface = useCase.originalMethod.parameterTypes.first().toString()
 
         val implementations = mutableListOf<ClassDef>()

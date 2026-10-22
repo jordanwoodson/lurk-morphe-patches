@@ -6,6 +6,7 @@ import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.rumble.shared.RUMBLE
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PRIVACY
 import io.github.jordanwoodson.patches.rumble.shared.kotlinObject
 import io.github.jordanwoodson.patches.shared.compose.newInstanceTypes
@@ -47,7 +48,7 @@ val disableAnalyticsPatch = bytecodePatch(
     execute {
         val repository = EventRepositoryFingerprint.matchAllOrNull()?.singleOrNull()?.classDef
             ?: throw PatchException("Rumble: expected exactly one event repository. " +
-                "This patch targets 3.21.0; recheck the analytics code before updating compatibility.")
+                "This patch targets Rumble ${RUMBLE.version}; recheck the analytics code before updating compatibility.")
 
         // send(events: List, ...6 strings, continuation): every e.rumble.com upload.
         val sendEvents = repository.singleMethod("event upload") { method ->

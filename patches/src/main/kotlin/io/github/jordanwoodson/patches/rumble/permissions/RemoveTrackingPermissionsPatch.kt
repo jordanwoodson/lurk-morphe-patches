@@ -3,6 +3,7 @@ package io.github.jordanwoodson.patches.rumble.permissions
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.resourcePatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.rumble.shared.RUMBLE
 import io.github.jordanwoodson.patches.rumble.shared.childElements
 
 // Permissions only trackers use. Without AD_ID, Google Play services hands every SDK, and Rumble's own
@@ -43,7 +44,7 @@ val removeTrackingPermissionsPatch = resourcePatch(
             val missing = TRACKING_PERMISSIONS - permissions.map { it.getAttribute("android:name") }.toSet()
             if (missing.isNotEmpty()) {
                 throw PatchException("Rumble: tracking permissions not found: ${missing.joinToString()}. " +
-                    "This patch targets 3.21.0; recheck the manifest before updating compatibility.")
+                    "This patch targets Rumble ${RUMBLE.version}; recheck the manifest before updating compatibility.")
             }
             permissions.forEach { manifest.removeChild(it) }
 
