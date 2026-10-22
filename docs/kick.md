@@ -226,9 +226,9 @@ details and validation follow.
 | Disable analytics | Yes | On | Firebase collection/event bridge, Insider initialization/events/queued jobs, Datadog initialization, Mux/Datazoom and PAL nonce suppression. Promise completion is preserved. |
 | Disable autoplay | Yes | On | Changes the initial feed-preview preference; saved preferences and Kick's own toggle take precedence. |
 | Default video quality | No | On; quality on mobile data, Same as on Wi-Fi | Configurable adaptive default/Auto ceiling, consistently applied to initialization, reset and cleanup. Explicit player selections retain Kick's normal rules. A lower starting ceiling can be set for mobile data. |
-| Hide KICKs tipping | No | On | Gift-shop, purchase and leaderboard tipping entry points; received gifts remain. |
-| Hide subscription upsells | No | On | Subscribe/gift-subscription prompts, preserving the subscribed badge. |
-| Hide Clips | No | On | Browse/channel/category tabs and channel clip rail. Direct playback routes remain. |
+| Hide KICKs tipping | Yes | Off | Gift-shop, purchase and leaderboard tipping entry points; received gifts remain. |
+| Hide subscription upsells | Yes | Off | Subscribe/gift-subscription prompts, preserving the subscribed badge. |
+| Hide Clips | Yes | Off | Browse/channel/category tabs and channel clip rail. Direct playback routes remain. |
 | Clean share links | Yes | On | Known campaign/click parameters on Kick URLs only; functional parameters, other hosts and attachments remain. |
 | Bypass VOD ad sessions | No | Off | Experimental original-VOD-URL fallback. No live-ad removal claim. |
 | Block update prompts | Yes | On | Kick's forced-update screen and update sheet, and the Play Store version lookup behind them. |

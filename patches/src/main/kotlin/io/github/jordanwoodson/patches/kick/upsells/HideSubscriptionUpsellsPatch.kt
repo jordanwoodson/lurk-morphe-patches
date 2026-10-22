@@ -16,8 +16,7 @@ private const val KEY = "hide_subscription_upsells"
 val hideSubscriptionUpsellsPatch = bytecodePatch(
     name = "Hide subscription upsells",
     description = "Hides channel Subscribe and Gift a Sub buttons and the leaderboard gift-subscription prompt. " +
-        "Keeps the existing subscribed indicator." + OTA_UPDATES_OFF,
-    default = false,
+        "Keeps the existing subscribed indicator. Starts off. Turn it on in Lurk settings > Interface." + OTA_UPDATES_OFF,
 ) {
     compatibleWith(COMPATIBILITY_KICK)
     dependsOn(kickHermesPatch)
@@ -33,15 +32,17 @@ val hideSubscriptionUpsellsPatch = bytecodePatch(
             KEY,
             subscribed + hex("5e 04 06 0c"),
             subscribed + hex("94 04 76 04"),
+            defaultEnabled = false,
         )
-        kickHermes.returnNull("ChannelGiftSubButton", KEY)
-        kickHermes.returnNull("LeaderboardSubsFooter", KEY)
+        kickHermes.returnNull("ChannelGiftSubButton", KEY, defaultEnabled = false)
+        kickHermes.returnNull("LeaderboardSubsFooter", KEY, defaultEnabled = false)
         kickSettings.add(
             SwitchSetting(
                 KEY,
                 "Hide subscription upsells",
                 "Hide channel subscription buttons and the leaderboard gift prompt.",
                 Section.INTERFACE,
+                default = false,
                 restart = true,
             ),
         )
