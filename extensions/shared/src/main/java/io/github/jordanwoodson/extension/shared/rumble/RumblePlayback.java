@@ -194,13 +194,39 @@ public final class RumblePlayback {
     public static void onPlayingChanged(Object listener, boolean playing) {
         if (!pauseActionSet) {
             pauseActionSet = true;
-            SleepTimer.setPauseAction(RumblePlayback::pauseByMediaKey);
+            SleepTimer.setPauseAction(RumblePlayback::pauseStarted);
         }
         if (playing) SleepTimer.onPlay(listener);
         else SleepTimer.onStop(listener);
     }
 
-    /** Pauses through Rumble's media session, as a headset's pause button would, including in the background. */
+    /**
+     * Pauses each player service whose listener reported playback, through the pause Rumble's media session
+     * uses. Only when none could be paused does it fall back to a media key, which the system sends to the
+     * active media session, possibly another app's.
+     */
+    static void pauseStarted() {
+        int paused = 0;
+        for (Object listener : SleepTimer.started()) {
+            try {
+                if (pausePlayer(listener)) paused++;
+            } catch (Throwable t) {
+                Logger.d("sleep timer: " + t);
+            }
+        }
+        if (paused > 0) {
+            Logger.d("sleep timer: paused " + paused + " player" + (paused == 1 ? "" : "s"));
+        } else {
+            pauseByMediaKey();
+        }
+    }
+
+    /** Replaced at patch time: pauses the player of a player service listener; false if it has none. */
+    private static boolean pausePlayer(Object listener) {
+        return false;
+    }
+
+    /** Fallback: a media key, as a headset's pause button would send, to the system's active media session. */
     static void pauseByMediaKey() {
         Context context = Settings.appContext();
         AudioManager audio = context == null ? null : context.getSystemService(AudioManager.class);

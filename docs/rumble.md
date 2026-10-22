@@ -667,10 +667,23 @@ The end of a video and leaving the player still let the screen turn off.
 
 The same choices and behavior as Twitch's, in the shared `SleepTimer`: playback pauses the chosen time
 after it last started or resumed. The player service's `Player.Listener` (the inner class checking states 1
-and 4 in `onPlaybackStateChanged`) reports `onIsPlayingChanged` to it. To pause, the extension sends
-`KEYCODE_MEDIA_PAUSE` through `AudioManager.dispatchMediaKeyEvent`: it reaches Rumble's media session and
-its own pause path, also in the background and in picture-in-picture. Twitch's sleep timer uses the same
-class with Twitch's own pause action.
+and 4 in `onPlaybackStateChanged`) reports `onIsPlayingChanged` to it, with itself as the player. To pause,
+the extension pauses each listener that reported playback through `lurkPause`, a public static method the
+patch adds to the listener class: it reads the listener's service (a package-private field, which the
+extension couldn't read), the service's player through the service's public static accessor, and calls the
+pause Rumble's media session uses. That pause is found from Media3: `Player.pause()` is the `()V` method of
+`BasePlayer` (a class implementing the interface `ExoPlayer` extends) that only calls `setPlayWhenReady(false)`,
+and the service's media session player (an inner class of the service) overrides it with a call to one
+`()V` method of Rumble's player. This works in the background and in picture-in-picture, and it pauses Rumble
+even when another app owns the active media session. Only if no listener could be paused does the extension
+send `KEYCODE_MEDIA_PAUSE` through `AudioManager.dispatchMediaKeyEvent`, which the system routes to the active
+media session. Twitch's sleep timer uses the same class with Twitch's own pause action.
+
+Checked on 2026-10-22 with a test build that counts minutes as seconds, "Keep playing during other sounds"
+at "Keep playing" and the timer at 30: Rumble played a VOD, then a cloned Rumble (Clone app) played another
+one while Rumble kept playing. 30 s after Rumble last started, Rumble logged "sleep timer: paused 1 player"
+and its media session went to PAUSED, while the clone's session kept PLAYING. The system's media button
+session was still Rumble's at that moment, so the run shows the direct pause, not a media key going astray.
 
 ### Refresh stream
 
@@ -824,9 +837,9 @@ that app code calls every new extension method.
   choice 2 keeps playing through both.
 - **Keep screen on while paused:** with a 15 s screen timeout (and stay-awake-while-charging off), a video
   paused for 30 s keeps the screen awake with the switch on; off, the screen goes to sleep.
-- **Sleep timer:** checked with a test build that counts minutes as seconds: with "15", Rumble logs "sent
-  pause" and its media session goes to PAUSED 15 s after playback starts; Twitch logs "paused 1 native
-  players" 15 s after a stream starts.
+- **Sleep timer:** checked with a test build that counts minutes as seconds: with "15", Rumble's media
+  session goes to PAUSED 15 s after playback starts (it then paused with a media key; see Sleep timer for
+  the direct pause it uses now); Twitch logs "paused 1 native players" 15 s after a stream starts.
 - **Default startup tab:** "My Feed" opens Rumble on My Feed after a cold start, "Home" on Home.
 - **Hide Create tab:** the bottom bar shows Home, My Feed and Account (with Hide Shorts); each still opens its
   own screen.
