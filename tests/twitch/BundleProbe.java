@@ -103,6 +103,40 @@ public final class BundleProbe {
                 Arrays.copyOfRange(selected, content.length, selected.length)), "Invalid Hermes footer: " + key);
             switches.put(key, false);
         }
-        System.out.println("PASS: loader defaults, process snapshot, all-off stock restoration, " + switches.size() + " independent switches");
+
+        // Cold starts with unchanged settings reuse the prepared copy instead of rewriting 28 MB.
+        File copy = new File(directory, "lurk-twitch.hbc");
+        File sidecar = new File(directory, "lurk-twitch.json");
+        check(Arrays.equals(load(prepare, prepared, defaults, assets, embedded), restored), "All-off copy changed");
+        check(sidecar.isFile(), "No sidecar for the prepared copy");
+        long written = copy.lastModified();
+        Thread.sleep(50);
+        check(Arrays.equals(load(prepare, prepared, defaults, assets, embedded), restored) && copy.lastModified() == written,
+            "Unchanged settings rewrote the prepared copy");
+        // Another selection is rebuilt, and so is the first one again afterwards.
+        String first = switches.keySet().iterator().next();
+        switches.put(first, true);
+        Thread.sleep(50);
+        check(!Arrays.equals(load(prepare, prepared, defaults, assets, embedded), restored) && copy.lastModified() != written,
+            "A changed setting reused the old copy");
+        switches.put(first, false);
+        check(Arrays.equals(load(prepare, prepared, defaults, assets, embedded), restored), "Returning to a selection reused the wrong copy");
+        // A copy changed after its sidecar was written, or a missing sidecar, means a rebuild.
+        byte[] tampered = Files.readAllBytes(copy.toPath());
+        tampered[200] ^= 1;
+        Thread.sleep(50);
+        Files.write(copy.toPath(), tampered);
+        check(Arrays.equals(load(prepare, prepared, defaults, assets, embedded), restored), "A modified copy was reused");
+        check(sidecar.delete(), "No sidecar to delete");
+        written = copy.lastModified();
+        Thread.sleep(50);
+        check(Arrays.equals(load(prepare, prepared, defaults, assets, embedded), restored) && copy.lastModified() != written &&
+            sidecar.isFile(), "A copy without a sidecar was reused");
+        // Back at the defaults, both files go.
+        switches.clear();
+        check(load(prepare, prepared, defaults, assets, embedded) == embedded && !copy.exists() && !sidecar.exists(),
+            "Defaults kept the private copy or its sidecar");
+        System.out.println("PASS: loader defaults, process snapshot, all-off stock restoration, independent switches, " +
+            "prepared copy reused only for unchanged settings");
     }
 }

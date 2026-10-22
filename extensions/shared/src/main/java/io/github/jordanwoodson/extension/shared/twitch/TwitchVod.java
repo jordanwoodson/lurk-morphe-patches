@@ -3,7 +3,6 @@ package io.github.jordanwoodson.extension.shared.twitch;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
-import android.content.ContextWrapper;
 import android.content.res.Resources;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
@@ -12,7 +11,6 @@ import android.os.Looper;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -43,7 +41,6 @@ public final class TwitchVod {
     private static final String GQL = "https://gql.twitch.tv/gql";
     // The Twitch Android app's public Client-ID. The "moments" query used here is public, so it is
     // answered without an account token.
-    private static final String CLIENT_ID = "kd1unb4b3q4t58fwlpcbzcbnm76a8fp";
 
     private TwitchVod() {
     }
@@ -496,7 +493,7 @@ public final class TwitchVod {
     }
 
     private static void show(Context context, Object presenter, String id, List<Chapter> chapters) {
-        Activity activity = activity(context);
+        Activity activity = TwitchContext.activity(context);
         if (!Settings.isEnabled("vod_chapters") || !id.equals(vodOf(presenter))
                 || activity == null || activity.isFinishing() || activity.isDestroyed()) return;
         if (chapters.isEmpty()) {
@@ -548,7 +545,7 @@ public final class TwitchVod {
                             + "momentRequestType: VIDEO_CHAPTER_MARKERS) { edges { node { "
                             + "positionMilliseconds description type } } } } }")
                     .put("variables", new JSONObject().put("id", id));
-            String response = TwitchRequest.http(GQL, payload.toString(), CLIENT_ID, deadline,
+            String response = TwitchRequest.http(GQL, payload.toString(), TwitchRequest.CLIENT_ID, deadline,
                     () -> Settings.isEnabled("vod_chapters"));
             return response == null ? null : parse(response);
         } catch (Exception e) {
@@ -606,21 +603,7 @@ public final class TwitchVod {
         return String.format("%d:%02d", minutes, secs);
     }
 
-    private static Activity activity(Context context) {
-        while (context instanceof ContextWrapper) {
-            if (context instanceof Activity) return (Activity) context;
-            context = ((ContextWrapper) context).getBaseContext();
-        }
-        return null;
-    }
-
     private static void toast(Context context, String text) {
-        MAIN.post(() -> {
-            try {
-                Toast.makeText(context.getApplicationContext(), text, Toast.LENGTH_SHORT).show();
-            } catch (RuntimeException e) {
-                Logger.d("vod chapters: toast " + e);
-            }
-        });
+        TwitchContext.toast(context, text, "vod chapters");
     }
 }

@@ -6,7 +6,7 @@ APKMirror APKM and signing certificate pinned in `rumble/shared/Constants.kt`.
 Sign in, or sign out and back in after installing, to fetch a fresh profile. The patch
 overrides the profile's local premium flag; a signed-out session never fetches that
 profile. Server-authorized streams, purchases and subscription metadata are unaffected.
-Live signed-in playback has not been verified with an account.
+Signed-in behavior has not been verified with an account (see below).
 
 ## Implementation
 
@@ -32,6 +32,25 @@ These obfuscated names describe this APK only; they are not patch fingerprints.
 Only the getter's result changes. Nullable `premiumData`, account
 validation, age verification and onboarding retain their original behavior.
 
+### What a premium flag without premium data does
+
+The patch leaves `premiumData` (JSON `premium`: plan, start and expiration dates, renewal, provider) null
+for a free account while `isPremium` reads true. Traced in 3.21.0:
+
+- The mapper turns `premiumData` into an entity (`UserProfilePremiumDataEntity`), and the profile use cases
+  only ever test it for null: `isUserPremiumKey = premiumData != null || isPremium`. Nothing in the app shows
+  the plan or dates, so a null `premiumData` with the flag on has no code path that could fail on it.
+- The session's premium flow (the `isUserPremiumKey` reader) feeds the ad use cases, the feeds' and video
+  page's view models, the Downloads screen and the Premium upsell checks. With it true the app stops asking
+  for ads and shows Downloads instead of its upsell.
+- Premium-only videos, live gates (`liveGate`), downloads and premium comments are decided by the server:
+  each video carries `has_access_to_premium`, and its sources, download and comment requests are authorized
+  with the session. The patch can't change those. What the app shows when the server refuses (an empty
+  player, an error, a paywall) has not been seen.
+
+None of this was run signed in: there was no Rumble account for testing. `PremiumProbe` runs the getter and
+the mapper on the real APK with fixtures.
+
 ## Build and test
 
 With GitHub Packages access configured as described in the workspace README:
@@ -43,13 +62,47 @@ bash bin/test-rumble ~/build/lurk-morphe-patches/out/rumble-3.21.0-patched.apk
 ```
 
 `bin/test-rumble` runs every probe in `tests/rumble/`, or only the ones named after the APK
-(`bash bin/test-rumble <apk> PremiumProbe`). Each probe calls the patched APK's real methods; settings are
+(`bash bin/test-rumble <apk> PremiumProbe`). Running them all also runs three checks on the APK's dex:
+
+- `tests/rumble/verify_compose.py`: the Compose trace labels and App Info rows the patches rely on (see
+  [Finding code](#finding-code-in-3210)).
+- The extension hooks: `tests/rumble/expected_hooks.py` reads the settings registry out of the dex and lists
+  the hooks of `tests/rumble/expected-hooks.txt` whose setting is registered, and
+  `tests/verify_extension_calls.py` fails unless app code calls each one. Add a line there with every new hook.
+- `tests/rumble/verify_switch_reads.py`: every registered setting's key is loaded by some code, app or
+  extension, so a switch can't silently do nothing.
+
+| Probe | Covers |
+|---|---|
+| `AdsProbe` | Block ads: the repository's ad answers, Boosted videos left out of the five video lists, `Video.boosted`, `ad_block` sections |
+| `PrivacyProbe` | Disable analytics and Keep watch progress, Block cookie notice (Ketch, cached consent, the Airship-only start loop, Airship features), Clean share links |
+| `HideProbe` | Hide Shorts (parser, channel tabs, `ShortsListView`), Hide Premium upsells, Hide tipping and Rants |
+| `PlaybackProbe` | Fill screen (Media3's real `AspectRatioFrameLayout` measured in landscape and portrait), Seek interval, the sleep timer's pause through the listener |
+| `ChatProbe`, `KeywordsProbe` | Hide chat clutter, Show deleted messages, Chat timestamps, Chat keywords |
+| `CountProbe`, `InterfaceProbe`, `SearchProbe`, `UpdateProbe` | Show exact counts, startup tab and Home sections, Don't save searches, Block update prompts |
+| `PlayerProbe`, `QualityProbe`, `RefreshProbe` | Remember speed, audio focus, keep screen on; Default video quality; Refresh stream |
+| `PremiumProbe` | Unlock Premium's getter and mapper |
+
+Disable autoplay changes DataStore defaults inside coroutine readers that can't run under `app_process`;
+`verify_switch_reads.py` checks that its keys are read, and the 2026-10-14 walk-through covers the behavior.
+Composables are called with a null Composer: a hooked one returns before touching it, Rumble's own code
+fails on it. Each probe calls the patched APK's real methods; settings are
 switched by rewriting their defaults in the registry, since there is no Context under `app_process`
 (`ProbeSupport.setting`). `tests/rumble/verify_settings.py <apktool-dir>` checks the settings registry of a
 decoded patched APK: unique keys, valid sections and choices, and the documented defaults. `PremiumProbe` executes the actual APK's profile
 getter and mapper on `emulator-5580` using free and paid fixtures, including absent subscription
 metadata. It also checks unrelated account state. No probe uses a Rumble account or sends API
-requests. The probes are deliberately pinned to 3.21.0 and must be re-derived for other versions.
+requests.
+
+The probes reach obfuscated classes, methods and fields through locators: while patching, each patch records
+what it matched with `Locators.record("rumble.<patch>.<what>", …)` (45 entries: classes as `Lpkg/A;`,
+methods as `Lpkg/A;->name(…)R`, fields as `Lpkg/A;->name:T`), and the settings patch writes them into the
+patched APK as `assets/lurk/locators.json`. `ProbeSupport.locate`, `type`, `method` and `fieldName` read that
+file from the APK on the probe's classpath and fall back to the names in 3.21.0 while it is absent (the stock
+APK, or a build from before the asset). A new Rumble version then needs no probe edits for anything a patch
+matches. What no patch touches (Compose state internals, ExoPlayer and Composer methods in `RefreshProbe`, the
+profile mapper in `PremiumProbe`) stays pinned to 3.21.0 and has to be re-derived; other lookups go by type or
+signature (`ProbeSupport.bySignature`, `staticOfType`).
 
 To confirm the negative control, the same probe against the original base APK must
 fail with `Profile must report premium when server is_premium=false`:
@@ -116,16 +169,52 @@ consent recorded while the switch was off, or before the patch was included, wou
 trackers on every launch. While the switch is on, the cached model's `hasDecision` getter returns `false`
 (found as the class whose `toString` starts `CachedConsent(hasDecision=`; it is the only `()Z` there).
 Startup then hands every tracker an empty purpose set, as on a fresh install: Firebase Analytics,
-Crashlytics, Performance and Facebook switch their persisted collection off again, and AppsFlyer and
-Airship are never started. The cached consent strings still go into ad requests, which Block ads stops.
-Turning the switch off uses the cached consent again.
+Crashlytics, Performance and Facebook switch their persisted collection off again, and AppsFlyer is never
+started. The cached consent strings still go into ad requests, which Block ads stops. Turning the switch
+off uses the cached consent again.
+
+### Push notifications (Airship)
+
+Rumble's consent service keeps a set of trackers (AppsFlyer, Firebase Analytics, Crashlytics, Performance,
+Facebook, Airship), each tied to one purpose. Two loops hand them the granted purposes: an update loop that
+every change runs, and a start loop that runs once, only when a decision exists. Airship, Rumble's push
+service, is taken off in its tracker's start method, so with no decision it never starts. Rumble files
+Airship, Crashlytics and Firebase Performance under `essential_services`. Granting that purpose through
+Rumble's own path would switch Crashlytics and Performance on too, and the start loop starts AppsFlyer
+whatever was granted (its start method calls `init` and `start` and only passes the purposes on as consent
+flags). So stock Rumble starts AppsFlyer even for a user who rejects everything but essential services.
+
+While Block cookie notice is on, the start loop (found in the consent service, whose constructor checks
+`trackers`, `sendDebugLogEventUseCase` and `getAdvertisingIdUseCase`, as the `()V` method that sets a flag
+and calls the tracker interface's `(Set, boolean)` method) starts only the tracker that calls into
+`com.urbanairship.UAirship`, with `essential_services`. It sets the loop's "started" flag itself, so it runs
+once. The other trackers only ever get the update loop's empty set.
+
+For `essential_services` the Airship tracker enables push, contacts (your Rumble user ID as Airship's named
+user when signed in, as in stock Rumble), tags and attributes, in-app messages and Airship's own analytics.
+`RumblePrivacy.airshipFeatures` filters the array the tracker passes to Airship's privacy manager and drops
+analytics (Airship's public `FEATURE_ANALYTICS` value, 16) while the switch is on.
+
+Checked on 2026-10-22 on the Android 16 emulator, signed out, default patch selection:
+
+- Fresh install, switch on: logcat shows `consent: starting Airship with essential_services only`, Airship's
+  "taking off", "Airship ready", "Push registration updated", and `consent: Airship analytics left off`
+  followed by Airship deleting its analytics events. Airship's `PrivacyManager.enabledFeatures` is 101 (in-app
+  messages, push, tags, contacts). No Ketch, AppsFlyer or Crashlytics connections; Firebase consent `G100`.
+- Switch off (Ketch records consent): Ketch, AppsFlyer (`cdn-settings.appsflyersdk.com`) and Crashlytics
+  settings connect, and Airship's features are 117 (the same plus analytics).
+- Switched on again and restarted: features 101, Crashlytics and Performance collection persisted as off.
+  Crashlytics sent the reports it had queued while it was on (`crashlyticsreports-pa.googleapis.com`) during
+  that first launch, before the empty purpose set reached it.
+- Within 45 s neither run created an Airship channel ("No channel ID"), stock path included, so channel
+  creation and notification delivery are not established on the emulator. They need a device with Google
+  Play and a real push.
 
 The switch offers a restart after either toggle. It blocks future Ketch calls immediately, but cannot
 undo SDK initialization or replace consent already applied to the running process. Restart to apply the
 startup consent path consistently; turning it off also needs a restart to restore that path. The
-actual-process consent/restart SDK-state matrix is recorded in
-[the 2026-10-17 verification record](verification-2026-10-17.md); notification delivery and
-live queued-event drain remain untested.
+consent and restart SDK-state matrix was checked in a running process on 2026-10-18; notification
+delivery and live queued-event drain remain untested.
 
 Validated on 2026-10-14 on the Android 16 emulator, fresh data each time, location resolved by Ketch as
 US-MO:
@@ -142,14 +231,6 @@ US-MO:
 The visible banner itself wasn't reproduced, since no notice is shown at that location; the patch doesn't
 depend on jurisdiction, because both entry points that can display one are disabled.
 
-Block cookie notice prevents Airship, Rumble's push service, from starting after a restart.
-Airship-handled messages cannot be processed without it; Airship's push feature requires the
-`essential_services` purpose. The actual consent matrix confirms startup and feature state,
-but no notification was delivered. The inherited FirebaseMessagingService can independently
-auto-display recognized notification payloads while the app is backgrounded or locked, before
-calling Airship's `onMessageReceived`. Data-message handling has a separate Airship-availability
-guard. This is therefore not a guarantee that every incoming FCM notification is suppressed.
-
 ## Lurk settings
 
 Every Rumble patch that changes code can be switched off and on in the app, without patching again:
@@ -157,6 +238,15 @@ Settings > App info > **Lurk**, or long-press the launcher icon > **Lurk setting
 only the patches that were included. Each switch starts at the patch's default (or its patch option)
 and keeps the user's choice from then on, including across updates. Reset to defaults forgets those
 choices.
+
+Defaults follow one rule: a patch that changes what the app does is selected in Manager and its switch
+starts off; the description ends "Starts off. Turn it on in Lurk settings > <Section>." The exceptions start
+on: privacy (Block ads, Block cookie notice, Disable analytics, Clean share links, Don't save searches),
+lockout protection (Block update prompts), nags (Hide Premium upsells) and restoring expected behavior
+(Resume videos when signed out, Refresh stream), plus the chat features that match Twitch's defaults. Hide
+Shorts, Hide tipping and Rants, Disable autoplay and Default video quality moved to this rule on 2026-10-22:
+they used to be unselected with the switch (or the 1080p default quality) on, so a user who had selected one
+finds its switch off after updating, unless it was changed on the screen before.
 
 | Switch | Key | Takes effect |
 |---|---|---|
@@ -167,6 +257,9 @@ choices.
 | Hide Premium upsells | `hide_premium_upsells` | when the screen is drawn again |
 | Hide Shorts | `hide_shorts` | after a restart |
 | Hide tipping and Rants | `hide_tipping` | when the data is loaded again |
+| Hide Join buttons, Hide Shop buttons | `hide_join_button`, `hide_shop_button` | when the buttons are drawn again |
+| Hide comments, Hide related videos | `hide_comments`, `hide_related_videos` | when a video is opened again |
+| Hide premium-only videos | `hide_premium_only` | when a list is loaded again |
 | Block update prompts | `block_update_prompts` | after a restart |
 | Default video quality (a choice; "Rumble's default" is 0) | `video_quality` | at the next video |
 | Live streams too | `video_quality_live` | after a restart |
@@ -182,7 +275,9 @@ choices.
 | Don't save searches | `no_search_history` | at the next search |
 | Resume videos when signed out | `resume_signed_out` | at the next video |
 | Remember playback speed | `remember_speed` | at the next speed read or pick |
+| Default playback speed (a choice in hundredths; "1x (Rumble's)" is 0) | `default_speed` | at the next video |
 | Fill screen | `fill_screen` | when the player is laid out again |
+| Player gestures | `player_gestures` | at the next touch |
 | Keep playing during other sounds (a choice; "Pause" is 0) | `audio_focus` | at the next interruption |
 | Keep screen on while paused | `keep_screen_on_paused` | at the next pause |
 | Sleep timer (a choice in minutes; "Off" is 0) | `sleep_timer` | when playback next starts |
@@ -193,10 +288,11 @@ choices.
 | Hide category rows, Hide creator rows, Hide playlist rows | `home_hide_categories`, `home_hide_creators`, `home_hide_playlists` | when Home loads again |
 | Hide Home sections by title (text) | `home_hide_titles` | when Home loads again |
 | No autoplay of the next video, No feed previews | `autoplay_next_video_off`, `feed_previews_off` | after a restart |
+| Background audio by default | `background_audio` | after a restart |
 | Unlock Premium | `unlock_premium` | after signing in again |
 
-Resource patches (Lurk icon, Remove tracking permissions, Clone app, Change app name) change the
-APK itself, so they aren't listed.
+Resource patches (Lurk icon, Remove tracking permissions, Disable tracking SDKs, Clone app, Change app
+name) change the APK itself, so they aren't listed.
 
 How it works:
 
@@ -208,11 +304,16 @@ How it works:
   composable, drawn by a static method the patch adds next to it with the same arguments as Rumble's
   rows. Its onClick is a `kotlin.jvm.functions.Function0` the extension makes with a `Proxy`, since
   the extension doesn't compile against Kotlin.
+- That lookup requires exactly three calls to one row composable `(modifier, text, value, showArrow,
+  composer, $changed, $default)` in `AppInfoSection` (Data Consent, Credits, Send Feedback). A version with
+  a fourth row or a different row composable fails the settings patch, and with it every Rumble patch that
+  has a switch. `tests/rumble/verify_compose.py <apk>` counts those rows (and checks the Compose trace
+  labels below); run it on a new version's APK before anything else.
 - Each patch registers its switches at the end of `execute`, so a patch that is left out or fails
   shows none. The settings patch writes them as JSON into `Settings.registryJson()` in `finalize`.
 - Injected code calls `Settings.isEnabled(key)` (or `getInt(key)`) and runs Rumble's original code
   when it returns false. Values live in the `lurk_settings` SharedPreferences, written only when
-  changed on the screen; unknown keys count as on.
+  changed on the screen; unknown keys count as off.
 - Restart Rumble (shown after changing a switch that needs it) relaunches the launcher activity and
   exits the process.
 
@@ -243,8 +344,24 @@ R8 renames Rumble's classes and methods, so the patches below find code through 
   matched without the line number.
 - Gson DTOs in `com.rumble.network.dto` keep their class and field names; only the getters are renamed.
 
-`shared/Bytecode.kt` has the helpers for these. Each patch fails with a message rather than guess when a
-lookup doesn't find exactly one match.
+The helpers for these are app-agnostic and live in `patches/shared/compose/` (`Lookups.kt`, `Compose.kt`,
+`ToString.kt`, `Dataflow.kt`, `Preferences.kt`, `Loops.kt`), each taking an `AppCode` built from the app's
+`Compatibility` for its error messages; `rumble/shared/` keeps thin wrappers with Rumble's name (`RUMBLE`) and
+the Rumble-only fingerprints. Each patch fails with a message rather than guess when a lookup doesn't find
+exactly one match, naming the version the patches target (taken from `COMPATIBILITY_RUMBLE`).
+
+Two of these could break many patches at once:
+
+- **Compose trace labels.** Twelve hooks (the `composableFingerprint`s and the bottom bar's lambda) depend on
+  the labels the Compose compiler writes when the app is built with source information. A build without
+  them fails all twelve; the error of each names its label and the check. `tests/rumble/verify_compose.py
+  <apk>` lists each label with its match count and the file using it, or says in one message that the
+  build has no labels at all. `bin/test-rumble` runs it.
+- **`checkNotNullParameter` names.** Constructor parameter names reach the dex only through Kotlin's null
+  checks. A build with `-assumenosideeffects` for `Intrinsics.checkNotNullParameter` would drop them, and
+  with them the lookups of Block ads, Disable analytics, Block cookie notice's Airship start, Disable
+  autoplay, Default video quality, Resume signed out, Don't save searches, Remember playback speed and the
+  chat mapper. Those fail with "expected exactly one …" naming the class.
 
 ## Disable analytics
 
@@ -261,8 +378,12 @@ of the event use cases check consent, so Block cookie notice doesn't stop these.
 the top of the three upload methods: `Success` for event lists (as after an upload, so queued watch time is
 cleared rather than retried) and `Unit` for the other two.
 
-The Keep watch progress switch (initially the `keepWatchProgress` option) lets an upload through when its list holds a watch progress event (found
-by its `toString`, `"WatchProgressEvent(timeRange="`). Rumble's watch history is server side
+The Keep watch progress switch (initially the `keepWatchProgress` option) lets the watch progress events
+of an upload through, and only those: Rumble batches them with the other events, so the upload's list
+goes through `RumblePrivacy.watchProgressOnly` with the event's class (found by its `toString`,
+`"WatchProgressEvent(timeRange="`). A batch without any is answered with `Success`. The upload method hands
+its arguments straight to a coroutine, so replacing its list parameter is safe. Those events carry the
+user ID, advertising ID and AppsFlyer ID, which the switch's text says. Rumble's watch history is server side
 (`watch_history.clear`), probably fed by these events; that is untested, as it needs an account.
 
 ## Block ads
@@ -276,10 +397,24 @@ answers each request with a result Rumble already handles:
 - **Feed and video page display ads** (`a.ads.rmbl.ws` / `a-delivery.rmbl.ws`, which receive the zone,
   keywords, user and video IDs, `ad_device_id` and the consent strings): `WaitingForAds`. Both injectors
   treat it like a failed request.
-- **Impression pixels and click/progress beacons**: success. Boosted (promoted) videos stay in feeds,
-  but their `d4.ads.rmbl.ws` impressions and clicks are no longer reported.
+- **Impression pixels and click/progress beacons**: success, so `d4.ads.rmbl.ws` gets no Boosted or ad
+  impressions and clicks.
+- **Boosted videos** are paid placements: the server sets a video's `boosted` (the advertiser's thumbnail and
+  title, the bid, and click and impression URLs), and the card shows that creative with a "Boosted" label.
+  A hidden patch passes the server's video lists (the getters of `HomeSectionDto.videos`,
+  `RelatedVideoData.videos`, `Video.related`, `VideoItems.items` for search and `CategoryVideoListData.items`;
+  Gson DTOs, found by field name) through `RumbleInterface.videos(list, kind)`, which leaves out every element
+  whose `boosted` field is set while `block_ads` is on. Hide premium-only videos and Hide related videos share
+  that one hook. `Video.boosted` returns null as well, so a Boosted video reaching the app through another list
+  shows as the plain video, without the creative, label or reports.
+- **Home's `ad_block` sections** (a display ad between Home's rows) parse as `HIDE`, like Hide Shorts does
+  for `shorts`, so they are neither loaded nor drawn.
 
 The Revcontent DTOs in the app are unused.
+
+Checked on 2026-10-22 on the emulator, signed out: with Block ads off, Home's Editor Picks row had a card
+labeled "Boosted"; with it on, scrolling all of Home shows none and nothing crashes. No `ad_block` section
+came up on Home in either run, so that hook is checked only in the code.
 
 ## Remove tracking permissions
 
@@ -287,10 +422,48 @@ Removes `AD_ID`, `ACCESS_ADSERVICES_AD_ID`, `ACCESS_ADSERVICES_ATTRIBUTION`, `AD
 install referrer permission, the Samsung and Huawei store referrer permissions and `READ_PHONE_STATE`.
 It also removes the AppsFlyer referrer `<queries>` entries.
 
-- Without `AD_ID`, Google Play services returns the all-zero ID. That covers every SDK and Rumble's own
-  `ad_device_id` (home layout, banners, watch progress); Rumble's reader doesn't filter zeros.
+- Without `AD_ID`, Google Play services returns the all-zero ID on Android 13 (API 33) and newer, where the
+  permission exists. That covers every SDK and Rumble's own `ad_device_id` (home layout, banners, watch
+  progress); Rumble's reader doesn't filter zeros. On Android 12 and older Play services doesn't check the
+  permission and returns the real ID, unless the user deleted or reset it in Android's settings.
 - `READ_PHONE_STATE` is declared by the app but never requested, and no code needs it.
 - Every other user catches the failure or checks the permission first.
+
+## Disable tracking SDKs
+
+A resource patch with no switch: it sets the SDKs' own manifest `<meta-data>` switches, adding each one that
+Rumble doesn't already declare. Rumble ships the collection defaults off and turns each SDK on from its
+consent trackers once consent is recorded (see Block cookie notice); this patch takes away what consent can
+turn back on.
+
+| Meta-data | Value | Effect |
+|---|---|---|
+| `firebase_analytics_collection_deactivated` | true | Firebase Analytics is off for good; `setAnalyticsCollectionEnabled(true)` is ignored. |
+| `google_analytics_adid_collection_enabled` | false | No advertising ID in Analytics, should it run anyway. |
+| `firebase_performance_collection_deactivated` | true | Firebase Performance is off for good ("permanently disabled"). |
+| `firebase_crashlytics_collection_enabled` | false | Already Rumble's default. Crashlytics' run-time setting overrides it. |
+| `com.facebook.sdk.AutoInitEnabled` | false | The SDK initializes but not fully, and refuses Graph requests. |
+| `com.facebook.sdk.AutoLogAppEventsEnabled`, `AdvertiserIDCollectionEnabled`, `MonitorEnabled` | false | Defaults; Rumble's Facebook tracker can still turn the first two on. |
+
+AppsFlyer has no manifest switch: Rumble starts it in code (`init` and `start`) whenever any consent decision
+exists, so only Block cookie notice keeps it off. Crashlytics also follows consent. The Facebook login SDK
+isn't in the app (no `FacebookActivity`), so nothing needs the fully initialized SDK.
+
+Checked on 2026-10-22 on the Android 16 emulator, fresh install, signed out, through the logging proxy
+(launch, Use Rumble signed out, three scrolls, Home):
+
+- Default selection without this patch: Rumble's hosts, `remote-data.urbanairship.com`,
+  `graph.facebook.com` (the Facebook SDK's settings and gatekeeper fetch), Firebase installations, Remote
+  Config and logging.
+- With it: the same without `graph.facebook.com`. Logcat shows "GraphRequest can't be used when Facebook SDK
+  isn't fully initialized" for each fetch, and no crash.
+- With Block cookie notice off, Ketch recorded essential services only (its banner jurisdiction): Firebase
+  logs "App measurement deactivated via the manifest", Performance never writes `isEnabled`, Crashlytics
+  is switched on (`firebase_crashlytics_collection_enabled` true) and AppsFlyer starts (`AFRequestCache`).
+
+Firebase installations and Remote Config stay: push tokens need installations, and Remote Config carries the
+update prompts Block update prompts handles. Firebase logging (`firebaselogging.googleapis.com`) is Google's
+transport for Firebase SDK telemetry and stays as well.
 
 ## Hide Shorts
 
@@ -318,12 +491,51 @@ Premium status itself isn't touched; that's Unlock Premium's job.
 
 ## Hide tipping and Rants
 
-- `Tip` is dropped from the list of action buttons the channel and video headers may draw.
+- `Tip` is dropped from the list of action buttons the channel and video headers may draw. A hidden patch
+  passes that list (the composable whose strings include `possibleCreatorActionButtonTypesToDisplay`) through
+  `RumbleInterface.actionButtons` with the enum's `Tip`, `Join` and `Shop` constants; it returns Rumble's own
+  list while no switch hides one, and the same filtered list for the same list, so the buttons can still
+  skip recomposition. Both callers pass the list (their `$default` masks, 0 and 0x2002, leave bit 14 clear),
+  so the default-argument code after the hook doesn't overwrite it.
 - `Creator.tipsInfo` and `VideoSource.wallet` (the Shorts tip button) are null.
 - `LiveChatConfigRant.enable` returns false, which hides the Rant button.
 - `LiveChatConfigRant.walletEnabled` returns false, which disables paying with Rumble Wallet.
 
 Rants other viewers send still show.
+
+## Hide premium-only videos
+
+Rumble's mapper marks a video premium-only when the Gson DTO's `availability` is `premium` (ignoring case);
+`has_access_to_premium` (`hasAccessToPremium`) says whether the account may watch it. While
+`hide_premium_only` is on, the shared video list hook (see Block ads) leaves out the premium-only videos without
+access, in Home sections, related videos, search and categories. Channel pages and My Feed load their videos
+through other DTOs the hook doesn't reach, so they may still show them. `HideProbe` runs a Home section's real
+getter with a free, a locked and an unlocked premium-only video. No premium-only video came up on the emulator,
+so the hiding wasn't seen in the app.
+
+## Hide comments and related videos
+
+- **Comments:** the video page adds its Comments button (which opens `CommentsView` with its
+  `CommentsHeaderView`) only when the video entity says comments are on, which comes from the Gson DTO field
+  `Video.areCommentsDisabled`. While `hide_comments` is on its getter returns `TRUE`, so Rumble leaves the button
+  out as for a video whose creator turned comments off. Emptying the two composables instead would leave a
+  button that opens an empty panel.
+- **Related videos:** the shared video list hook (see Block ads) passes `RelatedVideoData.videos` (the related
+  endpoint) and `Video.related` as related lists; `RumbleInterface.videos` returns an empty list for those while
+  `hide_related_videos` is on. The page then shows Rumble's own empty state ("There is nothing to see here"),
+  and Autoplay next video has nothing to play.
+
+Checked on 2026-10-22: a VOD's page shows Like, Share, Comments and Repost and a list of related videos with
+both switches off; with both on, Share, Repost and Save follow Like and the related list is Rumble's empty
+state. `HideProbe` runs both getters.
+
+## Hide Join and Shop buttons
+
+The channel and video headers draw Follow, Join (paid channel membership), Tip and Shop (a creator's store)
+from one list of button types. The hidden action buttons patch Hide tipping uses also passes the `Join` and
+`Shop` constants; `RumbleInterface.actionButtons` drops each while `hide_join_button` or `hide_shop_button`
+is on. Checked on 2026-10-22: with Hide Join buttons on, The Dan Bongino Show's channel shows Tip and Follow
+(Tip, Join and Follow with it off). No channel with a Shop button came up; `HideProbe` covers both lists.
 
 ## Disable autoplay
 
@@ -337,6 +549,21 @@ Settings > Playback still works.
   player builder to play even when feed playback is off; the patch clears that flag, so the featured card
   follows the setting too.
 
+## Background audio by default
+
+Settings > Playback > Background Play offers picture-in-picture (1), sound only (2) and off (3), stored as the
+DataStore Int `backgroundPlayKey`. With nothing stored, `UserPreferenceManager`'s reader picks
+picture-in-picture where the device supports it, else sound only. The patch finds that reader the way Disable
+autoplay finds its defaults (key, field, synthetic accessor, the inner class method that unboxes the Int) and
+inserts after the `check-cast` of the stored value: while `background_audio` is on and nothing is stored, the
+value becomes sound only's (read from the enum constant `SOUND` with the getter the reader itself compares
+with), and Rumble's own mapping does the rest. A choice made in Rumble's settings is stored and wins. Only the
+stored value's register is used, since it is null on the path that changes it.
+
+Checked on 2026-10-22 on the emulator, signed out, with a VOD from Home's Editor Picks: switch off, Home moves
+the video into a picture-in-picture window; switch on (and a restart), Home leaves no window and the media
+session stays PLAYING, the position moving on in the background.
+
 ## Default video quality
 
 The player chooses its start source with (sources, last picked height, last picked bitrate, the server's
@@ -344,8 +571,9 @@ preferred height, isLive, data saver, live uses Auto). That signature is unique,
 `sourceList`.
 
 - With no picked quality, Rumble uses `preferred_video_resolution`, which is 480p on phones.
-- The patch fills in the chosen height and the highest bitrate, and Rumble's own nearest-height logic does
-  the rest.
+- The choice starts at "Rumble's default" (0; the `quality` option sets another start). Once a height is
+  chosen, the patch fills it in with the highest bitrate, and Rumble's own nearest-height logic does the
+  rest.
 - A quality picked in the player is stored app-wide and keeps winning.
 - Data saver still takes precedence.
 
@@ -436,8 +664,8 @@ backslashes and a leading `@` or `?` are escaped.
 
 Every share sheet goes through one share use case: videos, live streams, Shorts, reposts, playlists and
 channels. It takes `(text, title)`, and `android.intent.extra.TITLE` appears nowhere else in the app. The
-patch cuts everything from the first `?` off the link when its host is `rumble.com` or a subdomain; other
-links are left alone.
+patch passes the text through `RumblePrivacy.cleanShareLink`, which cuts everything from the first `?` off
+the link when its host is `rumble.com` or a subdomain (any case); other links are left alone.
 
 3.21.0 doesn't tag the links it shares:
 
@@ -564,6 +792,20 @@ and the getter uses Rumble's own value. The saved value is retained: turning the
 the last speed picked while it was enabled, until another enabled pick replaces it. With no saved value,
 Rumble's own speed applies until that first enabled pick.
 
+### Default playback speed
+
+Shares the speed store hooks with Remember playback speed (a hidden patch): the setter reports picks to
+`RumblePlayback.onSpeedPicked`, the store's reset (its one `()V` method, which the player service calls to set
+every scope back to 1x) reports to `onSpeedReset`, and the getter asks `rememberedSpeed`. That returns, in
+order: the speed Remember playback speed saved, while it is on; the `default_speed` choice, until a speed is
+picked after the last reset; else nothing, so Rumble's own value applies. The choice's values are the speed
+in hundredths (150 for 1.5x), mapped to the speed enum's constant names (`SPEED_1_5`). Live streams without
+rewind ignore the getter and play at 1x.
+
+Checked on 2026-10-22 on the emulator: with 1.5x chosen, a VOD from Home starts with its media session at speed
+1.5; at "1x (Rumble's)" it plays at 1.0. `PlayerProbe` runs the real store (reset, default, a pick winning,
+the next reset) and `test_state_transitions.py` the extension's order on the JVM.
+
 ### Fill screen
 
 The phone players are Media3 `PlayerView`s that Rumble always gives the FIT resize mode (the custom
@@ -572,6 +814,27 @@ changes, so the patch changes it where `AspectRatioFrameLayout` (inflated from X
 reads it in `onMeasure`. While `fill_screen` is on, in landscape and outside picture-in-picture,
 `RumblePlayer.resizeMode` turns FIT into ZOOM: the video fills the screen and the edges are cropped. Each
 rotation re-measures, so portrait goes back to FIT.
+
+### Player gestures
+
+The phone player is Media3's `PlayerView` under Rumble's Compose controls, which take the touches, so the patch
+takes them where they enter the app: `RumbleMainActivity` (named in the manifest; it has no
+`dispatchTouchEvent` of its own, which the patch checks) gets one that asks `RumbleGestures.dispatch` first and
+otherwise calls the superclass's. While `player_gestures` is on, a touch starts a candidate only in landscape,
+outside picture-in-picture and TalkBack, on the left or right 35% of the largest `AspectRatioFrameLayout` (the
+video frame, at least half the window wide), away from its top 15% and bottom 20% (the close button and seek
+bar). It becomes a swipe once it moves vertically past the touch slop and twice as far as sideways; the rest of
+the app then gets `ACTION_CANCEL`, so Rumble's taps, double-taps and drags work as before. Up on the left raises
+the window's brightness, on the right the media volume, with an indicator over the video. Back in portrait, the
+next touch hands brightness back to the system.
+
+Rumble already skips 15 s on a double-tap at either side of the video (Seek interval changes that distance
+through the same default-argument twins), so the patch adds no double-tap.
+
+Checked on 2026-10-22 on the emulator, landscape, a VOD playing: a swipe up on the right raised the media volume
+from 5 to 12 (of 25); a swipe up on the left set the window's brightness override (display manager
+`mWindowManagerBrightnessOverride=0.447`). A double-tap on the right of the playing video in portrait jumped it
+from 16 s to 34 s in stock behavior.
 
 ### Keep playing during other sounds
 
@@ -595,10 +858,23 @@ The end of a video and leaving the player still let the screen turn off.
 
 The same choices and behavior as Twitch's, in the shared `SleepTimer`: playback pauses the chosen time
 after it last started or resumed. The player service's `Player.Listener` (the inner class checking states 1
-and 4 in `onPlaybackStateChanged`) reports `onIsPlayingChanged` to it. To pause, the extension sends
-`KEYCODE_MEDIA_PAUSE` through `AudioManager.dispatchMediaKeyEvent`: it reaches Rumble's media session and
-its own pause path, also in the background and in picture-in-picture. Twitch's sleep timer uses the same
-class with Twitch's own pause action.
+and 4 in `onPlaybackStateChanged`) reports `onIsPlayingChanged` to it, with itself as the player. To pause,
+the extension pauses each listener that reported playback through `lurkPause`, a public static method the
+patch adds to the listener class: it reads the listener's service (a package-private field, which the
+extension couldn't read), the service's player through the service's public static accessor, and calls the
+pause Rumble's media session uses. That pause is found from Media3: `Player.pause()` is the `()V` method of
+`BasePlayer` (a class implementing the interface `ExoPlayer` extends) that only calls `setPlayWhenReady(false)`,
+and the service's media session player (an inner class of the service) overrides it with a call to one
+`()V` method of Rumble's player. This works in the background and in picture-in-picture, and it pauses Rumble
+even when another app owns the active media session. Only if no listener could be paused does the extension
+send `KEYCODE_MEDIA_PAUSE` through `AudioManager.dispatchMediaKeyEvent`, which the system routes to the active
+media session. Twitch's sleep timer uses the same class with Twitch's own pause action.
+
+Checked on 2026-10-22 with a test build that counts minutes as seconds, "Keep playing during other sounds"
+at "Keep playing" and the timer at 30: Rumble played a VOD, then a cloned Rumble (Clone app) played another
+one while Rumble kept playing. 30 s after Rumble last started, Rumble logged "sleep timer: paused 1 player"
+and its media session went to PAUSED, while the clone's session kept PLAYING. The system's media button
+session was still Rumble's at that moment, so the run shows the direct pause, not a media key going astray.
 
 ### Refresh stream
 
@@ -615,6 +891,11 @@ the App Info rows as for the Lurk row, and a tap reloads the player at the same 
   no quality.
 - The player's load method (the one asking the start-source chooser) records which player loaded which
   video, so a panel reloads its own player.
+- The hook runs at the start of the composable, on every recomposition. `RumblePlayer.refreshable` makes
+  one tap action per video and remembers the last panels' (modifier, video) pairs, so a panel drawn again
+  gets the same clickable modifier and Compose can skip what didn't change. Its one caller passes the
+  modifier (`Modifier.fillMaxSize()`, `$default` 0), so the default-argument code after the hook doesn't
+  overwrite it.
 
 Rumble retries network errors itself: with the network cut, live streams and VODs keep buffering for
 minutes without the error panel and resume when the network returns. The panel, and so the reload, is for
@@ -633,6 +914,14 @@ chosen. At "15 seconds (Rumble's)" the buttons and icons are Rumble's own.
 `PlayerProbe` runs the real speed store with the switch on and off, and the focus and keep-screen-on
 decisions. `RefreshProbe` checks the clickable panel modifier and the silent callback.
 
+## AMOLED black (not built)
+
+`RumbleTheme` (`com.rumble.theme.RumbleTheme`) wraps Material's theme, whose dark colors already use
+`#000000` for background and surface, and a CompositionLocal of Rumble's own colors. In dark mode those draw the
+screens black too; only the floating bottom bar, sheets and some cards use dark greys (`#1B2127`, `#283139`) to
+stand out from the black. Checked on 2026-10-22 with the emulator in dark mode: Home's background is black. A
+patch would only blacken those raised surfaces, which would hide their edges, so none was built.
+
 ## Live chat
 
 Rumble's live chat arrives as JSON events on a chat endpoint (`web7.rumble.com` in testing). Gson parses
@@ -644,8 +933,11 @@ Compose rows draw the entities.
 `LiveChatMessageData.messages` (each event's messages) and `LiveChatInitData.messages` (the history sent on
 joining) pass their list through `RumbleChat.messages`. It drops the messages a switch hides before any
 entity is built, so they don't count as unread either. It returns Rumble's own list while nothing is hidden,
-and the same filtered list when the getter runs again on the same DTO. Switches of patches that weren't
-included count as off there, because unknown keys normally count as on.
+and the same filtered list when the getter runs again on the same DTO. While no chat switch is on (raid
+notices, gift notices, Chat keywords) it returns at once, without reading the DTO. Switches of patches that
+weren't included count as off there, because unknown keys normally count as on. The signed-in user's name
+for mentions is learned from the users list only while Chat keywords is on, so turning it on during a
+stream highlights mentions after the next chat update that lists you (reopening the chat does).
 
 ### Hide chat clutter
 
@@ -752,9 +1044,9 @@ that app code calls every new extension method.
   choice 2 keeps playing through both.
 - **Keep screen on while paused:** with a 15 s screen timeout (and stay-awake-while-charging off), a video
   paused for 30 s keeps the screen awake with the switch on; off, the screen goes to sleep.
-- **Sleep timer:** checked with a test build that counts minutes as seconds: with "15", Rumble logs "sent
-  pause" and its media session goes to PAUSED 15 s after playback starts; Twitch logs "paused 1 native
-  players" 15 s after a stream starts.
+- **Sleep timer:** checked with a test build that counts minutes as seconds: with "15", Rumble's media
+  session goes to PAUSED 15 s after playback starts (it then paused with a media key; see Sleep timer for
+  the direct pause it uses now); Twitch logs "paused 1 native players" 15 s after a stream starts.
 - **Default startup tab:** "My Feed" opens Rumble on My Feed after a cold start, "Home" on Home.
 - **Hide Create tab:** the bottom bar shows Home, My Feed and Account (with Hide Shorts); each still opens its
   own screen.
@@ -786,8 +1078,7 @@ repeated taps, disabled/null cases and preserved quality callbacks. The generate
 its callback in a catch-all handler too: stock `x4` catches ordinary Exceptions, but an escaping Error
 or failure inside its logger previously left the no-op callback installed. These exceptions are
 synthetic regression inputs; no live occurrence is claimed. `tests/rumble/verify_refresh.py` checks
-emitted catch metadata and the fatal-state branch to the mobile panel. The
-[dated verification record](verification-2026-10-17.md) adds real emulator network failure,
-fatal-panel tap and continuing nonzero playback under an explicit three-method error-policy
-fixture. Unchanged production recovered automatically from the observed outage; natural fatal
+emitted catch metadata and the fatal-state branch to the mobile panel. A real emulator network
+failure, the fatal-panel tap and continuing playback were observed on 2026-10-18 under a
+three-method error-policy fixture. Unchanged production recovered automatically from the observed outage; natural fatal
 entry, physical-phone and authenticated/Premium behavior are not established by that fixture.

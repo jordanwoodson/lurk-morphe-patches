@@ -1,0 +1,49 @@
+# Extension methods that Rumble's app code calls in a patched APK, by the setting whose patch adds the call.
+# bin/test-rumble checks them with tests/verify_extension_calls.py, which catches an injected call that Morphe
+# dropped without an error (a non-range invoke above v15).
+#
+# Format: <keys> <Class.method>
+#   keys: setting keys separated by "|"; the hook is expected when any of them is in the APK's registry.
+#         "*" means always (the settings patch every other patch depends on).
+#   Class: the simple name of a class under io.github.jordanwoodson.extension.
+
+*  Settings.init
+*  Settings.openAction
+*  Settings.isEnabled
+
+block_ads|hide_premium_only|hide_related_videos  RumbleInterface.videos
+block_cookie_notice  RumblePrivacy.startingAirship
+block_cookie_notice  RumblePrivacy.airshipFeatures
+disable_analytics  RumblePrivacy.watchProgressOnly
+clean_share_links  RumblePrivacy.cleanShareLink
+
+exact_counts  RumbleInterface.exactCount
+hide_tipping|hide_join_button|hide_shop_button  RumbleInterface.actionButtons
+home_hide_categories  RumbleInterface.homeSectionKind
+startup_tab  Settings.getInt
+
+chat_hide_raid_notices|chat_keywords  RumbleChat.messages
+chat_keywords  RumbleChat.currentUserId
+chat_keywords  RumbleChat.highlight
+show_deleted_messages  RumbleChat.deletedLabel
+chat_timestamps  RumbleChat.nameWithTime
+
+video_quality  RumblePlayback.startHeight
+video_quality  RumblePlayback.capActive
+video_quality  RumblePlayback.liveUsesAutoByDefault
+resume_signed_out  RumblePlayback.signedOutPosition
+remember_speed|default_speed  RumblePlayback.onSpeedPicked
+remember_speed|default_speed  RumblePlayback.onSpeedReset
+remember_speed|default_speed  RumblePlayback.rememberedSpeed
+audio_focus  RumblePlayback.ignoreFocusLoss
+sleep_timer  RumblePlayback.onPlayingChanged
+
+fill_screen  RumblePlayer.resizeMode
+player_gestures  RumbleGestures.dispatch
+keep_screen_on_paused  RumblePlayer.keepScreenOn
+refresh_stream  RumblePlayer.onVideoLoaded
+refresh_stream  RumblePlayer.refreshable
+refresh_stream  RumblePlayer.noQualityCallback
+seek_seconds  RumblePlayer.seekMillis
+seek_seconds  RumblePlayer.seekBackIcon
+seek_seconds  RumblePlayer.seekForwardIcon

@@ -1,7 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.vod
 
 import app.morphe.patcher.Fingerprint
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.methodCall
 import app.morphe.patcher.patch.PatchException
@@ -16,13 +16,15 @@ import com.android.tools.smali.dexlib2.iface.reference.TypeReference
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.twitch.player.VodPlayerOverlayFingerprint
-import io.github.jordanwoodson.patches.twitch.player.parameterRegister
+import io.github.jordanwoodson.patches.shared.parameterRegister
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.twitch.player.hookPlayerViewAttach
 import io.github.jordanwoodson.patches.twitch.player.playerPresenterClass
-import io.github.jordanwoodson.patches.twitch.player.requireNoBranchTo
 import io.github.jordanwoodson.patches.twitch.player.requireUnwritten
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 private const val VOD_MODEL = "Ltv/twitch/android/models/videos/VodModel;"
@@ -43,7 +45,8 @@ val vodChaptersPatch = bytecodePatch(
     name = "VOD chapters",
     description = "Adds a Chapters button to the native video (VOD) player that lists the stream's game and " +
         "category changes and jumps to one through Twitch's own seek. The list comes from Twitch's public " +
-        "data, fetched with the app's client ID. On by default.",
+        "data: one request to gql.twitch.tv per video the native player loads, feed previews included, with " +
+        "the app's client ID and without your account. On by default; the switch is in Lurk settings > Playback.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
     dependsOn(twitchSettingsPatch, chaptersIconPatch)
@@ -62,8 +65,9 @@ val vodChaptersPatch = bytecodePatch(
             method.returnType == "V" &&
                 method.parameterTypes.map { it.toString() } == listOf(VOD_MODEL, "I", "Ljava/lang/String;")
         } ?: throw PatchException("Twitch: the VOD load method changed")
-        load.requireNoBranchTo(0, "the VOD load method")
-        load.addInstructions(0, "invoke-static { p0, p1 }, $VOD->vodLoaded(Ljava/lang/Object;Ljava/lang/Object;)V")
+        load.requireNotBranchTarget(0, "the VOD load method")
+        load.addInstructions(0, invokeStatic("$VOD->vodLoaded(Ljava/lang/Object;Ljava/lang/Object;)V",
+            load.parameterRegister(0), load.parameterRegister(1)))
 
         // Every native player presenter (live, VOD, clip) attaching its player view, so a tapped overlay
         // resolves to the presenter under it rather than to a preloaded neighbour. The VOD presenter is
@@ -73,23 +77,7 @@ val vodChaptersPatch = bytecodePatch(
                 .any { it == base.type }) {
             throw PatchException("Twitch: the VOD presenter no longer extends the player presenter")
         }
-        Fingerprint(
-            definingClass = base.type, returnType = "V", parameters = listOf("L"),
-            filters = listOf(
-                fieldAccess(definingClass = VIEW_DELEGATE, type = "Landroid/view/View;", opcode = Opcode.IGET_OBJECT),
-                methodCall(definingClass = "Landroid/view/View;", name = "addOnLayoutChangeListener"),
-            ),
-        ).twitchMatch("player view attach").let { attach ->
-            val read = attach.instructionMatches.first()
-            val view = (read.instruction as TwoRegisterInstruction).registerA
-            val self = attach.method.parameterRegister(0)
-            attach.method.requireUnwritten(self, read.index, "player presenter")
-            attach.method.requireNoBranchTo(read.index + 1, "player view attach")
-            // A non-range invoke above v15 is dropped silently, so refuse rather than lose the call.
-            if (self > 15 || view > 15) throw PatchException("Twitch: player view attach registers are too high")
-            attach.method.addInstructions(read.index + 1,
-                "invoke-static { v$self, v$view }, $VOD->playerView(Ljava/lang/Object;Landroid/view/View;)V")
-        }
+        hookPlayerViewAttach()
 
         // Seek exactly as Twitch does, through the presenter's own interface method.
         vodBridge("seekVod", """
@@ -115,13 +103,14 @@ val vodChaptersPatch = bytecodePatch(
             throw PatchException("Twitch: the VOD player's settings button lookup changed")
         }
         val gear = (code[cast] as OneRegisterInstruction).registerA
-        method.requireNoBranchTo(cast + 1, "the VOD player's settings button")
+        method.requireNotBranchTarget(cast + 1, "the VOD player's settings button")
         method.addInstructions(cast + 1,
             "invoke-static/range { v$gear .. v$gear }, $VOD->bindChapters(Landroid/view/View;)V")
 
         twitchSettings.add(SwitchSetting("vod_chapters", "VOD chapters",
             "Adds a Chapters button to the video (VOD) player that lists the stream's game and category " +
-                "changes and jumps to one. The list is fetched from Twitch with the app's client ID.",
+                "changes and jumps to one. One request to Twitch per video loaded, previews included, without " +
+                "your account.",
             Section.PLAYBACK, default = true))
     }
 }

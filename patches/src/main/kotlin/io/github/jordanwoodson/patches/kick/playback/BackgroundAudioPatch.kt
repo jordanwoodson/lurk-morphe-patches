@@ -47,7 +47,7 @@ val backgroundAudioPatch = bytecodePatch(
                 invoke-static/range { p0 .. p0 }, $KICK_PLAYER->onUserLeaveHint(Landroid/app/Activity;)Z
                 move-result v0
                 if-eqz v0, :kick_pip
-                invoke-super { p0 }, $reference
+                invoke-super/range { p0 .. p0 }, $reference
                 return-void
             """, ExternalLabel("kick_pip", getInstruction(0)))
         }

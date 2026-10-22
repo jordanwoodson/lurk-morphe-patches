@@ -1,6 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.player
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -14,10 +14,12 @@ import com.android.tools.smali.dexlib2.iface.instruction.WideLiteralInstruction
 import com.android.tools.smali.dexlib2.iface.reference.TypeReference
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
-import io.github.jordanwoodson.patches.shared.settings.addInstructionsIfEnabled
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsIfEnabled
 import io.github.jordanwoodson.patches.twitch.highlights.HIGHLIGHTS_CLASS
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.HermesBundle
 import io.github.jordanwoodson.patches.twitch.shared.hex
@@ -51,13 +53,15 @@ val hidePlayerButtonsPatch = bytecodePatch(
         VerticalShareActionFingerprint.twitchMatch("vertical theatre share action").method
             .addInstructionsIfEnabled(SHARE, "return-void")
         // Cast: every native cast button is an AndroidX MediaRouteButton.
-        CastButtonVisibilityFingerprint.twitchMatch("cast button setVisibility").method.addInstructions(0, """
-            invoke-static { p1 }, $HIGHLIGHTS_CLASS->castVisibility(I)I
-            move-result p1
-        """)
-        CastButtonAttachedFingerprint.twitchMatch("cast button onAttachedToWindow").method.addInstructions(0, """
-            invoke-static { p0 }, $HIGHLIGHTS_CLASS->hideCastButton(Landroid/view/View;)V
-        """)
+        CastButtonVisibilityFingerprint.twitchMatch("cast button setVisibility").method.apply {
+            addInstructions(0, """
+                ${invokeStatic("$HIGHLIGHTS_CLASS->castVisibility(I)I", parameterRegister(1))}
+                move-result p1
+            """)
+        }
+        CastButtonAttachedFingerprint.twitchMatch("cast button onAttachedToWindow").method.apply {
+            addInstructions(0, invokeStatic("$HIGHLIGHTS_CLASS->hideCastButton(Landroid/view/View;)V", parameterRegister(0)))
+        }
         twitchHermes.hidePlayerButtons()
 
         twitchSettings.add(
@@ -93,7 +97,7 @@ internal fun HermesBundle.hidePlayerButtons() {
     returnNull("ChromecastButton", CAST, defaultEnabled = false)
     // PlayerControlsOverlay always renders the share IconButton (disabled without onShare), so its JSX
     // call becomes null in the same register: `onShare !== undefined`, the two props, then Call3.
-    // The registers are the compiler's for 31.7.0 (props object r87, IconButton r88, jsx r89).
+    // The registers are the compiler's for the supported version (props object r87, IconButton r88, jsx r89).
     replace("PlayerControlsOverlay", SHARE, hex("17 04 1f 02 52 57 04 04 52 57 1f 05 6f 57 59 02 58 57"),
         hex("17 04 1f 02 52 57 04 04 52 57 1f 05 94 57 94 57 94 57"))
     // SkylineControlsOverlay only renders it when onShare is set.

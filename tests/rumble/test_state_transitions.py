@@ -18,7 +18,7 @@ public class RumbleStateProbe {
   public static class User {long id;String userName;User(long i,String n){id=i;userName=n;}}
   public static class Dto {List<User> users;Dto(User... u){users=List.of(u);}}
   public static class Message {long userId=7,id=1;String text="hi";}
-  enum Speed {NORMAL,FAST,SLOW}
+  enum Speed {NORMAL,FAST,SLOW,SPEED_1_5}
   static int checks;
   static void check(boolean b,String m){if(!b)throw new AssertionError(m);checks++;}
   static String self()throws Exception{Field f=RumbleChat.class.getDeclaredField("self");f.setAccessible(true);return (String)f.get(null);}
@@ -37,7 +37,9 @@ public class RumbleStateProbe {
         Settings.values.put("chat_keywords","false");
         check(RumbleChat.messages(messages,first)==messages,"disabled keywords changed messages");
         Settings.values.put("chat_keywords","true");
-        check(mention("hi @lurker")==ChatFilter.HIGHLIGHT,"keywords-off join did not learn identity");break;
+        check(mention("hi @lurker")==ChatFilter.NONE,"keywords-off join read the users list");
+        RumbleChat.messages(messages,first);
+        check(mention("hi @lurker")==ChatFilter.HIGHLIGHT,"keywords-on update did not learn identity");break;
       case "account":
         RumbleChat.messages(messages,first);
         check(mention("hi @lurker")==ChatFilter.HIGHLIGHT,"first account not learned");
@@ -60,6 +62,21 @@ public class RumbleStateProbe {
         check(RumblePlayback.rememberedSpeed(Speed.NORMAL)==Speed.FAST,"off/on lost previously saved speed");
         RumblePlayback.onSpeedPicked(Speed.SLOW);
         check(RumblePlayback.rememberedSpeed(Speed.NORMAL)==Speed.SLOW,"new enabled pick did not replace speed");break;
+      case "default-speed":
+        check(RumblePlayback.rememberedSpeed(Speed.NORMAL)==null,"default speed unregistered still applies");
+        Settings.values.put("default_speed","150");
+        check(RumblePlayback.rememberedSpeed(Speed.NORMAL)==Speed.SPEED_1_5,"default speed not applied");
+        RumblePlayback.onSpeedPicked(Speed.FAST);
+        check(RumblePlayback.rememberedSpeed(Speed.NORMAL)==null,"default speed overrode a pick");
+        RumblePlayback.onSpeedReset();
+        check(RumblePlayback.rememberedSpeed(Speed.NORMAL)==Speed.SPEED_1_5,"default speed not back after a reset");
+        Settings.values.put("remember_speed","true");
+        RumblePlayback.onSpeedPicked(Speed.SLOW);
+        RumblePlayback.onSpeedReset();
+        check(RumblePlayback.rememberedSpeed(Speed.NORMAL)==Speed.SLOW,"remembered pick lost to the default");
+        Settings.values.put("default_speed","0");
+        Settings.values.put("remember_speed","false");
+        check(RumblePlayback.rememberedSpeed(Speed.NORMAL)==null,"1x default changed the speed");break;
       default:throw new AssertionError(args[0]);
     }
     System.out.println("PASS: Rumble "+args[0]+" "+checks+" state checks");
@@ -69,4 +86,4 @@ public class RumbleStateProbe {
 
 if __name__ == '__main__':
     run('RumbleStateProbe', ['SleepTimer.java', 'ChatFilter.java', 'rumble/RumbleChat.java',
-                            'rumble/RumblePlayback.java'], PROBE, ['empty', 'off', 'account', 'speed'])
+                            'rumble/RumblePlayback.java'], PROBE, ['empty', 'off', 'account', 'speed', 'default-speed'])

@@ -1,6 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.clips
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.shared.Locators
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
@@ -27,12 +28,20 @@ private const val FILTER = "$INTERFACE_CLASS->homeTabs(Ljava/util/List;Ljava/lan
  * labels, pages and indexes agree. A Home opened on Clips (a shared clip link) keeps its Clips tab.
  */
 internal fun BytecodePatchContext.hideNativeHomeClipsTab() {
-    val providers = HomeTabsFingerprint.matchAllOrNull().orEmpty().map { it.classDef }
+    val matches = HomeTabsFingerprint.matchAllOrNull().orEmpty()
+    val providers = matches.map { it.classDef }
     val interfaces = providers.flatMap { it.interfaces }.groupingBy { it }.eachCount().filterValues { it == providers.size }.keys
     val provider = interfaces.singleOrNull()
         ?: throw PatchException("Twitch: Home tab providers (${providers.size}) share no single interface")
     if (providers.size != 2) throw PatchException("Twitch: expected signed-in and signed-out Home tab lists")
-    val call = "$provider->b(Z)Ljava/util/List;"
+    // Both lists implement the interface's one List(boolean) method, so the matched methods carry its name.
+    val name = matches.map { it.method.name }.distinct().singleOrNull()
+        ?: throw PatchException("Twitch: the Home tab lists implement different methods")
+    classDefBy(provider).methods.singleOrNull { method ->
+        method.name == name && method.returnType == "Ljava/util/List;" && method.parameterTypes.map { it.toString() } == listOf("Z")
+    } ?: throw PatchException("Twitch: the Home tab interface does not declare the matched List(boolean) method")
+    val call = "$provider->$name(Z)Ljava/util/List;"
+    Locators.record("twitch.hide_clips.home_tabs", call)
     val sites = mutableListOf<Pair<String, MethodReference>>()
     classDefForEach { type ->
         type.methods.forEach { method ->

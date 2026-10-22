@@ -158,6 +158,8 @@ public final class AdsProbe {
     }
 
     public static void main(String[] args) throws Exception {
+        if (args.length > 0) ProbeLocators.load(args[0]);
+        System.out.println(ProbeLocators.loaded() ? "names from the APK's locators" : "no locators in the APK: 31.7.0 names");
         Looper.prepareMainLooper();
         settings();
         Class<?> ads = Class.forName(ADS);
@@ -201,7 +203,11 @@ public final class AdsProbe {
         // Brand surveys: the real state constructor.
         Class<?> itemType = Class.forName("tv.twitch.android.shared.viewer.pub.FeedItem$BrandSurveyItem");
         Class<?> stateType = Class.forName("tv.twitch.android.shared.viewer.pub.s");
-        Class<?> completion = Class.forName("qhh");
+        // The state's second constructor parameter: the survey's completion enum.
+        Class<?> completion = null;
+        for (Constructor<?> candidate : stateType.getConstructors()) {
+            if (candidate.getParameterCount() == 2 && candidate.getParameterTypes()[0] == itemType) completion = candidate.getParameterTypes()[1];
+        }
         Object notStarted = completion.getField("NOT_STARTED").get(null);
         Object item = allocate(itemType);
         Constructor<?> state = stateType.getConstructor(itemType, completion);
@@ -234,14 +240,16 @@ public final class AdsProbe {
         System.out.println("PASS: AdEdgeApi Result.error and pass-through, RN ad URL filter, brand survey state, RN VAST noAd/off");
 
         // Mute stitched ads, native player: the real metadata handler and stream load.
-        // R8 names are Twitch 31.7.0's: native player aoa, ad overlay vw with states rw (playing) and sw (hidden).
-        Class<?> nativeType = Class.forName("aoa");
-        Method cue = nativeType.getMethod("h", JSONObject.class);
+        // Names from the APK's locators; the fallbacks are Twitch 31.7.0's: native player aoa, ad overlay vw
+        // with states rw (playing) and sw (hidden, not located).
+        Class<?> nativeType = Class.forName(ProbeLocators.type("twitch.match.native_ad_cue", "aoa"));
+        Method cue = nativeType.getMethod(ProbeLocators.method("twitch.match.native_ad_cue", "h"), JSONObject.class);
         Method load = null;
-        for (Method method : nativeType.getMethods()) if (method.getName().equals("T") && method.getParameterTypes().length == 2) load = method;
+        String loadName = ProbeLocators.method("twitch.match.native_player_load", "T");
+        for (Method method : nativeType.getMethods()) if (method.getName().equals(loadName) && method.getParameterTypes().length == 2) load = method;
         FakePlayer first = new FakePlayer();
         Object owner = allocate(nativeType);
-        set(owner, nativeType, "t", first.player);
+        set(owner, nativeType, ProbeLocators.field("twitch.mute_stitched_ads.native_player", "t"), first.player);
         switches.put("mute_stitched_ads", false);
         originalContinues(cue, owner, ad("15", "2", "0"));
         check(first.mutes.isEmpty(), "Switched-off native player was muted");
@@ -272,11 +280,13 @@ public final class AdsProbe {
         // Native cover: the real overlay renderer with Twitch's ad-playing and hidden states.
         Context context = systemContext();
         FrameLayout overlay = new FrameLayout(context);
-        Class<?> overlayType = Class.forName("vw");
+        Class<?> overlayType = Class.forName(ProbeLocators.type("twitch.match.stitched_ad_overlay", "vw"));
         Object renderer = allocate(overlayType);
-        set(renderer, Class.forName("tv.twitch.android.core.mvp.viewdelegate.BaseViewDelegate"), "b", overlay);
-        Method render = overlayType.getMethod("u", Class.forName("tv.twitch.android.core.mvp.viewdelegate.ViewDelegateState"));
-        Object playing = allocate(Class.forName("rw"));
+        set(renderer, Class.forName("tv.twitch.android.core.mvp.viewdelegate.BaseViewDelegate"),
+            ProbeLocators.field("twitch.mute_stitched_ads.root_view", "b"), overlay);
+        Method render = overlayType.getMethod(ProbeLocators.method("twitch.match.stitched_ad_overlay", "u"),
+            Class.forName("tv.twitch.android.core.mvp.viewdelegate.ViewDelegateState"));
+        Object playing = allocate(Class.forName(ProbeLocators.type("twitch.match.stitched_ad_playing", "rw")));
         Object hidden = Class.forName("sw").getField("a").get(null);
         switches.put("mute_stitched_ads", true);
         originalContinues(render, renderer, playing);

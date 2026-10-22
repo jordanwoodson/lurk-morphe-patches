@@ -1,7 +1,8 @@
 package io.github.jordanwoodson.patches.twitch.analytics
 
+import io.github.jordanwoodson.patches.shared.Locators
 import app.morphe.patcher.Fingerprint
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import com.android.tools.smali.dexlib2.AccessFlags
@@ -13,7 +14,7 @@ import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.iface.reference.StringReference
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
-import io.github.jordanwoodson.patches.shared.settings.addInstructionsIfEnabled
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsIfEnabled
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.hex
@@ -125,6 +126,7 @@ val disableAnalyticsPatch = bytecodePatch(
         val arbiter = CrashlyticsArbiterFingerprint.twitchMatch("Crashlytics automatic collection arbiter").classDef
         val permission = arbiter.methods.singleOrNull { it.parameterTypes.isEmpty() && it.returnType == "Z" }
             ?: throw PatchException("Twitch: Crashlytics collection permission changed")
+        Locators.record("twitch.disable_analytics.crashlytics_permission", permission)
         permission.addInstructionsIfEnabled(KEY, "const/4 v0, 0x0\nreturn v0")
         val crashlytics = "Lcom/google/firebase/crashlytics/FirebaseCrashlytics;"
         Fingerprint(definingClass = crashlytics, name = "setCrashlyticsCollectionEnabled", returnType = "V", parameters = listOf("Z"))

@@ -9,6 +9,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 import io.github.jordanwoodson.extension.shared.settings.Settings;
@@ -17,9 +19,19 @@ import io.github.jordanwoodson.extension.shared.settings.Settings;
  * Sleep timer, shared by the apps: pauses playback the chosen number of minutes (the {@code sleep_timer}
  * choice) after it last started or resumed. The app reports its players starting and stopping and supplies
  * the pause action.
+ *
+ * <p>Two locks, always taken in the same order (the gate, then the bookkeeping). {@code STARTED} guards the
+ * bookkeeping (players, generation, the scheduled callback) and is only held for that, never while app code
+ * runs. {@code DISPATCH}, the gate, is held while a sleep pause runs app code. A play callback waits at the
+ * gate, at most {@link #GATE_WAIT_MS}, so a resume that races the pause lands after it instead of being
+ * paused; stop callbacks never wait. A pause path that waits on another thread reporting a stop therefore
+ * can't deadlock, and one that waits on a thread reporting a play holds that thread up for at most the bound.
  */
 public final class SleepTimer {
     public static final String KEY = "sleep_timer";
+
+    /** How long a play callback waits for a pause in progress on another thread before it goes ahead. */
+    static final long GATE_WAIT_MS = 1000;
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     /** Players that were started and not paused or released since. */
@@ -28,7 +40,15 @@ public final class SleepTimer {
     private static long generation;
     private static Runnable scheduledSleep;
     private static volatile Consumer<Expiry> pauseAction;
-    /** Scope for app pause commands enqueued by the initial action; always cleared after dispatch. */
+    private static final ReentrantLock DISPATCH = new ReentrantLock();
+    /**
+     * The expiry whose pause action runs on this thread, for {@link #guardPauseOperation}. It is a ThreadLocal,
+     * so only operations the action enqueues on the thread it was called on are recognized. When an app's
+     * pause path hops to another thread first, what that thread enqueues runs as a stock operation: it isn't
+     * revalidated, so a resume that overtakes it can still be paused. Tagging submissions from other threads
+     * while a pause runs would also catch the user's own pause, seek or quality commands enqueued at that
+     * moment and could drop them, which is worse than the rare stale pause.
+     */
     private static final ThreadLocal<Expiry> DISPATCHING = new ThreadLocal<>();
 
     private SleepTimer() {
@@ -56,14 +76,19 @@ public final class SleepTimer {
     /** A player started or resumed: (re)arms the timer from now. May run on any thread. */
     public static void onPlay(Object player) {
         if (player == null) return;
-        synchronized (STARTED) {
-            long playing = ++generation;
-            STARTED.put(player, playing);
-            MAIN.post(() -> arm(playing));
+        boolean gated = enterGate();
+        try {
+            synchronized (STARTED) {
+                long playing = ++generation;
+                STARTED.put(player, playing);
+                MAIN.post(() -> arm(playing));
+            }
+        } finally {
+            if (gated) DISPATCH.unlock();
         }
     }
 
-    /** A player paused, stopped or was released. */
+    /** A player paused, stopped or was released. Never waits for a pause in progress. */
     public static void onStop(Object player) {
         if (player != null) STARTED.remove(player);
     }
@@ -88,28 +113,53 @@ public final class SleepTimer {
 
     private static void sleep(long playing) {
         if (Settings.getInt(KEY) <= 0) return;
+        Consumer<Expiry> action = pauseAction;
+        Expiry expiry;
+        // Snapshot under the bookkeeping lock; the app's pause code runs outside it.
         synchronized (STARTED) {
             if (playing != generation) return;
             if (STARTED.isEmpty()) {
                 Logger.d("sleep timer: nothing is playing");
                 return;
             }
-            Consumer<Expiry> action = pauseAction;
             if (action == null) {
                 Logger.d("sleep timer: no pause action");
                 return;
             }
-            Expiry expiry = new Expiry(playing, new WeakHashMap<>(STARTED));
-            // Initial pause paths can affect every app player. Serialize the actual dispatch with
-            // onPlay, just as the per-player fallback does. IVS's injected onStop reenters this monitor.
+            expiry = new Expiry(playing, new WeakHashMap<>(STARTED));
+        }
+        // Initial pause paths can affect every app player. Plays wait at the gate until the dispatch is done,
+        // as they do for the per-player fallback; stops (IVS's injected onStop) go straight through. The gate
+        // is only busy here when an earlier expiry's queued pause runs on a player thread.
+        boolean gated = enterGate();
+        try {
+            synchronized (STARTED) {
+                // A play got in between the snapshot and the gate.
+                if (playing != generation) return;
+            }
             DISPATCHING.set(expiry);
             try {
                 action.accept(expiry);
             } finally {
                 DISPATCHING.remove();
             }
+        } finally {
+            if (gated) DISPATCH.unlock();
         }
         toast("Sleep timer: playback paused");
+    }
+
+    /**
+     * Waits for a pause in progress on another thread, at most GATE_WAIT_MS; the thread running it enters at
+     * once. False when it gave up waiting, so the caller goes ahead without the gate.
+     */
+    private static boolean enterGate() {
+        try {
+            return DISPATCH.tryLock(GATE_WAIT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
     }
 
     /**
@@ -127,29 +177,44 @@ public final class SleepTimer {
             this.candidates = candidates;
         }
 
+        /** Runs a pause command the action enqueued, unless a play came after this expiry or the timer is off. */
         private void runIfCurrent(Runnable operation) {
-            synchronized (STARTED) {
-                if (generation != SleepTimer.generation || Settings.getInt(KEY) <= 0) return;
+            boolean gated = enterGate();
+            try {
+                synchronized (STARTED) {
+                    if (generation != SleepTimer.generation) return;
+                }
+                if (Settings.getInt(KEY) <= 0) return;
                 operation.run();
+            } finally {
+                if (gated) DISPATCH.unlock();
             }
         }
 
         public void pauseLeftovers(String platform) {
-            synchronized (STARTED) {
-                if (consumed) return;
-                consumed = true;
-                if (Settings.getInt(KEY) <= 0) return;
-                for (Map.Entry<Object, Long> entry : candidates.entrySet()) {
-                    Object player = entry.getKey();
-                    if (!entry.getValue().equals(STARTED.get(player))) continue;
-                    // Keep the generation check and pause together: onPlay may run on any thread.
+            List<Object> due = new ArrayList<>();
+            boolean gated = enterGate();
+            try {
+                synchronized (STARTED) {
+                    if (consumed) return;
+                    consumed = true;
+                    if (Settings.getInt(KEY) <= 0) return;
+                    for (Map.Entry<Object, Long> entry : candidates.entrySet()) {
+                        Object player = entry.getKey();
+                        if (entry.getValue().equals(STARTED.get(player))) due.add(player);
+                    }
+                }
+                // Plays wait at the gate, so the generation check above still holds while these pause.
+                for (Object player : due) {
                     try {
                         player.getClass().getMethod("pause").invoke(player);
                         Logger.d("sleep timer: paused a player " + platform + " missed");
                     } catch (Throwable t) {
-                        Logger.d("sleep timer: " + t);
+                        Logger.w("sleep timer: couldn't pause a player " + platform + " missed: " + t);
                     }
                 }
+            } finally {
+                if (gated) DISPATCH.unlock();
             }
         }
     }

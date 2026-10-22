@@ -108,10 +108,11 @@ public final class UiBoundaryProbe {
    SharedPreferences preferences=(SharedPreferences)Proxy.newProxyInstance(SharedPreferences.class.getClassLoader(),new Class[]{SharedPreferences.class},(p,m,a)->prefs.getOrDefault((String)a[0],a[1]));
    Context isolated=new ContextWrapper(system.createPackageContext("com.android.shell",0)){@Override public SharedPreferences getSharedPreferences(String n,int m){return preferences;}};
    Class<?> settings=Class.forName("io.github.jordanwoodson.extension.shared.settings.Settings");Field f=settings.getDeclaredField("context");f.setAccessible(true);f.set(null,isolated);
-   f=Class.forName(ROOT+"TwitchChatKeywords").getDeclaredField("application");f.setAccessible(true);f.set(null,isolated);
+   f=Class.forName(ROOT+"TwitchContext").getDeclaredField("application");f.setAccessible(true);f.set(null,isolated);
    player=Class.forName(ROOT+"TwitchPlayer");overlay=Class.forName(ROOT+"TwitchChatOverlay");current=overlay.getDeclaredField("overlay");current.setAccessible(true);
    prefs.put("chat_overlay",true);prefs.put("swipe_controls",true);
    Screen first=new Screen(isolated),second=new Screen(isolated);
+   if(args.length>1)ProbeLocators.load(args[1]);
    Handler handler=new Handler(Looper.getMainLooper());String scenario=args[0];
    if(scenario.equals("overlay-navigation")) {
     Method tagged,channel,dispose;
@@ -174,6 +175,68 @@ public final class UiBoundaryProbe {
    } else if(scenario.equals("overlay-off")) {
     message(first);prefs.put("chat_overlay",false);
     handler.post(()->finish(()->check(current.get(null)==null,"queued overlay must recheck opt-out"),scenario));
+   } else if(scenario.equals("overlay-off-idle")) {
+    // Switched off with no overlay on screen: chat messages queue nothing on the main thread.
+    prefs.put("chat_overlay",false);
+    for(int i=0;i<50;i++)message(first);
+    check(Looper.getMainLooper().getQueue().isIdle(),"switched-off overlay posted work for chat messages");
+    // With an overlay still showing, switching off removes it through one queued task.
+    prefs.put("chat_overlay",true);show(first);check(current.get(null)!=null,"overlay shown");
+    prefs.put("chat_overlay",false);for(int i=0;i<50;i++)message(first);
+    handler.post(()->finish(()->check(current.get(null)==null,"switched-off overlay still showing"),scenario));
+   } else if(scenario.equals("gesture-hook")) {
+    // The patched DraggableConstraintLayout.onInterceptTouchEvent itself: its injected call claims a vertical
+    // edge swipe while the switch is on, and leaves the gesture to Twitch while it is off.
+    Class<?> layoutType=Class.forName("tv.twitch.android.shared.ui.elements.draggable.DraggableConstraintLayout");
+    ViewGroup layout=(ViewGroup)layoutType.getConstructor(Context.class).newInstance(first);
+    // Its own onLayout needs inflated children; set the frame directly instead.
+    first.content.addView(layout,new FrameLayout.LayoutParams(1000,600));layout.setLeftTopRightBottom(0,0,1000,600);
+    TextureView video=new TextureView(first){@Override public boolean isShown(){return true;}
+     @Override public boolean getGlobalVisibleRect(Rect r,Point p){r.set(0,0,1000,600);return true;}};
+    layout.addView(video,new ViewGroup.LayoutParams(1000,600));video.setLeftTopRightBottom(0,0,1000,600);
+    Method intercept=layoutType.getMethod("onInterceptTouchEvent",MotionEvent.class);
+    for(boolean enabled:new boolean[]{true,false}){
+     prefs.put("swipe_controls",enabled);
+     long down=SystemClock.uptimeMillis()+(enabled?0:1000);
+     MotionEvent press=MotionEvent.obtain(down,down,MotionEvent.ACTION_DOWN,200,300,0);
+     MotionEvent move=MotionEvent.obtain(down,down+20,MotionEvent.ACTION_MOVE,200,100,0);
+     intercept.invoke(layout,press);
+     boolean claimed=(boolean)intercept.invoke(layout,move);
+     press.recycle();move.recycle();
+     if(enabled)check(claimed&&(int)field(player,"swipe")!=0,"switched-on hook did not claim the edge swipe");
+     else check((int)field(player,"swipe")==0,"switched-off hook claimed a swipe");
+     Field swipe=player.getDeclaredField("swipe");swipe.setAccessible(true);swipe.set(null,0);
+    }
+    finish(()->{},scenario);
+   } else if(scenario.equals("overlay-destroy-view")) {
+    // The patched VerticalTheatreFragment.onDestroyView itself: its injected call retires the view's chat
+    // feeder before Twitch's own teardown runs (which needs an attached fragment, so it fails here).
+    Class<?> fragmentType=Class.forName("tv.twitch.android.feature.theatre.vertical.VerticalTheatreFragment");
+    Class<?> feederType=fragmentType.getDeclaredMethod(ProbeLocators.method("twitch.match.viewer_overlay_feeder","P")).getReturnType();
+    Field unsafeField=Class.forName("sun.misc.Unsafe").getDeclaredField("theUnsafe");unsafeField.setAccessible(true);
+    Object unsafe=unsafeField.get(null);Method allocate=unsafe.getClass().getMethod("allocateInstance",Class.class);
+    Object fragment=allocate.invoke(unsafe,fragmentType),feeder=allocate.invoke(unsafe,feederType);
+    int owners=0;
+    for(Field candidate:fragmentType.getDeclaredFields())if(candidate.getType()==feederType){candidate.setAccessible(true);candidate.set(fragment,feeder);owners++;}
+    check(owners>0,"no chat feeder field on the fragment");
+    overlay.getMethod("channel",Object.class,Object.class).invoke(null,feeder,"42");
+    try{fragmentType.getMethod("onDestroyView").invoke(fragment);}catch(InvocationTargetException expected){/* Twitch's own teardown */}
+    Field ownersField=overlay.getDeclaredField("OWNERS");ownersField.setAccessible(true);
+    Object owner=((Map<?,?>)ownersField.get(null)).get(feeder);
+    check(owner!=null,"feeder never had an owner");
+    Field retired=owner.getClass().getDeclaredField("retired");retired.setAccessible(true);
+    check((boolean)retired.get(owner),"onDestroyView did not retire its chat feeder");
+    finish(()->{},scenario);
+   } else if(scenario.equals("refresh-off")) {
+    // Refresh stream off: the gear keeps its own long-press; on: Lurk's replaces it.
+    boolean[] own={false};View gear=new View(first);first.content.addView(gear);
+    View.OnLongClickListener stock=v->{own[0]=true;return true;};
+    Method bind=player.getMethod("bindRefresh",View.class);
+    prefs.put("refresh_stream",false);gear.setOnLongClickListener(stock);bind.invoke(null,gear);gear.performLongClick();
+    check(own[0],"switched-off Refresh stream replaced the gear's long-press");
+    own[0]=false;prefs.put("refresh_stream",true);bind.invoke(null,gear);gear.performLongClick();
+    check(!own[0],"Refresh stream did not bind the gear");
+    finish(()->{},scenario);
    } else if(scenario.equals("overlay-owner")) {
     message(first);first.dead=true;show(second);Object owned=current.get(null);check(owned!=null,"new activity owns real overlay view");
     handler.post(()->finish(()->check(current.get(null)==owned,"stale invalid activity must not detach new overlay"),scenario));

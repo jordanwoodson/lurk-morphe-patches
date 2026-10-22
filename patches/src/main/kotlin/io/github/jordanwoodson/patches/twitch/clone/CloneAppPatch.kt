@@ -25,8 +25,9 @@ val cloneAppPatch = resourcePatch(
     fun rename(value: String) = when {
         value == ORIGINAL -> packageName!!
         value.startsWith("$ORIGINAL.") -> packageName!! + value.removePrefix(ORIGINAL)
-        value == "com.amazon.identity.auth.device.MapInfoProvider.$ORIGINAL" ->
-            "com.amazon.identity.auth.device.MapInfoProvider.${packageName!!}"
+        // Amazon's providers put the package name last (MapInfoProvider, CrossAppContextProvider); Android
+        // refuses a second install whose provider authority is already used by the original app.
+        value.endsWith(".$ORIGINAL") -> value.removeSuffix(ORIGINAL) + packageName!!
         else -> value
     }
 

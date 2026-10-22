@@ -55,11 +55,15 @@ public final class PrivacyAdsProbe {
     }
 
     public static void main(String[] args) throws Exception {
+        if (args.length > 0) ProbeLocators.load(args[0]);
+        System.out.println(ProbeLocators.loaded() ? "names from the APK's locators" : "no locators in the APK: 31.7.0 names");
         settings();
         switches.put("disable_analytics", true);
-        Class<?> dispatcher = Class.forName("jn0");
+        // The callback type kx50 stays the compile-time stub's name; the rest come from the locators.
+        Class<?> dispatcher = Class.forName(ProbeLocators.type("twitch.match.spade_event", "jn0"));
         Object owner = allocate(dispatcher);
-        Method send = dispatcher.getMethod("d", String.class, LinkedHashMap.class, kx50.class, boolean.class);
+        Method send = dispatcher.getMethod(ProbeLocators.method("twitch.match.spade_event", "d"),
+            String.class, LinkedHashMap.class, kx50.class, boolean.class);
         // R8 removed kx50's empty constructor, so bypass our compile-only constructor as well.
         SpadeCallback callback = (SpadeCallback) allocate(SpadeCallback.class);
         send.invoke(owner, "test_event", new LinkedHashMap<>(), callback, false);
@@ -88,10 +92,11 @@ public final class PrivacyAdsProbe {
             });
         Class<?> emitterType = Class.forName("io.reactivex.internal.operators.single.c");
         Object emitter = emitterType.getConstructor(observerType).newInstance(observer);
-        Class<?> merged = Class.forName("ms");
+        Class<?> merged = Class.forName(ProbeLocators.type("twitch.match.client_ad_eligibility", "ms"));
+        String eligibility = ProbeLocators.method("twitch.match.client_ad_eligibility", "h");
         Object request = merged.getConstructor(int.class, Object.class, Object.class)
-            .newInstance(0, allocate(Class.forName("os")), null);
-        merged.getMethod("h", emitterType).invoke(request, emitter);
+            .newInstance(0, allocate(Class.forName(ProbeLocators.type("twitch.block_client_ads.request", "os"))), null);
+        merged.getMethod(eligibility, emitterType).invoke(request, emitter);
         check(calls[0] == 1 && calls[1] == 0, "Client-ad eligibility must complete once without error");
         check(result[0].getClass().getName().equals("tv.twitch.android.util.Optional"), "Wrong eligibility result type");
         Field optionalValue = result[0].getClass().getDeclaredField("a");
@@ -101,7 +106,7 @@ public final class PrivacyAdsProbe {
         switches.put("block_client_ads", false);
         try {
             Object nextEmitter = emitterType.getConstructor(observerType).newInstance(observer);
-            merged.getMethod("h", emitterType).invoke(request, nextEmitter);
+            merged.getMethod(eligibility, emitterType).invoke(request, nextEmitter);
             throw new AssertionError("Disabled ad patch did not reach the original eligibility code");
         } catch (InvocationTargetException expected) {
             check(expected.getCause() instanceof NullPointerException, "Original ad dependencies must remain uninitialized");
@@ -109,9 +114,16 @@ public final class PrivacyAdsProbe {
         check(calls[0] == 1 && calls[1] == 0, "Disabled client-ad gate unexpectedly emitted a result");
 
         switches.put("disable_analytics", true);
-        Class<?> arbiterType = Class.forName("apc");
+        Class<?> arbiterType = Class.forName(ProbeLocators.type("twitch.match.crashlytics_arbiter", "apc"));
         Object arbiter = allocate(arbiterType);
-        Method collectionPermission = arbiterType.getMethod("b");
+        // Its one no-argument boolean: whether automatic collection may upload.
+        Method collectionPermission = null;
+        for (Method method : arbiterType.getDeclaredMethods()) {
+            if (method.getParameterCount() == 0 && method.getReturnType() == boolean.class) {
+                check(collectionPermission == null, "Several Crashlytics permission getters");
+                collectionPermission = method;
+            }
+        }
         check(Boolean.FALSE.equals(collectionPermission.invoke(arbiter)), "Crashlytics automatic upload permission must be false");
         Class<?> crashlyticsType = Class.forName("com.google.firebase.crashlytics.FirebaseCrashlytics");
         Object crashlytics = allocate(crashlyticsType);

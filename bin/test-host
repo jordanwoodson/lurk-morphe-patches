@@ -13,6 +13,7 @@ checks=(
     tests/twitch/test_providers.py
     tests/twitch/test_rn_chat.py
     tests/shared/test_sleep_timer.py
+    tests/shared/test_settings.py
     tests/rumble/test_state_transitions.py
     tests/kick/verify_player.py
     tests/kick/verify_privacy.py
@@ -21,6 +22,9 @@ checks=(
     tests/test_release.py
     tests/test_patch.py
 )
+
+# Source rules for the whole bundle.
+checks+=(tests/verify_version_literals.py)
 
 failed=0
 for check in "${checks[@]}"; do

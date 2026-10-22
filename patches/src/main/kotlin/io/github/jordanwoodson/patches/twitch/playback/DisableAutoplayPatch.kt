@@ -1,9 +1,9 @@
 package io.github.jordanwoodson.patches.twitch.playback
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
-import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
+import io.github.jordanwoodson.patches.twitch.shared.replaceInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.booleanOption
 import app.morphe.patcher.patch.bytecodePatch
@@ -17,6 +17,11 @@ import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.iface.reference.StringReference
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.invoke
+import io.github.jordanwoodson.patches.twitch.shared.freeRegister
+import io.github.jordanwoodson.patches.twitch.shared.requireFreeRegister
+import io.github.jordanwoodson.patches.twitch.shared.requireNotBranchTarget
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -64,13 +69,23 @@ val disableAutoplayPatch = bytecodePatch(
         val event = eventCode.withIndex().single { (_, instruction) ->
             (instruction as? ReferenceInstruction)?.reference.let { (it as? StringReference)?.string == "player_rec_autoplay" }
         }
+        // The event name's register is written by the original instruction there, so it is free before it.
         val scratch = (event.value as OneRegisterInstruction).registerA
-        val unit = eventCode.first { it.opcode == Opcode.RETURN_OBJECT } as OneRegisterInstruction
+        recommendation.requireFreeRegister(event.index, scratch, "automatic recommendation event")
+        recommendation.requireNotBranchTarget(event.index, "automatic recommendation event")
+        // The lambda returns Kotlin's Unit, which it loads into a register once at its start. Return the
+        // same singleton, loaded here, rather than trusting that register to still hold it.
+        val unit = (eventCode.first { it.opcode == Opcode.RETURN_OBJECT } as OneRegisterInstruction).registerA
+        val load = eventCode.firstOrNull { it.opcode.setsRegister() && (it as OneRegisterInstruction).registerA == unit }
+        val unitField = ((load as? ReferenceInstruction)?.reference as? FieldReference)
+            ?.takeIf { load.opcode == Opcode.SGET_OBJECT && it.type == it.definingClass }
+            ?: throw PatchException("Twitch: automatic recommendation dispatch no longer returns a singleton")
         // The manual Play event has its own branch. Gate only the automatic event and its analytics.
         recommendation.addInstructionsWithLabels(event.index, """
             ${isEnabled(NEXT, "v$scratch")}
             if-eqz v$scratch, :play
-            return-object v${unit.registerA}
+            sget-object v$scratch, $unitField
+            return-object v$scratch
         """, ExternalLabel("play", recommendation.getInstruction(event.index)))
 
         val countdown = RecommendationCountdownFingerprint.twitchMatch("recommendation countdown view").method
@@ -95,22 +110,28 @@ val disableAutoplayPatch = bytecodePatch(
         val timer = viewCode.mapNotNull { (it as? ReferenceInstruction)?.reference as? FieldReference }
             .filter { it.definingClass == countdown.definingClass && it.type == dispose.definingClass }
             .distinct().single()
+        // The check's result goes into a register that is dead here, so the stock path (check false)
+        // continues with every register as it was. The hide branch returns, so it may use any low register.
+        val result = countdown.freeRegister(progress.index, listOf(container.registerA), "recommendation countdown")
+        val zero = container.registerA
         // The title and creator are already bound here. Preserve this branch target by replacing
         // its first instruction; jumping here must not bypass the inserted countdown check.
         countdown.replaceInstruction(progress.index,
-            "invoke-static { v${container.registerA} }, $PLAYBACK->showManualRecommendation(Landroid/view/View;)Z")
+            invokeStatic("$PLAYBACK->showManualRecommendation(Landroid/view/View;)Z", container.registerA))
         // Restore the original field load first, then bind the off branch to that real
         // instruction. A local label assembled in an inserted snippet can retain a snippet-
         // relative location and resolve to an unrelated existing instruction in this method.
         countdown.addInstructions(progress.index + 1,
             "iget-object v$progressRegister, p0, $progressField")
         countdown.addInstructionsWithLabels(progress.index + 1, """
-            move-result v0
-            if-eqz v0, :lurk_countdown_stock
-            iget-object v0, p0, $timer
-            invoke-interface { v0 }, $dispose
-            const/4 v0, 0x0
-            invoke-virtual { p0, v0 }, $setVisibility
+            move-result v$result
+            if-eqz v$result, :lurk_countdown_stock
+            move-object/from16 v$result, p0
+            iget-object v$result, v$result, $timer
+            ${invoke("invoke-interface", dispose.toString(), result)}
+            move-object/from16 v$result, p0
+            const/4 v$zero, 0x0
+            ${invoke("invoke-virtual", setVisibility.toString(), result, zero)}
             return-void
         """, ExternalLabel("lurk_countdown_stock", countdown.getInstruction(progress.index + 1)))
 

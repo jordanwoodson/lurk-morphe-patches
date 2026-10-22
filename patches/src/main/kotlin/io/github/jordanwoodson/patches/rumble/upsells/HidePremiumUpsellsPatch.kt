@@ -4,6 +4,7 @@ import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
@@ -23,21 +24,27 @@ val hidePremiumUpsellsPatch = bytecodePatch(
 
     execute {
         // suspend fun shouldShowPremiumPromo(): Boolean
-        PremiumPromoFingerprint.single("Premium promo check").method.addInstructionsIfEnabled(
-            KEY,
-            """
-                sget-object v0, Ljava/lang/Boolean;->FALSE:Ljava/lang/Boolean;
-                return-object v0
-            """,
-        )
+        PremiumPromoFingerprint.single("Premium promo check").method.apply {
+            Locators.record("rumble.hide_premium_upsells.promo_check", this)
+            addInstructionsIfEnabled(
+                KEY,
+                """
+                    sget-object v0, Ljava/lang/Boolean;->FALSE:Ljava/lang/Boolean;
+                    return-object v0
+                """,
+            )
+        }
 
         // Composables that draw nothing when they return straight away.
         listOf(
-            PremiumBannerFingerprint to "PremiumBannerView",
-            PremiumOfferBannerFingerprint to "PremiumOfferBanner",
-            DownloadsUpsellFingerprint to "DownloadsUpsellView",
-        ).forEach { (fingerprint, name) ->
-            fingerprint.single("$name composable").method.addInstructionsIfEnabled(KEY, "return-void")
+            Triple(PremiumBannerFingerprint, "PremiumBannerView", "premium_banner_view"),
+            Triple(PremiumOfferBannerFingerprint, "PremiumOfferBanner", "premium_offer_banner"),
+            Triple(DownloadsUpsellFingerprint, "DownloadsUpsellView", "downloads_upsell_view"),
+        ).forEach { (fingerprint, name, locator) ->
+            fingerprint.single("$name composable").method.apply {
+                Locators.record("rumble.hide_premium_upsells.$locator", this)
+                addInstructionsIfEnabled(KEY, "return-void")
+            }
         }
 
         PremiumGiftsFingerprint.single("LiveChatConfig.giftList getter").method.addInstructionsIfEnabled(

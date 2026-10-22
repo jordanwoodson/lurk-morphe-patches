@@ -3,7 +3,7 @@
 
 Checks that the registry names Rumble, that keys are unique, that each setting's section is one of the
 screen's sections, and that the settings of the included patches start at the documented defaults: off
-for everything except lockout protection, local privacy, restoring expected behavior and the chat
+for everything except privacy, lockout protection, nags, restoring expected behavior and the chat
 features that match Twitch's.
 
 Usage: python3 -I tests/rumble/verify_settings.py <apktool-dir>
@@ -15,8 +15,29 @@ from pathlib import Path
 
 SECTIONS = {"Privacy", "Interface", "Playback", "Chat", "Premium"}
 
-# Settings of the patches added with the Lurk settings switch policy, and where each starts.
+# Where each setting starts with the patches' default options: off for new behavior, on for privacy,
+# lockout protection, nags, restoring expected behavior and the chat features that match Twitch's.
 DEFAULTS = {
+    "block_ads": "true",
+    "block_cookie_notice": "true",
+    "disable_analytics": "true",
+    "keep_watch_progress": "false",
+    "clean_share_links": "true",
+    "hide_premium_upsells": "true",
+    "hide_shorts": "false",
+    "hide_tipping": "false",
+    "video_quality": "0",
+    "autoplay_next_video_off": "false",
+    "feed_previews_off": "false",
+    "background_audio": "false",
+    "default_speed": "0",
+    "hide_join_button": "false",
+    "hide_shop_button": "false",
+    "hide_comments": "false",
+    "hide_related_videos": "false",
+    "hide_premium_only": "false",
+    "player_gestures": "false",
+    "unlock_premium": "true",
     "block_update_prompts": "true",
     "exact_counts": "false",
     "video_quality_live": "false",

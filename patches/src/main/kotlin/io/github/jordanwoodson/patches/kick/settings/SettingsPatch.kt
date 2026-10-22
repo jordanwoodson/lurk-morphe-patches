@@ -18,17 +18,23 @@ import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.immutable.reference.ImmutableStringReference
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.shared.SHARED_EXTENSION
+import io.github.jordanwoodson.patches.shared.settings.writeLocators
 import io.github.jordanwoodson.patches.shared.settings.SETTINGS_CLASS
 import io.github.jordanwoodson.patches.shared.settings.SettingsScreen
+import io.github.jordanwoodson.patches.shared.settings.debugLoggingSetting
 import org.w3c.dom.Element
 
 internal val kickSettings = SettingsScreen("Kick")
 internal const val KICK_BUNDLE = "Lio/github/jordanwoodson/extension/shared/kick/KickBundle;"
 
+/** The Kick version the patches target, from COMPATIBILITY_KICK, for messages. */
+private val KICK_VERSION = COMPATIBILITY_KICK.targets.joinToString(" or ") { "${it.version}" }
+
 context(context: BytecodePatchContext)
 internal fun Fingerprint.kickMatch(what: String): Match = matchAllOrNull()?.singleOrNull()
-    ?: throw PatchException("Kick 40.32.3: expected exactly one $what")
+    ?: throw PatchException("Kick $KICK_VERSION: expected exactly one $what")
 
 internal val kickSettingsPatch = bytecodePatch(
     description = "Adds Lurk settings to Kick's launcher shortcut.",
@@ -37,6 +43,7 @@ internal val kickSettingsPatch = bytecodePatch(
     extendWith(SHARED_EXTENSION)
     dependsOn(resourcePatch {
         execute {
+            Locators.clear()
             document("AndroidManifest.xml").use { doc ->
                 val app = doc.getElementsByTagName("application").item(0) as Element
                 app.appendChild(doc.createElement("activity").apply {
@@ -44,13 +51,16 @@ internal val kickSettingsPatch = bytecodePatch(
                     setAttribute("android:exported", "false")
                     setAttribute("android:label", "Lurk")
                     setAttribute("android:taskAffinity", "")
-                    setAttribute("android:theme", "@android:style/Theme.DeviceDefault.Light.NoActionBar")
+                    setAttribute("android:theme", "@android:style/Theme.DeviceDefault.NoActionBar")
                 })
             }
         }
+        // Finalized after every other patch, so everything they matched is recorded.
+        finalize { writeLocators("kick") }
     })
     execute {
         kickSettings.clear()
+        kickSettings.add(debugLoggingSetting)
         ApplicationOnCreateFingerprint.kickMatch("MainApplication.onCreate").method.addInstructions(
             0,
             """
@@ -79,6 +89,7 @@ internal val kickBundleLoaderPatch = bytecodePatch {
             throw PatchException("Kick: unexpected bundle loader interface")
         }
         val method = match.method
+        Locators.record("kick.settings.bundle_loader", method)
         val instructions = method.implementation!!.instructions.toList()
         val index = instructions.indices.singleOrNull { index ->
             val instruction = instructions[index]

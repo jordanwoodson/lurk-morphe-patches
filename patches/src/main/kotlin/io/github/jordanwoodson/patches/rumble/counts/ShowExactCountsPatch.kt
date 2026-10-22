@@ -4,6 +4,7 @@ import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_INTERFACE
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -22,7 +23,9 @@ val showExactCountsPatch = bytecodePatch(
     dependsOn(settingsPatch)
 
     execute {
-        CountFormatterFingerprint.single("count formatter").method.addInstructionsIfEnabled(
+        CountFormatterFingerprint.single("count formatter").method
+            .also { Locators.record("rumble.exact_counts.formatter", it) }
+            .addInstructionsIfEnabled(
             KEY,
             """
                 invoke-static/range { p0 .. p1 }, $RUMBLE_INTERFACE->exactCount(J)Ljava/lang/String;

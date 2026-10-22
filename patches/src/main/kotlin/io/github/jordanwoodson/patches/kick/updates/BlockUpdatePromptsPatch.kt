@@ -3,6 +3,7 @@ package io.github.jordanwoodson.patches.kick.updates
 import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.kick.settings.kickSettings
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.kick.shared.OTA_UPDATES_OFF
 import io.github.jordanwoodson.patches.kick.shared.kickHermes
 import io.github.jordanwoodson.patches.kick.shared.kickHermesPatch
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -14,7 +15,7 @@ private const val KEY = "block_update_prompts"
 val blockUpdatePromptsPatch = bytecodePatch(
     name = "Block update prompts",
     description = "Stops Kick from asking for or forcing an app update. A patched Kick can't be updated from " +
-        "Google Play, so update by patching a newer version. On by default. Turn it off in Lurk settings > Interface.",
+        "Google Play, so update by patching a newer version. On by default. Turn it off in Lurk settings > Interface." + OTA_UPDATES_OFF,
 ) {
     compatibleWith(COMPATIBILITY_KICK)
     dependsOn(kickHermesPatch)

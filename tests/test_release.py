@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -29,6 +30,7 @@ class ReleaseRecoveryTests(unittest.TestCase):
         self.fixture = Path(tempfile.mkdtemp(prefix="git-", dir=scratch))
         self.root = self.fixture / "work"
         self.root.mkdir()
+        self.started = int(time.time())
         self.remote = self.fixture / "origin.git"
         self.command("git", "init", "--bare", "--quiet", str(self.remote))
         self.git("init", "--quiet", "-b", "main")
@@ -84,20 +86,40 @@ class ReleaseRecoveryTests(unittest.TestCase):
     def git(self, *args):
         return self.command("git", *args)
 
-    def commit(self, subject, body=None):
+    def commit(self, subject, body=None, *, minutes=None, empty=False):
+        """Commit everything. `minutes` dates the commit that long after the fixture started, which
+        fixes the log order of commits made on different branches."""
         self.git("add", ".")
-        self.git("commit", "--quiet", "-m", subject, *(["-m", body] if body else []))
+        env = dict(os.environ)
+        if minutes is not None:
+            env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = f"@{self.started + 60 * minutes} +0000"
+        subprocess.run(["git", "commit", "--quiet", *(["--allow-empty"] if empty else []), "-m", subject,
+                        *(["-m", body] if body else [])], cwd=self.root, check=True, capture_output=True, env=env)
         return self.git("rev-parse", "HEAD")
 
-    def stable(self, published=False):
+    def merge(self, branch, minutes):
+        stamp = f"@{self.started + 60 * minutes} +0000"
+        subprocess.run(["git", "merge", "--quiet", "--no-ff", "-m", f"Merge {branch}", branch], cwd=self.root,
+                       check=True, capture_output=True,
+                       env={**os.environ, "GIT_AUTHOR_DATE": stamp, "GIT_COMMITTER_DATE": stamp})
+
+    def pre_release(self, version, minutes):
+        """A dev release commit and its tag, pushed but not published (its GitHub release failed)."""
+        sha = self.commit(f"chore: Release v{version} [skip ci]", f"## {version}\n\nDev notes",
+                          minutes=minutes, empty=True)
+        self.git("tag", f"v{version}")
+        self.git("push", "--quiet", "origin", "dev", "--tags")
+        return sha
+
+    def stable(self, published=False, minutes=None):
         (self.root / "feature.txt").write_text("stable feature\n")
-        self.commit("fix: fixture behavior")
+        self.commit("fix: fixture behavior", minutes=minutes)
         (self.root / "gradle.properties").write_text("version = 1.0.1\n")
         (self.root / "CHANGELOG.md").write_text("## 1.0.1\n\nStable notes\n\n## 1.0.0\n")
         (self.root / "patches-bundle.json").write_text('{"version":"1.0.1","description":"stable"}\n')
         (self.root / "patches-list.json").write_text('{"version":"1.0.1","patches":[]}\n')
         (self.root / "README.md").write_text("Stable patch list\n")
-        sha = self.commit("chore: Release v1.0.1 [skip ci]", "## 1.0.1\n\nStable notes")
+        sha = self.commit("chore: Release v1.0.1 [skip ci]", "## 1.0.1\n\nStable notes", minutes=minutes)
         self.git("tag", "v1.0.1")
         self.git("push", "--quiet", "origin", "main", "--tags")
         if published:
@@ -351,6 +373,57 @@ class ReleaseRecoveryTests(unittest.TestCase):
         self.assertEqual(values["published"], "true")
         self.assertTrue(values["assets"].endswith("patches-1.0.1.mpp"))
 
+    def test_stable_recovery_skips_newer_pre_release_commits_merged_from_dev(self):
+        # v1.0.1's GitHub release failed; dev, with a newer pre-release commit, was merged before the rerun.
+        sha = self.stable(minutes=1)
+        self.git("checkout", "--quiet", "dev")
+        (self.root / "dev.txt").write_text("next feature\n")
+        self.commit("feat: next development", minutes=2)
+        self.pre_release("1.1.0-dev.1", minutes=3)
+        self.published.add("v1.1.0-dev.1")
+        self.git("checkout", "--quiet", "main")
+        self.merge("dev", minutes=4)
+        self.git("push", "--quiet", "origin", "main")
+        self.invoke()
+        self.assertEqual(self.publications[0], "v1.0.1", "The unpublished stable release must be recovered")
+        self.assertEqual(self.builds[0], ("1.0.1", sha))
+        self.assert_merged(sha)
+
+    def test_pre_release_recovery_skips_newer_stable_release_commits(self):
+        # v1.1.0-dev.1's GitHub release failed; an older stable release was merged into dev after it.
+        self.git("checkout", "--quiet", "dev")
+        (self.root / "dev.txt").write_text("next feature\n")
+        self.commit("feat: next development", minutes=1)
+        sha = self.pre_release("1.1.0-dev.1", minutes=2)
+        self.git("checkout", "--quiet", "main")
+        self.stable(published=True, minutes=3)
+        self.git("checkout", "--quiet", "dev")
+        self.merge("main", minutes=4)
+        self.git("push", "--quiet", "origin", "dev")
+        self.invoke(branch="dev")
+        self.assertEqual(self.publications[0], "v1.1.0-dev.1", "The unpublished pre-release must be recovered")
+        self.assertEqual(self.builds[0], ("1.1.0-dev.1", sha))
+
+    def test_pre_release_contained_in_a_newer_stable_release_is_not_recovered(self):
+        # v1.0.1-dev.1's GitHub release failed, but the stable v1.0.1 made from it is out: publishing
+        # the pre-release now would put an outdated build above the stable one.
+        self.git("checkout", "--quiet", "dev")
+        (self.root / "dev.txt").write_text("development fix\n")
+        self.commit("fix: development fix", minutes=1)
+        self.pre_release("1.0.1-dev.1", minutes=2)
+        self.git("checkout", "--quiet", "main")
+        self.merge("dev", minutes=3)
+        self.commit("chore: Release v1.0.1 [skip ci]", "## 1.0.1\n\nStable notes", minutes=4, empty=True)
+        self.git("tag", "v1.0.1")
+        self.git("push", "--quiet", "origin", "main", "--tags")
+        self.published.add("v1.0.1")
+        self.git("checkout", "--quiet", "dev")
+        self.git("merge", "--quiet", "--ff-only", "main")
+        self.git("push", "--quiet", "origin", "dev")
+        self.invoke(branch="dev")
+        self.assertEqual(self.publications, [])
+        self.assertEqual(self.builds, [])
+
     def test_backmerge_fetch_failure_is_reported_for_retry(self):
         sha = self.stable()
         original = release.git_ok
@@ -454,6 +527,82 @@ class ReleaseRecoveryTests(unittest.TestCase):
         self.assertEqual(self.git("write-tree"), before_index)
         self.assertEqual(self.builds, [])
         self.assertEqual(self.publications, [])
+
+
+class ReleaseNotesTests(unittest.TestCase):
+    CATALOG = {
+        "twitch": release.App("Twitch", ("Sleep timer", "Third-party emotes", "Hide chat clutter")),
+        "kick": release.App("Kick", ("Sleep timer", "Hide rating prompt")),
+    }
+
+    @staticmethod
+    def commit(header, sha, body=""):
+        kind, scope, bang, text = release.HEADER.fullmatch(header).groups()
+        footer = release.BREAKING.search(body)
+        breaking = footer.group(1).strip() if footer else (text if bang else "")
+        return release.Commit(sha * 40, kind, scope or "", text, breaking)
+
+    def notes(self, *commits):
+        return release.notes(release.Version(1, 2, 0), release.Version(1, 1, 0), list(commits), "2026-10-22",
+                             "owner/repo", self.CATALOG)
+
+    def test_entries_are_grouped_by_app_then_section_with_shared_last(self):
+        text = self.notes(self.commit("fix(twitch): keep the sleep timer running in picture-in-picture", "a"),
+                          self.commit("feat(kick): hide rating prompt", "b"),
+                          self.commit("bump(twitch): support Twitch 31.8.0", "c"),
+                          self.commit("fix: serialize sleep dispatch", "d"),
+                          self.commit("fix(tooling): isolate patch inputs", "e"),
+                          self.commit("feat(twitch): Third-party emotes: show emotes in the picker", "f"),
+                          self.commit("chore(twitch): document the hooks", "0"))
+        headings = [line for line in text.splitlines() if line.startswith("#")]
+        self.assertEqual(headings, [
+            "## [1.2.0](https://github.com/owner/repo/compare/v1.1.0...v1.2.0) (2026-10-22)",
+            "### Kick", "#### ✨ New Features",
+            "### Twitch", "#### ✨ New Features", "#### 🚀 Updated App Support", "#### 🐛 Bug Fixes",
+            "### Shared", "#### 🐛 Bug Fixes",
+        ])
+        self.assertIn("* **Hide rating prompt** ([bbbbbbb](https://github.com/owner/repo/commit/" + "b" * 40 + "))", text)
+        self.assertIn("* **Third-party emotes:** show emotes in the picker (", text)
+        self.assertIn("* keep the **sleep timer** running in picture-in-picture (", text)
+        self.assertIn("* support Twitch 31.8.0 (", text)
+        self.assertIn("* **tooling:** isolate patch inputs (", text)
+        self.assertIn("* serialize sleep dispatch (", text)
+        self.assertNotIn("document the hooks", text)
+
+    def test_a_scope_naming_several_apps_lists_the_commit_under_each(self):
+        text = self.notes(self.commit("fix(kick,twitch): keep the Sleep timer after a restart", "a"))
+        self.assertEqual(text.count("keep the **Sleep timer** after a restart"), 2)
+        self.assertNotIn("### Shared", text)
+
+    def test_breaking_changes_come_first_and_keep_their_scope(self):
+        text = self.notes(self.commit("feat(kick)!: drop Kick 40.31", "a"),
+                          self.commit("fix(twitch): rename a key", "b", "BREAKING CHANGE: switches start off again"))
+        lines = text.splitlines()
+        self.assertEqual(lines[2], "### ⚠ BREAKING CHANGES")
+        self.assertEqual(lines[4:6], ["* **kick:** drop Kick 40.31", "* **twitch:** switches start off again"])
+
+    def test_manager_description_drops_commit_links_only(self):
+        text = self.notes(self.commit("fix(twitch): close #12 for the Sleep timer", "a"))
+        description = release.manager_description(text)
+        self.assertNotIn("/commit/", description)
+        self.assertIn("* close [#12](https://github.com/owner/repo/issues/12) for the **Sleep timer**", description)
+        self.assertIn("/compare/v1.1.0...v1.2.0", description)
+
+    def test_app_catalog_reads_names_and_patches_from_the_sources(self):
+        scratch = Path(os.environ.get("MORPHE_WORK", Path.home() / "build/lurk-morphe-patches")) / "release-tests"
+        scratch.mkdir(parents=True, exist_ok=True)
+        fixture = Path(tempfile.mkdtemp(prefix="catalog-", dir=scratch))
+        self.addCleanup(shutil.rmtree, fixture)
+        source = fixture / release.PATCHES_SRC
+        (source / "kick/shared").mkdir(parents=True)
+        (source / "kick/shared/Constants.kt").write_text('val COMPATIBILITY_KICK = Compatibility(\n    name = "Kick",\n)\n')
+        (source / "kick/timer").mkdir()
+        (source / "kick/timer/SleepTimerPatch.kt").write_text(
+            'val sleepTimerPatch = bytecodePatch(\n    name = "Sleep timer",\n    description = "x",\n)\n'
+            'val helper = bytecodePatch(description = "no name")\n')
+        (source / "shared").mkdir()
+        with patch.object(release, "ROOT", fixture):
+            self.assertEqual(release.apps(), {"kick": release.App("Kick", ("Sleep timer",))})
 
 
 class HostGateTests(unittest.TestCase):

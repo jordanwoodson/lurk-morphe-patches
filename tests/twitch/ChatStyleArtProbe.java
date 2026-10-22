@@ -48,7 +48,8 @@ public final class ChatStyleArtProbe {
             @Override public SharedPreferences getSharedPreferences(String name, int mode) { return preferences; }
             @Override public Resources getResources() { return resources; }
         };
-        for (String type : new String[]{"io.github.jordanwoodson.extension.shared.settings.Settings", KEYWORDS}) {
+        for (String type : new String[]{"io.github.jordanwoodson.extension.shared.settings.Settings",
+                "io.github.jordanwoodson.extension.shared.twitch.TwitchContext"}) {
             Field field = Class.forName(type).getDeclaredField(type.endsWith("Settings") ? "context" : "application");
             field.setAccessible(true);
             field.set(null, context);

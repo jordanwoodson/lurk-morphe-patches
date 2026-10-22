@@ -3,7 +3,7 @@ package io.github.jordanwoodson.patches.rumble.upsells
 import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.string
 import io.github.jordanwoodson.patches.rumble.shared.composableFingerprint
-import io.github.jordanwoodson.patches.rumble.shared.dtoGetterFingerprint
+import io.github.jordanwoodson.patches.shared.compose.dtoGetterFingerprint
 
 // Decides whether the video page opens the "Rumble Premium" sheet, after a delay set in Remote Config.
 internal object PremiumPromoFingerprint : Fingerprint(

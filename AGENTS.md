@@ -33,13 +33,26 @@ first. CONTRIBUTING.md has the rules contributors see; keep the two in line with
   `patches/.../shared/Extensions.kt` has the extension paths and the Logger descriptor.
 - Kick is React Native: logic is Hermes bytecode in `assets/index.android.bundle`. Use `hermesPatch`
   from morphe-patches-library for it; `bin/decompile kick` writes a disassembly and decompiled JS.
+- Injected calls go through `invokeStatic()`/`requireLowRegisters()` from `patches/shared/Registers.kt`:
+  Morphe drops a non-range invoke whose register is above v15 without an error. Every extension method a
+  patch calls is listed in `tests/<app>/expected-hooks.txt`; `bin/verify-hooks <app> <apk>` checks they survived.
+- Record every obfuscated name a patch matched with `Locators.record("<app>.<patch>.<what>", ...)`; the
+  settings patch writes them to `assets/lurk/locators.json` and probes read that instead of pinning R8 names.
+- No version literals outside `shared/Constants.kt` (a host check fails on new ones). Never rename a
+  settings key: users' saved choices would reset.
+- Switch defaults: a new patch is selected by default and its switch starts off, except lockout
+  protection, local privacy, nags and restoring expected behavior; same-named patches share defaults across
+  apps; patch-time-only changes (icon, name, clone, permissions, manifest) have no switch and say so.
 
 ## Commands
 
 `bin/bootstrap` (setup), `bin/build`, `bin/apk-add <file>`, `bin/apk-fetch <app>`, `bin/apk-info`,
 `bin/scan <app>`, `bin/decompile <app>`, `bin/patch <app> [--no-build] [--abi=x86_64] [--install=emulator-5580]`,
 `bin/emu [--port N] start [SNAPSHOT]|stop|restart|save|load|snapshots|status|shot`, `bin/ui <command>`,
-`bin/test-host`, `bin/test-<app>*`, `bin/new-app`, `bin/refs`, `bin/app-icon <app> <artwork.png>`.
+`bin/test-host`, `bin/test-<app>*`, `bin/verify-hooks <app> <apk>`, `bin/new-app`, `bin/refs`,
+`bin/app-icon <app> <artwork.png>`. Version bumps: `bin/bump <app> <version> [file] [--pin]` (patches with
+every patch forced on and groups the failures by cause), `bin/hermes-pin <app> [version]` (rewrites the
+Hermes bundle SHA gate), then `bump(<app>): support <App> <version>` as the commit.
 
 ## Fast loop
 

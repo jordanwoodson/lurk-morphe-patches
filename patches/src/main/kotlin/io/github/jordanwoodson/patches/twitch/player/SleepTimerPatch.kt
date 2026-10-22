@@ -1,6 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.player
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import com.android.tools.smali.dexlib2.AccessFlags
@@ -15,6 +15,8 @@ import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.requireLocals
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
@@ -29,11 +31,13 @@ val sleepTimerPatch = bytecodePatch(
     dependsOn(twitchSettingsPatch)
     execute {
         // Every start or resume, native or React Native, reaches IVS play(); pause() and release() end it.
-        IvsPlayFingerprint.twitchMatch("IVS play").method
-            .addInstructions(0, "invoke-static { p0 }, $PLAYER->onPlay(Ljava/lang/Object;)V")
+        IvsPlayFingerprint.twitchMatch("IVS play").method.apply {
+            addInstructions(0, invokeStatic("$PLAYER->onPlay(Ljava/lang/Object;)V", parameterRegister(0)))
+        }
         listOf(IvsPauseFingerprint to "IVS pause", IvsReleaseFingerprint to "IVS release").forEach { (fingerprint, what) ->
-            fingerprint.twitchMatch(what).method
-                .addInstructions(0, "invoke-static { p0 }, $PLAYER->onStop(Ljava/lang/Object;)V")
+            fingerprint.twitchMatch(what).method.apply {
+                addInstructions(0, invokeStatic("$PLAYER->onStop(Ljava/lang/Object;)V", parameterRegister(0)))
+            }
         }
 
         // Twitch pauses every player before a Guest Star call through a registry each player presenter
@@ -65,8 +69,9 @@ val sleepTimerPatch = bytecodePatch(
             // v0 is a local, so it holds nothing at the start.
             requireLocals(1)
             addInstructions(0, """
-                iget-object v0, p0, $players
-                invoke-static { v0 }, $PLAYER->pauseRegistry(Ljava/util/Set;)V
+                move-object/from16 v0, p0
+                iget-object v0, v0, $players
+                ${invokeStatic("$PLAYER->pauseRegistry(Ljava/util/Set;)V", 0)}
             """)
         }
         bridge("pauseRegisteredPlayer", """

@@ -22,6 +22,7 @@ import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_PLAYER
 import io.github.jordanwoodson.patches.rumble.shared.single
+import io.github.jordanwoodson.patches.shared.compose.mutableTwin
 import io.github.jordanwoodson.patches.shared.copyDrawablePaths
 import io.github.jordanwoodson.patches.shared.settings.ChoiceSetting
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -93,10 +94,7 @@ val seekIntervalPatch = bytecodePatch(
             }
             if (sites.isEmpty()) throw PatchException("Rumble: nothing draws the $icon icon")
             sites.forEach { (classDef, site) ->
-                val method = mutableClassDefBy(classDef).methods.single {
-                    it.name == site.name && it.parameterTypes.map(CharSequence::toString) ==
-                        site.parameterTypes.map(CharSequence::toString) && it.returnType == site.returnType
-                }
+                val method = mutableTwin(classDef, site)
                 val code = method.implementation!!.instructions.toList()
                 code.indices.filter {
                     code[it].opcode == Opcode.SGET && (code[it] as ReferenceInstruction).reference.toString() in fields

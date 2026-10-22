@@ -1,6 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.highlights
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
+import io.github.jordanwoodson.patches.shared.Locators
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
@@ -98,6 +99,10 @@ private fun BytecodePatchContext.hideHighlightTypes() {
         !AccessFlags.STATIC.isSet(method.accessFlags) && method.returnType == "V" &&
             method.parameterTypes.map { it.toString() } == listOf(event)
     } ?: throw PatchException("Twitch: no unique highlight dispatch")
+    Locators.record("twitch.hide_chat_highlights.dispatch", dispatch)
+    Locators.record("twitch.hide_chat_highlights.highlight_model", model.reference())
+    Locators.record("twitch.hide_chat_highlights.highlight_type", typeField.reference())
+    Locators.record("twitch.hide_chat_highlights.highlight_id", id.reference())
     dispatch.requireLocals(2)
     dispatch.addInstructionsWithLabels(0, """
         move-object/from16 v0, p1

@@ -63,6 +63,14 @@ public final class PrivacyProbe {
         equal(false, KickPrivacy.unavailablePalNonce().get("sdkAvailable"));
         equal("", KickPrivacy.unavailablePalNonce().get("nonce"));
         equal(2, KickPrivacy.unavailablePalNonce().size());
+
+        // Block device fingerprinting is opt-in: off, on, and an unreadable registry (key unknown) all checked.
+        equal(false, KickPrivacy.blockFingerprint());
+        Settings.fingerprintingBlocked = true;
+        equal(true, KickPrivacy.blockFingerprint());
+        equal(1, io.github.jordanwoodson.extension.shared.Logger.blocked);
+        Settings.fingerprintingRegistered = false;
+        equal(false, KickPrivacy.blockFingerprint());
         System.out.println("PASS: " + checks + " privacy helper contract assertions");
     }
 }

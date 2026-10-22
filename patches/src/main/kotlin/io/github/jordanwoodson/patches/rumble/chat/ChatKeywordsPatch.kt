@@ -7,9 +7,10 @@ import com.android.tools.smali.dexlib2.AccessFlags
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_CHAT
 import io.github.jordanwoodson.patches.shared.bridge
-import io.github.jordanwoodson.patches.rumble.shared.parameterRegister
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.rumble.shared.staticRangeCalls
 import io.github.jordanwoodson.patches.shared.settings.Section
@@ -45,6 +46,7 @@ val chatKeywordsPatch = bytecodePatch(
 
         // Highlighted rows get a tinted background around Rumble's own modifier.
         val row = LiveChatMessageViewFingerprint.single("live chat message row").method
+        Locators.record("rumble.chat.message_row", row)
         val modifier = row.parameterTypes[0].toString()
         row.apply {
             requireLocals(1)

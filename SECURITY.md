@@ -29,6 +29,27 @@ Include the app and version, the Lurk version, the patches involved and how to r
 You'll get an acknowledgement within a week. Fixes ship as a new release; the advisory is
 published once the release is out, with credit if you want it.
 
+## Release integrity
+
+Every release is built by the [Release workflow](.github/workflows/release.yml) on GitHub Actions
+from its tagged commit, after the host checks pass. Each published `.mpp` carries a GitHub build
+provenance attestation that ties the file to that workflow run and commit. To check a bundle you
+downloaded:
+
+```sh
+gh attestation verify patches-1.12.0.mpp --repo jordanwoodson/lurk-morphe-patches
+```
+
+The bundle itself is **not signed yet**: `patches-bundle.json` leaves `signature_download_url`
+empty, and Morphe Manager doesn't verify patch bundle signatures yet either. Manager installs the
+`.mpp` that `patches-bundle.json` points to on this repository's GitHub releases, so the trust rests
+on this repository and its release workflow; the attestation is the way to check a file
+independently. The workflow's actions are pinned by commit and the Hermes compilers by checksum
+(see [docs/development.md](docs/development.md#dependencies)).
+
+Patched apps are signed by your own Morphe Manager with a key it creates, not by Lurk; see the
+README on keeping that key.
+
 ## Supported versions
 
 Only the latest release is supported. Each release targets one version of each app (listed in

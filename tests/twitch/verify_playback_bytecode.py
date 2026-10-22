@@ -108,6 +108,9 @@ def verify_countdown_control_flow(method):
                 result = enabled
             elif line.startswith('move-result '):
                 registers[line.split()[1]] = result
+            elif line.startswith(('move-object/from16 ', 'move-object ')):
+                target, source = line.split(' ', 1)[1].split(', ')
+                registers[target] = registers[source]
             elif line.startswith('if-eqz '):
                 register, label = line.removeprefix('if-eqz ').split(', ')
                 if not registers[register]:

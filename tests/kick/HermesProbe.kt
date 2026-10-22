@@ -26,20 +26,21 @@ fun main(args: Array<String>) {
         bundle.returnNull(name, "hide_buttons")
     }
     rejects { bundle.returnNull("KicksShopButton", "overlap") }
-    val preview = bundle.previewDefault("disable_previews")
-    check(preview.original.size == 97 && preview.replacement.size == 97)
+    // A whole-body replacement must keep the body's length (Disable autoplay's edit; test_hermes.py checks it).
+    rejects { bundle.replaceBody("preferencesSettingsSlice", "invalid", ByteArray(96)) }
 
     // The decoder walks every function body exactly, including ones with switch tables.
     val decoded = bundle.instructions(bundle.function("handleBanUserEvent"))
     check(decoded.last().offset == 0x122 && decoded.last().bytes.contentEquals(byteArrayOf(0x76, 1)))
     check(decoded.count { it.target() != null } == 5)
+    branchChecks(original)
 
     // Object literal keys come from the shape table, in the slot order PutOwnBySlotIdx fills.
     val chatConfig = bundle.functionUsing("web chat config", reads = listOf("searchParams", "getRequestBaseHeaders"),
         loads = listOf("https://chat.mobile.kick.com"))
     val literals = bundle.instructions(chatConfig).filter { it.opcode == 2 } // NewObjectWithBufferLong
     check(bundle.objectKeys(literals[0]).take(3) == listOf("chatroomId", "subscriberBadges", "userCanModerate"))
-    check(bundle.objectKeys(literals[0]).size == 12) // 40.32.3 added channelLanguage.
+    check(bundle.objectKeys(literals[0]).size == 12) // With channelLanguage, which 40.32.1 lacked.
     check(bundle.objectKeys(literals[1]) == listOf("id", "slug", "username"))
     check(bundle.objectKeys(literals[2]) == listOf("uri"))
     rejects { bundle.objectKeys(bundle.instructions(chatConfig).first()) }
@@ -55,15 +56,8 @@ fun main(args: Array<String>) {
         byteArrayOf(0x93.toByte(), general, 0x76, general, 0, 0, 0, 0)))
     rejects { bundle.returnAtEntry("handleSubscriptionEvent", "invalid") } // JmpTrue isn't a prologue.
 
-    // One GetById becomes `true`; a function reading the property twice, or not at all, is rejected.
-    val deleted = bundle.functionUsing("delete message", reads = listOf("userCanModerate"), loads = listOf("user_deleted"))
-    bundle.trueProperty(deleted, "userCanModerate", "chat_show_deleted")
-    check(bundle.edits.last().original.contentEquals(hex("45 03 03 06")
-        + byteArrayOf(bundle.stringId("userCanModerate").toByte(), (bundle.stringId("userCanModerate") ushr 8).toByte())))
-    check(bundle.edits.last().replacement.contentEquals(hex("95 03 95 03 95 03")))
-    bundle.trueProperty(bundle.function("handleBanUserEvent"), "userCanModerate", "chat_show_deleted")
-    rejects { bundle.trueProperty(bundle.function("handleBanUserEvent"), "Date", "invalid") } // TryGetById, twice.
-    rejects { bundle.trueProperty(bundle.function("handleClearChatEvent"), "userCanModerate", "invalid") }
+    // An anonymous function is selected by what it reads and loads; no match is rejected.
+    bundle.functionUsing("delete message", reads = listOf("userCanModerate"), loads = listOf("user_deleted"))
     rejects { bundle.functionUsing("missing", reads = listOf("userCanModerate"), loads = listOf("clear-")) }
 
     // Both guard shapes; a function without one, or with another JmpTrue first, is rejected.
@@ -114,13 +108,14 @@ fun main(args: Array<String>) {
     // The live edge array [60] shares its value with an unrelated object: editing it is refused.
     val live = slots.getValue(0)
     check(bundle.literalsReading(live.start, live.end).size > 1)
-    rejects { bundle.dataEdit(live.start, "invalid", bundle.literal(live.start, 5), hex("71 3d000000"), listOf(live)) }
+    rejects { bundle.dataChoice(live.start, "invalid", bundle.literal(live.start, 5), mapOf("1" to hex("71 3d000000")),
+        listOf(live)) }
 
     // Literal edits: exact original bytes, only their own readers, unique windows, choices with their own bytes.
     val skip = vod.start
     check(bundle.literal(skip, 13).contentEquals(hex("73 0a000000 0a000000 0a000000")))
-    rejects { bundle.dataEdit(skip, "invalid", hex("73 0b000000"), hex("73 0c000000"), skipReaders) }
-    rejects { bundle.dataEdit(-1, "invalid", hex("00"), hex("01"), skipReaders) }
+    rejects { bundle.dataChoice(skip, "invalid", hex("73 0b000000"), mapOf("1" to hex("73 0c000000")), skipReaders) }
+    rejects { bundle.dataChoice(-1, "invalid", hex("00"), mapOf("1" to hex("01")), skipReaders) }
     rejects { bundle.dataChoice(skip, "vod_skip_seconds", hex("73 0a000000 0a000000 0a000000"),
         mapOf("5" to hex("73 05000000 05000000 05000000")), readers = listOf(vod)) } // A reader left out.
     val choice = bundle.dataChoice(skip, "vod_skip_seconds", hex("73 0a000000 0a000000 0a000000"),
@@ -135,7 +130,8 @@ fun main(args: Array<String>) {
     }
     val lowest = surface.start + 5
     val base = surface.start + 3
-    rejects { bundle.dataEdit(lowest, "vod_skip_seconds", id("#090A0B"), id("#000000"), listOf(surface)) } // Mixed kinds.
+    rejects { bundle.dataChoice(lowest, "vod_skip_seconds", id("#090A0B"), mapOf("1" to id("#000000")), listOf(surface),
+        defaultValue = "1") } // One key, two defaults.
     bundle.dataChoice(lowest, "amoled_black", id("#090A0B"), mapOf("1" to id("#000000"), "2" to id("#000000")),
         readers = listOf(surface))
     bundle.dataChoice(base, "amoled_black", id("#141517"), mapOf("2" to id("#0B0B0C")), readers = listOf(surface))
@@ -170,6 +166,70 @@ fun main(args: Array<String>) {
     check(manifest.contains("\"values\":{\"1\":\"$black\",\"2\":\"$black\"},\"default\":\"0\""))
     File(args[1]).writeBytes(patched)
     File(args[2]).writeText(manifest)
-    println("PASS: actual v99 headers, fail-closed checks, ${bundle.edits.size} edits (entry returns, property " +
-        "reads, guards, literal choices), footer, unique windows and exact disabled restoration")
+    println("PASS: actual v99 headers, fail-closed checks, ${bundle.edits.size} edits (entry returns, guards, " +
+        "literal choices), footer, unique windows and exact disabled restoration")
+}
+
+/**
+ * Switch decoding over the whole bundle, and the edit check that keeps branches out of replaced bytes: a jump or a
+ * switch case landing inside an edit's changed bytes is refused, an edit that changes only bytes after the landing
+ * point is allowed, and returnNull refuses a function that jumps into its replaced prologue.
+ */
+private fun branchChecks(original: ByteArray) {
+    val bundle = HermesBundle(original)
+    fun message(block: () -> Unit) = runCatching(block).exceptionOrNull()?.message.orEmpty()
+    val decoded = bundle.functions.filter { it.body.isNotEmpty() }.distinctBy { it.offset }
+        .associateWith { bundle.instructions(it) }
+    var uintSwitches = 0
+    var stringSwitches = 0
+    for ((_, instructions) in decoded) {
+        val boundaries = instructions.map { it.offset }.toSet()
+        for (instruction in instructions) {
+            if (instruction.opcode == 0xa7) uintSwitches++
+            if (instruction.opcode == 0xa8) stringSwitches++
+            for (target in instruction.targets()) check(target in boundaries) { "branch to a non-boundary $target" }
+        }
+    }
+    check(uintSwitches > 0 && stringSwitches > 0)
+
+    // Flip a register operand on each side of a landing point: the changed bytes then span it.
+    fun flipped(bytes: ByteArray, vararg at: Int) = bytes.copyOf().also { for (i in at) it[i] = (it[i].toInt() xor 1).toByte() }
+    fun spanning(switch: Boolean) = decoded.firstNotNullOf { (function, instructions) ->
+        val plain = instructions.mapNotNull { it.target() }.toSet()
+        val landing = instructions.flatMap { if (switch) it.switchTargets.drop(1) else listOfNotNull(it.target()) }
+            .firstOrNull { target ->
+                val index = instructions.indexOfFirst { it.offset == target }
+                index > 0 && instructions[index - 1].bytes.size >= 2 && instructions[index].bytes.size >= 2 &&
+                    instructions[index - 1].targets().isEmpty() && instructions[index].targets().isEmpty() &&
+                    (!switch || target !in plain)
+            } ?: return@firstNotNullOf null
+        val index = instructions.indexOfFirst { it.offset == landing }
+        Triple(function, instructions[index - 1], instructions[index])
+    }
+    for (switch in listOf(false, true)) {
+        val (function, before, at) = spanning(switch)
+        val window = before.bytes + at.bytes
+        val error = message {
+            HermesBundle(original).replace(function, "probe", window, flipped(window, 1, before.bytes.size + 1))
+        }
+        check("lands inside the edited bytes" in error) { "${if (switch) "switch case" else "jump"} into an edit: $error" }
+        // Control: changing only the instruction at the landing point keeps the landing point an unchanged boundary.
+        HermesBundle(original).replace(function, "probe", window, flipped(window, before.bytes.size + 1))
+    }
+
+    // returnNull pads its prologue with Unreachable: a function that jumps into it is refused.
+    val prologues = decoded.keys.filter { function ->
+        val body = function.body
+        function.name.isNotEmpty() && body.size >= 9 && body[0].toInt() == 0x34 && (body[3].toInt() and 255) in setOf(0x40, 0x89, 0x41) &&
+            function.flags and 0x18 == 0
+    }
+    val jumpsIn = prologues.filter { function ->
+        val length = if ((function.body[3].toInt() and 255) == 0x41) 9 else 6
+        decoded.getValue(function).any { instruction -> instruction.targets().any { it in 1 until length } } &&
+            runCatching { bundle.function(function.name) }.isSuccess
+    }
+    for (function in jumpsIn) check("branches into its prologue" in message { HermesBundle(original).returnNull(function.name, "probe") })
+    println("PASS: ${decoded.size} functions decoded with $uintSwitches UInt and $stringSwitches string switches, every " +
+        "branch on an instruction boundary; jumps and switch cases into edited bytes refused, ${jumpsIn.size} " +
+        "returnNull prologues with a jump into them refused")
 }

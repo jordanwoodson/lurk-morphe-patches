@@ -20,7 +20,9 @@ public final class TwitchRNChat {
         "emotes_7tv", "emotes_bttv", "emotes_ffz", "badges_ffz", "badges_chatterino", "badges_pronouns"};
     private static Object previousLists;
     private static String previousConfig;
+    private static int[] previousValues;
     private static int revision;
+    private static boolean lifecycle;
     private static final Map<Object,Scope> OWNERS = new WeakHashMap<>();
     private static final class Interest implements BooleanSupplier {
         volatile int count;
@@ -47,6 +49,7 @@ public final class TwitchRNChat {
         boolean enabled = false;
         for (String key : KEYS) enabled |= on(key);
         if (!enabled || !CompiledBundle.load(instance, assets, ASSET, 98)) return;
+        invalidateOnResume();
         try {
             CompiledBundle.call(ASSET, "LurkTwitchChat", "configure",
                 new String(CompiledBundle.read(assets, ASSET + "-contract.json", 8192), StandardCharsets.UTF_8));
@@ -108,7 +111,7 @@ public final class TwitchRNChat {
             user.length()>100 || body.length()>10000)return;
         if(TwitchChatKeywords.classify(user,body)==ChatFilter.HIGHLIGHT &&
             !user.equalsIgnoreCase(TwitchChatKeywords.lists().self)) {
-            ChatFilter.vibrate(TwitchChatKeywords.application(),id);
+            ChatFilter.vibrate(TwitchContext.application(),id);
         }
     }
 
@@ -182,22 +185,51 @@ public final class TwitchRNChat {
         return out.toString();
     }
 
+    /**
+     * The settings the compiled chat reads, as JSON with a revision that changes with any of them or the
+     * keyword lists. The JSON is built only when a value changed; otherwise the last string is returned.
+     */
     private static String config() throws Exception {
-        JSONObject out = new JSONObject().put("version",1)
-            .put("timestamps",on("chat_timestamps")).put("clock",Settings.getInt("chat_timestamp_format"))
-            .put("deleted",on("chat_show_deleted")).put("keywords",on("chat_keywords"))
-            .put("vibrate",on("chat_highlight_vibrate"))
-            .put("appearance",on("chat_appearance")).put("scale",Settings.getInt("chat_text_size"))
-            .put("plain",Settings.getInt("chat_me_style") == 1).put("alternate",on("chat_alternate_rows"))
-            .put("width",Settings.getInt("chat_landscape_width")).put("opacity",Settings.getInt("chat_landscape_opacity"));
         boolean providers = false;
         for (int i=4;i<KEYS.length;i++) providers |= on(KEYS[i]);
-        out.put("providers",providers);
-        Object lists = on("chat_keywords") ? TwitchChatKeywords.lists() : null;
-        String value = out.toString();
-        if (!value.equals(previousConfig) || lists != previousLists) {
-            previousConfig=value; previousLists=lists; revision++;
+        int[] values = {on("chat_timestamps") ? 1 : 0, Settings.getInt("chat_timestamp_format"),
+            on("chat_show_deleted") ? 1 : 0, on("chat_keywords") ? 1 : 0, on("chat_highlight_vibrate") ? 1 : 0,
+            on("chat_appearance") ? 1 : 0, Settings.getInt("chat_text_size"), Settings.getInt("chat_me_style"),
+            on("chat_alternate_rows") ? 1 : 0, Settings.getInt("chat_landscape_width"),
+            Settings.getInt("chat_landscape_opacity"), providers ? 1 : 0};
+        Object lists = values[3] == 1 ? TwitchChatKeywords.lists() : null;
+        if (previousConfig != null && java.util.Arrays.equals(values, previousValues) && lists == previousLists) {
+            return previousConfig;
         }
-        return out.put("revision",revision).toString();
+        previousValues = values; previousLists = lists; revision++;
+        previousConfig = new JSONObject().put("version",1)
+            .put("timestamps",values[0] == 1).put("clock",values[1])
+            .put("deleted",values[2] == 1).put("keywords",values[3] == 1).put("vibrate",values[4] == 1)
+            .put("appearance",values[5] == 1).put("scale",values[6]).put("plain",values[7] == 1)
+            .put("alternate",values[8] == 1).put("width",values[9]).put("opacity",values[10])
+            .put("providers",providers).put("revision",revision).toString();
+        return previousConfig;
+    }
+
+    /**
+     * The compiled chat keeps its config until told it may have changed. Lurk settings is an activity of
+     * its own, so any activity resuming (chat's, when the user comes back) invalidates it.
+     */
+    private static synchronized void invalidateOnResume() {
+        if (lifecycle) return;
+        android.content.Context context = Settings.appContext();
+        if (!(context instanceof android.app.Application)) return;
+        lifecycle = true;
+        ((android.app.Application) context).registerActivityLifecycleCallbacks(new android.app.Application.ActivityLifecycleCallbacks() {
+            @Override public void onActivityResumed(android.app.Activity activity) {
+                CompiledBundle.call(ASSET, "LurkTwitchChat", "invalidate", "{}");
+            }
+            @Override public void onActivityCreated(android.app.Activity activity, android.os.Bundle state) { }
+            @Override public void onActivityStarted(android.app.Activity activity) { }
+            @Override public void onActivityPaused(android.app.Activity activity) { }
+            @Override public void onActivityStopped(android.app.Activity activity) { }
+            @Override public void onActivitySaveInstanceState(android.app.Activity activity, android.os.Bundle state) { }
+            @Override public void onActivityDestroyed(android.app.Activity activity) { }
+        });
     }
 }

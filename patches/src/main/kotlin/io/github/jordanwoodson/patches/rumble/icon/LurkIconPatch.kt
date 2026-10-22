@@ -3,6 +3,7 @@ package io.github.jordanwoodson.patches.rumble.icon
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.resourcePatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.rumble.shared.RUMBLE
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
@@ -30,7 +31,7 @@ val lurkIconPatch = resourcePatch(
         val missing = targets.filterValues { !it.isFile }.keys
         if (missing.isNotEmpty()) {
             throw PatchException("Rumble: launcher icon files not found: ${missing.joinToString()}. " +
-                "This patch targets 3.21.0; recheck res/ before updating compatibility.")
+                "This patch targets Rumble ${RUMBLE.version}; recheck res/ before updating compatibility.")
         }
 
         val loader = object {}.javaClass.classLoader

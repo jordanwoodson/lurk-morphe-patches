@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Point a React Native app's Hermes SHA gate at a stored version's bundle.
+# Usage: bin/hermes-pin <app> [version] [--check]
+# Reads assets/index.android.bundle from the stored APK (the newest version unless one is given), prints
+# its SHA-256 and Hermes bytecode version, and rewrites SOURCE_SHA256 in the app's shared/Hermes.kt.
+# --check only compares, and exits 1 when the pinned hash is a different one.
+# The gate is there because the Hermes edits match byte patterns and string and function IDs of one
+# bundle. A new hash only lets them run against the new one: bin/bump shows which still match.
+source "$(dirname "$0")/lib/common.sh"
+
+slug="" version="" check=""
+for arg in "$@"; do
+    case "$arg" in
+        --check) check=1 ;;
+        -*) die "unknown option $arg" ;;
+        *) if [[ -z "$slug" ]]; then slug="$arg"; else version="$arg"; fi ;;
+    esac
+done
+[[ -n "$slug" ]] || die "usage: bin/hermes-pin <app> [version] [--check]"
+app_constants "$slug" >/dev/null
+hermes_kt="$PATCHES_SRC/$slug/shared/Hermes.kt"
+[[ -f "$hermes_kt" ]] || die "$slug has no shared/Hermes.kt, so no Hermes SHA gate to pin"
+version="$(app_version "$slug" "$version")"
+input="$(app_input "$slug" "$version")"
+
+found="$(apk_py hermes-sha "$input")" || die "no assets/index.android.bundle in $(basename "$input")"
+read -r sha bytecode <<<"$found"
+pinned="$(grep -oE 'const val SOURCE_SHA256 = "[0-9a-f]{64}"' "$hermes_kt" | grep -oE '[0-9a-f]{64}' || true)"
+[[ "$(wc -l <<<"$pinned")" == 1 && -n "$pinned" ]] ||
+    die "expected one 'const val SOURCE_SHA256 = \"<64 hex digits>\"' in ${hermes_kt#"$ROOT"/}"
+# The bytecode version the patches are written for, from the manifest Hermes.kt writes ("version":98).
+family="$(grep -oE '\\"version\\":[0-9]+' "$hermes_kt" | head -1 | grep -oE '[0-9]+$' || true)"
+
+echo "$slug $version: index.android.bundle SHA-256 $sha (Hermes bytecode v$bytecode)"
+if [[ -n "$family" && "$family" != "$bytecode" ]]; then
+    note "the Hermes patches are written for bytecode v$family and this bundle is v$bytecode: they, the" \
+        "runtime code's compiler family and Hermes.kt's parser need porting, not only a new hash"
+fi
+if [[ "$sha" == "$pinned" ]]; then
+    note "already pinned in ${hermes_kt#"$ROOT"/}"
+    exit 0
+fi
+if [[ -n "$check" ]]; then
+    note "${hermes_kt#"$ROOT"/} pins $pinned instead"
+    exit 1
+fi
+python3 -I - "$hermes_kt" "$pinned" "$sha" <<'PY'
+import sys
+from pathlib import Path
+path, old, new = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+text = path.read_text(encoding="utf-8")
+line = f'const val SOURCE_SHA256 = "{old}"'
+assert text.count(line) == 1, line
+path.write_text(text.replace(line, f'const val SOURCE_SHA256 = "{new}"'), encoding="utf-8")
+PY
+note "SOURCE_SHA256 in ${hermes_kt#"$ROOT"/}: $pinned -> $sha"
+note "next: bin/bump $slug $version patches it and sorts what no longer matches"

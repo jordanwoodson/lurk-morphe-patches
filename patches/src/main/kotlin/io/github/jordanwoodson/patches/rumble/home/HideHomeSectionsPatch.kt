@@ -9,9 +9,10 @@ import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_INTERFACE
-import io.github.jordanwoodson.patches.rumble.shared.dtoGetterFingerprint
-import io.github.jordanwoodson.patches.rumble.shared.parameterRegister
+import io.github.jordanwoodson.patches.shared.compose.dtoGetterFingerprint
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
@@ -39,6 +40,7 @@ val hideHomeSectionsPatch = bytecodePatch(
 
     execute {
         HomeSectionKindGetterFingerprint.single("Home section kind getter").method.apply {
+            Locators.record("rumble.hide_home_sections.kind_getter", this)
             val code = implementation!!.instructions
             if (code.size != 2 || code[0].opcode != Opcode.IGET_OBJECT || code[1].opcode != Opcode.RETURN_OBJECT) {
                 throw PatchException("Rumble: unexpected Home section kind getter")

@@ -33,7 +33,7 @@ APKMirror reports the signing certificate SHA-256 as
 `1338f9b049893cc70b78432a177582f90bd4bc6296ea4ed35bcc7df59687ac53`.
 The supplied APK's verified signature matches this certificate, which is now pinned
 in `twitch/shared/Constants.kt`. Decompiled Java, smali and resources are under
-`~/build/lurk-morphe-patches/twitch/31.7.0/` (`bin/decompile twitch`). Twitch also embeds a Hermes v98 React Native bundle
+`$MORPHE_WORK/twitch/31.7.0/` (`bin/decompile twitch`). Twitch also embeds a Hermes v98 React Native bundle
 and web-view JavaScript; native screens alone do not cover every feature.
 
 ## Coverage
@@ -62,7 +62,7 @@ based on this APK; the Rumble and Kick fingerprints do not apply directly.
 ## Patches beyond the Rumble set
 
 These were added on 2026-10-15 after comparing Lurk with other Twitch patch bundles and mods at the
-feature level. Each is written from 31.6.0's own code.
+feature level. Each was written from 31.6.0's own code and moved to 31.7.0 with the rest.
 
 ### Feature checklist
 
@@ -76,7 +76,7 @@ ReVive, bttv-android, TwitchMod, Xtra, Twire and Frosty.
 | Proxy ad blocking | Playlist proxy (opt-in, own URL) |
 | Hide display ads, audio ads | Block display ads |
 | Fix login / notifications in re-signed builds | Fix notifications. Sign-in has no signature gate (see below). |
-| Disable Bugsnag | Not in 31.6.0. Nielsen and Sprig, the remaining reporters, are now in Disable analytics. |
+| Disable Bugsnag | Not in 31.6.0 or 31.7.0. Nielsen and Sprig, the remaining reporters, are now in Disable analytics. |
 | Disable Google Play services | Declined |
 | Anonymous chat | Anonymous chat |
 | Show deleted messages, ignore chat clears | Show deleted messages, with Ignore chat clears |
@@ -112,7 +112,7 @@ are under [Declined](#declined).
 
 ### Watch without signing in
 
-31.6.0 still ships Twitch's signed-out browsing mode. It sits behind the Eppo `loggedOutExperiment`,
+Twitch (31.6.0 and 31.7.0) still ships its signed-out browsing mode. It sits behind the Eppo `loggedOutExperiment`,
 which is unassigned by default. Three places decide between the main UI and `LoginActivity`: the
 intent router, `ViewerLandingActivity.onCreate` and the settings screen. All three call the
 experiment's one boolean getter: false while signed in, otherwise whether the device was given a
@@ -141,7 +141,10 @@ completes. Checked against the live endpoint:
 
 The patch sets both header values right before the two `addRequestProperty` calls in the
 Installations client. The client is found by its three header strings. It sends the original package
-name and the original certificate's SHA-1 (`8C68C138…9463`, from the pinned certificate).
+name and the original certificate's SHA-1 (`8C68C138…9463`, from the pinned certificate), the values
+unpatched Twitch sends. The `fix_notifications` switch (Interface, on by default, after a restart) picks
+the original or the app's own value through `TwitchNotifications.firebaseHeader`, using a register
+proven dead at each call for the original.
 
 Verified on the emulator: the clone's `PersistedInstallation` moved from `FisError: BAD CONFIG` to
 status 3 (registered) with auth and refresh tokens, and an FCM token was stored. Delivering a
@@ -165,7 +168,7 @@ Browse opens at launch.
 
 ### Trackers in Disable analytics
 
-31.6.0 has no Bugsnag, Facebook SDK, SafetyNet or Amazon APS. Disable analytics now also:
+31.7.0, like 31.6.0, has no Bugsnag, Facebook SDK, SafetyNet or Amazon APS. Disable analytics now also:
 - turns Nielsen's server-to-server ping into a no-op. That is the method calling
   `NielsenS2SService.firePing`, a GET to `imrworldwide.com` with the advertising ID;
 - skips `UserLeap.configure(Context, String)`, so Sprig surveys and tracking never get an
@@ -213,12 +216,23 @@ is closed.
 The patch makes the routing method (the one logging `parse_launcher_intent`) run once per activity.
 `onCreate` schedules a 5-second fallback that calls it if the activity is still up and hasn't routed,
 and a late Branch answer is then ignored. With the patch, 16 cold starts gave 0 stalls; the fallback
-fired twice.
+fired twice. The `fix_stuck_start` switch (Interface, on by default) turns both off: every route runs,
+as unpatched, and no fallback is scheduled.
 
 Implementing this exposed a patcher pitfall. A non-range `invoke-static { p0, v0 }` in a method whose
-`p0` maps above v15 (here v30) is dropped from the output without an error or warning. Injected
-calls therefore use `/range` or low registers, and a scan of the patched DEX lists every extension
-method that app code calls (`~/build/lurk-morphe-patches/twitch-gap/scripts/ext_calls.py`).
+`p0` maps above v15 (here v30) is dropped from the output without an error or warning. The same
+happens to every instruction with four-bit register fields (`iget`, `instance-of`, `move-object`,
+`const/4`, `if-eq`): Morphe's inline smali compiler prints the rejection to stderr and leaves the line
+out. Two checks guard against it:
+
+- The Twitch patches insert smali through `twitch/shared/Smali.kt`, which compiles each snippet,
+  counts the instructions that came out and fails the patch unless every instruction line compiled.
+  Calls are built with `invokeStatic()` (plain form up to v15, `/range` above), and entry hooks that
+  need a parameter in a four-bit form copy it into a local first (`lowParameters()`).
+- `tests/twitch/expected-hooks.txt` lists every extension method the patches call from app code,
+  grouped by the settings key of the patch that injects it. `bin/test-twitch` runs
+  `tests/twitch/verify_hooks.py`, which keeps the groups of the patches the APK includes (read from
+  its settings registry) and checks each call is in the patched dex.
 
 ### Player: sleep timer, refresh, gestures and latency
 
@@ -233,7 +247,9 @@ audio can be resumed from its notification.
 *Refresh stream* calls the error screen's Retry, `N1(0, true)`. For live that fetches a new token and
 playlist; a VOD keeps its position. It's triggered by a long press on the settings gear of the live
 (`player_control_overlay`) and VOD/clip (`player_control_overlay_widget`) overlays, or a long press on
-the middle of the video.
+the middle of the video. The gear's long-click listener is replaced only while the switch is on when the
+overlay is built, so a player opened with it off keeps Twitch's gear as is; turning it on applies to
+players opened afterwards (`UiBoundaryProbe refresh-off`).
 
 *Player gestures*:
 - change the three VOD skip constants, and swap Twitch's "10"/"30" icons for arrow-only copies made
@@ -245,7 +261,11 @@ the middle of the video.
 Native and portal calls. On the emulator, latency rose from about 2 s to 6–7 s.
 
 Verified on the emulator, signed out, in the classic theatre. The React Native, portal and vertical
-theatres are checked statically only.
+theatres are checked statically only. `UiBoundaryProbe gesture-hook` calls the patched
+`DraggableConstraintLayout.onInterceptTouchEvent` on ART: its injected call claims a vertical edge
+swipe with the switch on and leaves it to Twitch with the switch off. `overlay-destroy-view` does the
+same for `VerticalTheatreFragment.onDestroyView`, whose injected call retires the view's chat feeder
+before Twitch's own teardown. Both fail on an APK without the hooks.
 
 ### Display ads, stitched ads and the playlist proxy
 
@@ -288,6 +308,12 @@ for the body), which every Twitch player uses. When a media playlist's next segm
 - a break past 4 minutes, an unreadable playlist or a backup that stops answering ends the switch;
 - without a backup, Mute stitched ads applies.
 
+When a break ends that way rather than by the stream's own playlist coming back, the stream returns on
+a new session: a new `play_session_id` with the account's token while that token has more than a
+minute left, otherwise a token requested with the Client-ID only, as for the backup. In the second case
+the rest of the playback runs on an anonymous session, not the account's. Its effect on subscriber ad
+exemption, minutes watched and Drops is untested; the description says so.
+
 Playlist reads and backup discovery share a six-second monotonic budget, including queued work,
 headers and continually progressing bodies. Compressed and expanded bodies are limited to 1 MiB.
 Three I/O workers and eight pending operations bound stalled providers; cancellation releases the
@@ -307,8 +333,23 @@ the worker count stays bounded and saturated callers fail promptly or use the ex
 build with a faked break went 1080p → 360p → 1080p without a reload. No real commercial was caught
 in the app.
 
+Switching *Avoid stitched ads* off stops new breaks, not the streams it already changed. A stream on
+a picture-by-picture session, or renumbered after one, keeps being served until it ends: its own
+playlist has the original sequence numbers, and serving it as is would move the player's media
+sequence. A break in progress therefore returns to the stream the usual way when it's over. Streams it
+never changed pass unchanged from the moment the switch is off. `TwitchAsyncProbe disabled` checks
+both cases.
+
 *Playlist proxy* is opt-in and does nothing without its `proxyUrl` option. It sends live usher requests
-to the configured proxy, and the proxy receives the signed playback token.
+to the configured proxy. Its switch starts on once a URL is set, since setting one is the opt-in. The
+proxy sees which channel is watched and when, and receives the signed playback token in the request
+URL: in the query when it takes usher's place, inside the encoded Twitch URL with `{url}`, so its access
+logs can keep it. Whatever it returns is what the player plays, including segments of its own; the
+description says so and to use only a proxy you trust. *Avoid stitched ads* reads
+only `usher.ttvnw.net` master playlists, so a stream loaded through the proxy is never tracked: with
+both patches on, the proxy alone decides what the playlists hold, and Mute stitched ads still acts on
+any ad cues they keep. `TwitchAsyncProbe proxy` checks that a proxied master, in place of usher or with
+the usher URL in its query, isn't consumed.
 
 `bin/test-twitch-ads` runs these hooks on ART. Signed out, no display or stitched ads were served,
 so real ad delivery is verified only through the probe and the emitted bytecode. The proxy was checked
@@ -356,8 +397,21 @@ use the original delayed-drop predicate. The setting requires restart. *Ignore c
 without a target user as a no-op, in native and React Native chat; timeouts and bans still apply.
 
 *Chat timestamps* turns on Twitch's own history timestamp for live channel chat, not whispers, with a
-24/12-hour choice. *Auto-claim channel points* (off by default, needs an account) calls the bonus
-chest's own claim action once per claim ID.
+24/12-hour choice. The choice replaces the `H:mm` pattern of the one formatter that also draws chat
+history's timestamps, so it is read only while the switch is on; with it off, history keeps Twitch's
+clock (`ChatArtProbe` checks both).
+
+*Auto-claim channel points* (off by default, needs an account) calls the bonus chest's own claim action
+once per claim ID, from the points button presenter's subscriber to the points store. The action takes
+`(claim ID, ChatModeMetadata)`; the chest's two tap handlers read the chat mode from the chat UI's
+state, which the presenter can't reach, so the patch passes null. That is safe in 31.7.0, checked
+statically: the three implementations of the action null-check only the claim ID (R8's `getClass`
+form of Kotlin's parameter check) and hand the chat mode to the claim's success callback, which reads it
+behind `chatModeMetadata != null` for the `chatroom_type` field of the
+`channel_points_client_bonus_points_claim` analytics event (blocked by Disable analytics). The patch
+fails on a version where any implementation dereferences the chat mode before overwriting its register
+(`neverDereferenced`, every path). Without an account, the claim was exercised on ART only with a
+stand-in for the action, so the request itself is unverified.
 
 `bin/test-twitch-chat <apk>` runs the real classes with each switch on and off. Signed-in IRC login
 and bonus claims are verified only through bytecode and the probe.
@@ -399,13 +453,19 @@ text/emote colors, player, gutters and actions keep their original styles. A sta
 carries primitive opacity or neutral null without adding a native View or remounting chat when
 opacity changes. While wrappers are installed, neutral paths preserve original native styles and
 child objects, rather than literal outer React object identity; full configure-off restores the
-original exports. Unknown shapes keep stock handling. The
-[dated verification record](verification-2026-10-17.md) distinguishes actual visible opacity
-controls from the earlier style-only readback, and real provider images from controlled cached
+original exports. Unknown shapes keep stock handling. The visible opacity controls and real provider
+images were checked on a phone on 2026-10-18, after the earlier style-only readback with cached
 badge/pronoun metadata.
 
 The original RN live store is keyed by channel login. Keyword notification ownership preserves that
 bounded login exactly; provider row acquisition independently uses the numeric channel/source-room ID.
+
+The compiled chat reads Lurk's chat settings through one synchronous native call and keeps them until
+the native side invalidates them, which it does whenever an activity resumes (Lurk settings is an
+activity of its own), or until `configure` runs. Rows, message bodies, timestamps and the history
+selector share that read instead of asking per render, and keyword verdicts are cached by line
+content per config revision. `TwitchRNChat.config()` builds its JSON only when a value or the keyword
+lists changed. `tests/twitch/test_chat.js` counts the native calls.
 
 The pinned live RN owners are discovered by unique exports in Hermes98, with an additional compiled
 bundle installed before consumers render. Both embedded and prepared main bundles retain
@@ -441,7 +501,9 @@ failed/missing data leaves codes as text. Queues, per-room caches and snapshots 
 work rechecks switches and surviving owners before each new request, preserving shared native demand.
 
 Badges download FrankerFaceZ's and Chatterino's public lists of badge holders and match them on the
-device, so no chatter is looked up. The exception is *pronouns* (`badges_pronouns`, off by default):
+device, so no chatter is looked up. Badge images come from the https addresses in those lists:
+FrankerFaceZ's are on cdn.frankerfacez.com; Chatterino's are on fourtf.com today, but the host is
+whatever Chatterino's list names, which the descriptions say. Holder and chatter IDs are 64-bit. The exception is *pronouns* (`badges_pronouns`, off by default):
 pronouns.alejo.io has no bulk list, so the username of each chatter whose message you see is looked
 up there.
 - Answers, including "none", are cached for an hour, for up to 2000 users.
@@ -458,7 +520,9 @@ chat. The exact viewer feeder owns posted messages. Its stream-model observer re
 destination without waiting for another message, and onDestroyView retires that feeder without removing
 a newer viewer's overlay. A recreated view can reuse the feeder with fresh state. This takes effect at
 the measured model emission or teardown, not before a navigation intent reaches either boundary.
-React Native chat, VODs and chat replay don't pass through that feeder.
+React Native chat, VODs and chat replay don't pass through that feeder. With the switch off, a message
+costs one settings read: the main thread gets a task only to remove an overlay still on screen, once
+(`UiBoundaryProbe overlay-off-idle`).
 
 Twitch already loads recent chat history on join (native
 `ChatHistory`, RN preload) and replays VOD chat, so a third-party history service isn't used.
@@ -467,8 +531,10 @@ Twitch already loads recent chat history on join (native
 
 *VOD chapters* (on by default) adds a Chapters button next to the rotate button in the native VOD
 player's overlay. It reads the video's `moments(momentRequestType: VIDEO_CHAPTER_MARKERS)` (position,
-duration, game) from gql.twitch.tv with the app's Client-ID only, since chapters are public. This
-shares one background request per video between prefetches and open overlays. Two chapter jobs run
+duration, game) from gql.twitch.tv with the app's Client-ID only, since chapters are public. That
+is one anonymous request per video the native VOD player loads, feed previews included, which the
+description and switch summary say. This shares one background request per video between prefetches
+and open overlays. Two chapter jobs run
 at once with eight queued; successful results and failure backoff each retain at most 32 videos.
 Failures retry after 15 seconds. Each load keeps at most eight weak owners, and at most 32 pending
 buttons can wait for a dialog. Requests use the same six-second monotonic budget and 1 MiB body
@@ -476,7 +542,9 @@ limit as playlist I/O. Tapping a row seeks through Twitch's own VOD seek.
 
 Feed previews also load VOD presenters, so the button finds its video through its own overlay: the
 presenter whose visible player view lies under it (captured in the base presenter's view binding),
-mapped to the video it loaded. `VodModel.getId()` carries a `v` prefix that GQL rejects, so the
+mapped to the video it loaded. That binding has one hook, `TwitchPlayerViews.attached`, which Refresh
+stream and VOD chapters share: whichever patch runs first inserts it, and it passes the view on to
+each included patch. `VodModel.getId()` carries a `v` prefix that GQL rejects, so the
 prefix is stripped. Pending dialogs check the original presenter, video, overlay attachment and
 current setting before appearing. Player-view detach callbacks retire both prefetch and open demand on the main thread; an old
 attachment cannot retire its replacement. Navigation and disabling chapters retire queued/provider work;
@@ -510,7 +578,7 @@ statically.
 
 These features appear in other Twitch bundles and mods but are deliberately not built:
 
-- **Twitch debug mode** (ReVanced): 31.6.0's debug menu (`debug_app_actions`, RN `canReachDevTools`)
+- **Twitch debug mode** (ReVanced): the debug menu (`debug_app_actions`, RN `canReachDevTools`)
   is staff-gated, and release builds fold the debug-build check to false. Reaching it means passing
   the app off as a staff account, or bypassing the staff gate on a menu whose tools change experiment
   assignments, GQL and Spade endpoints, latency and ad behaviour on Twitch's service. *Show video
@@ -518,8 +586,8 @@ These features appear in other Twitch bundles and mods but are deliberately not 
 - **Disable Google Play services** (PurpleTV): Play services carries push (see *Fix notifications*),
   Google and FIDO sign-in, Cast, Play Integrity attestation and billing. A blanket switch would break
   them; the analytics SDKs that use it are blocked individually instead.
-- **VOD unlock / VODHunter** (PurpleTV: sub-only and deleted VODs): not implemented. Building the
-  sub-only part was stopped by the assistant's safety checks, so it was left out. Recovering deleted
+- **VOD unlock / VODHunter** (PurpleTV: sub-only and deleted VODs): not implemented. The sub-only
+  part was not built. Recovering deleted
   VODs doesn't work in any case: for broadcasts whose VODs are gone, every VOD CDN host answered 403
   for the computed playlist path, so the segments are removed.
 - **Third-party recent chat history** (PurpleTV, Xtra: recent-messages.robotty.de): Twitch already
@@ -623,14 +691,31 @@ Settings initialize before affected SDK providers and at Application startup, on
 per process. Long-pressing the launcher icon opens the Lurk shortcut.
 
 The original Hermes v98 bundle SHA-256 is
-`50e73cce33e67272f9eb9a38b8d8e6f1ecd06ceccf4b88cc9dbc091743493fc9`.
+`928f89c5766562e9cb266485282e90c058dd7947f73c9bcafa1d0fc626debf5e` (31.7.0).
 Patch-time parsing pins that hash/version, verifies function boundaries and unique
-instruction patterns, and permits only equal-length non-overlapping edits. The
+instruction patterns, and permits only equal-length non-overlapping edits. Every edit also passes
+`HermesBundle.requireSafeEdit`, which decodes the function with the v98 instruction lengths
+(generated from hermes-dec's hbc98 definitions) and reads its jumps, `UIntSwitchImm` jump tables and
+catch table. An edit must start and end on instructions and its replacement must decode to whole
+instructions. Nothing outside the edit may jump into its interior, since the helpers pad with
+`Unreachable` (0x00), which aborts the app. The one exception is a landing instruction from which the
+replacement keeps the original bytes: Hide subscription upsells' cache-hit path still reaches the
+same `Ret`. Edits in one function are also checked pairwise, together when they share a setting and in
+any combination when they don't. A function with a `StringSwitchImm` is refused, since its table isn't
+decoded. `bin/test-twitch-interface-hermes` runs `HermesEditSafetyProbe.kt`: every function of the
+stock bundle must decode, and padding over a real jump target must be refused. The
 runtime loader snapshots switches. When every switch is at its patch-time default it
 loads the embedded asset as is and deletes any earlier private copy; otherwise it
 validates the embedded hash and edit manifest, applies original/replacement bytes,
 recomputes the Hermes footer and writes a private copy. All switches off must
 reproduce the independently hashed stock bundle. Changes require a restart.
+Next to the copy, `lurk-twitch.json` records what it was made from (the manifest's SHA-256, the
+embedded bundle's SHA-256 and the switch snapshot) and the copy's length and modification time. A
+later cold start with the same selection loads the copy without reading or hashing the 28 MB asset;
+any difference, a missing sidecar or a copy changed since it was written means a rebuild, and the
+sidecar is deleted before a rebuild starts. Android clears the code cache on app updates.
+`bin/test-twitch` checks reuse, rebuilds on a changed switch, a modified copy and a missing sidecar,
+and that the defaults remove both files.
 
 The shipped release `RNSourceModePolicy` disables Metro and selects the embedded
 asset through `RNReactHostFactory` and `DefaultReactHost`; the file path argument is
@@ -658,8 +743,9 @@ manifest. The independent interface/playback selection also patches successfully
 Android probes execute the injected loader and actual app classes, not stand-ins
 for the target methods:
 
-- `bash bin/test-twitch <patched.apk>`: embedded defaults, process snapshot,
-  independent switches and exact all-off reconstruction of the original bundle.
+- `bash bin/test-twitch <patched.apk>`: every injected extension call of the included patches
+  (`expected-hooks.txt`), then embedded defaults, process snapshot, independent switches and exact
+  all-off reconstruction of the original bundle.
 - `bash bin/test-twitch-privacy <patched.apk>`: real Spade callback once/null/off
   paths, completed client-ad emitter, Crashlytics upload permission and four
   dispatch guards. Disabled controls reach the deliberately empty original
@@ -687,9 +773,36 @@ functions and switch targets using the production interface probe's manifest.
 with boundary fixtures. The existing Rumble and Kick Android probes also pass on
 APKs made with the expanded patch bundle.
 
-The [dated verification record](verification-2026-10-17.md) adds current guest native
-VOD/replay/chapters/PiP and qualified RN consumer/provider/reload observations, with
-artifact-specific provenance. The following account limits remain:
+### Locators
+
+The probes and verifiers exercise R8-renamed classes, which change with every Twitch build. The patches
+record what they matched with `Locators.record`, and the settings patch writes the records into the
+patched APK as `assets/lurk/locators.json`:
+
+- every `twitchMatch` records its method as `twitch.match.<name>`, from the fingerprint object's name
+  (`ChatRestrictionFingerprint` gives `twitch.match.chat_restriction`, value `Lyn6;->b(...)`), or for a
+  fingerprint built in place, from its description;
+- every native UI flag a patch filters records its field as `twitch.ui_flag.<state>.<flag>`;
+- members found without a fingerprint are recorded by their patch: `twitch.auto_claim.action`,
+  `twitch.chat_timestamps.line_config`/`message_source`, `twitch.ignore_chat_clears.ignored_result`,
+  `twitch.show_deleted.name_span`, `twitch.mute_stitched_ads.native_player`/`root_view`,
+  `twitch.block_client_ads.request`, `twitch.disable_analytics.crashlytics_permission`,
+  `twitch.block_cookie_notice.options_constructor`, `twitch.hide_chat_highlights.dispatch`/`highlight_*`,
+  `twitch.hide_clips.home_tabs` and `twitch.hide_subscription_upsells.subscribe_renderer`/`turbo_dialog_route`.
+
+`ChatArtProbe`, `AdsProbe`, `PrivacyAdsProbe` and `HighlightsArtProbe` read the file through
+`ProbeLocators.java`, and `verify_privacy.py` and `verify_interface_emitted.py` through `locators.py`;
+other classes come from the located ones by reflection (constructor and parameter types, the one
+method of a signature). Each lookup carries the 31.7.0 name as a fallback, used while an APK has no
+locators. Still pinned: what no patch matches (in `HighlightsArtProbe` the state flag fields, the raid
+highlight, notice kinds and callout lambda; the deleted-message string ID in `ChatArtProbe`; the
+compile-time `kx50`/`akg` stubs of `PrivacyAdsProbe`; `verify_interface_emitted.py`'s preservation
+controls), and the probes not converted yet (`ChatStyleArtProbe`, `InterfaceArtProbe`,
+`PlaybackArtProbe`, `RNBridgeProbe`). `verify_playback_bytecode.py` finds its methods by content and
+pins no names.
+
+Guest native VOD, replay, chapters and PiP, and the RN consumer, provider and reload paths, were
+checked on the emulator and on a phone on 2026-10-18. The following account limits remain:
 **signed-in playback and chat, sending messages, actual server ad delivery, purchases,
 subscription/member screens and Amazon sign-in remain unverified.** Stock Twitch
 requires Log In or Sign Up, including for a direct channel URL, and no test account
@@ -699,9 +812,8 @@ the emulator. Bytecode and callback probes establish
 specific local behavior, not complete authenticated end-to-end coverage. The
 app also contains WebView code outside the covered native/RN presentation hooks.
 
-Analysis, decoded APKs, build logs and emulator captures remain under
-`~/build/lurk-morphe-patches/twitch/31.6.0/`, `build-twitch/`, `twitch-privacy/` and
-`twitch-interface/`. The original upload is untouched.
+Decoded APKs (`bin/decompile twitch`), build logs and probe output go to `$MORPHE_WORK`
+(`twitch/<version>/`, `twitch-chat/`, `twitch-interface/` and so on); none of it is in the repository.
 
 ## Implementation and release requirements
 

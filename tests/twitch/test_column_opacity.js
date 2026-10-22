@@ -31,12 +31,12 @@ assert.equal(areas.get('active').composerBarFill,'#181818');assert.equal(areas.g
 assert.equal(flat(rendered.get('sibling').style).backgroundColor,'#181818','sibling tree cannot borrow opacity authority');
 const instance=instances.get('active').instance;instances.get('active').setDraft('local state');
 for(const [opacity,extra]of [[75,{}],[0,{}],[50,{pipFloatSettled:true}],[50,{pipCompactFrame:true}],[50,{isTheatreDocked:true}],[50,{}]]){
- config={...config,opacity};draw(extra);assert.equal(instances.get('active').instance,instance,'opacity toggles preserve child instance');assert.equal(instances.get('active').draft,'local state');
+ config={...config,opacity};g.LurkTwitchChat.invalidate();draw(extra);assert.equal(instances.get('active').instance,instance,'opacity toggles preserve child instance');assert.equal(instances.get('active').draft,'local state');
  const enabled=opacity!==0&&!Object.values(extra).some(Boolean);
  assert.equal(flat(rendered.get('active').style).backgroundColor,enabled?'transparent':'#181818');
  assert.equal(flat(areas.get('active').style).backgroundColor,enabled?'transparent':'#181818');
 }
-config={...config,appearance:false};draw();assert.equal(instances.get('active').instance,instance);assert.equal(flat(rendered.get('active').style).backgroundColor,'#181818');
-config={...config,appearance:true};malformed=true;draw();assert.equal(flat(rendered.get('active').style).backgroundColor,'#181818','wrong owner stays stock');malformed=false;
-config={version:1};g.LurkTwitchChat.configure(contract);assert.equal(modules.classicColumn.ClassicChatColumn,original,'full off restores exact original export');
+config={...config,appearance:false};g.LurkTwitchChat.invalidate();draw();assert.equal(instances.get('active').instance,instance);assert.equal(flat(rendered.get('active').style).backgroundColor,'#181818');
+config={...config,appearance:true};g.LurkTwitchChat.invalidate();malformed=true;draw();assert.equal(flat(rendered.get('active').style).backgroundColor,'#181818','wrong owner stays stock');malformed=false;
+config={version:1};g.LurkTwitchChat.invalidate();g.LurkTwitchChat.configure(contract);assert.equal(modules.classicColumn.ClassicChatColumn,original,'full off restores exact original export');
 console.log('Column opacity: exact original surfaces, sibling isolation, neutral/off guards and child state PASS');

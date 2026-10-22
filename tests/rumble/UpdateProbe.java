@@ -2,7 +2,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 /**
- * Block update prompts: calls Rumble 3.21.0's forced and suggested update checks with null dependencies.
+ * Block update prompts: calls Rumble's forced and suggested update checks with null dependencies.
  * Patched with the switch on, both return false before reaching Firebase. With the switch off (and on the
  * stock APK) the original code runs: Firebase isn't set up under app_process, and the catch block calls
  * the null error use case, so the call throws.
@@ -10,13 +10,13 @@ import java.lang.reflect.Method;
 public final class UpdateProbe {
     public static void main(String[] args) {
         ProbeSupport.run("update checks return false with the switch on and run Rumble's code with it off", () -> {
-            // Locators for 3.21.0 only (ShouldForceNewAppVersionUseCase, ShouldSuggestNewAppVersionUseCase).
-            Class<?> force = Class.forName("Fe.l");
-            Class<?> suggest = Class.forName("Fe.m");
-            Method forceCheck = force.getMethod("a", String.class);
-            Method suggestCheck = suggest.getMethod("a", String.class, Class.forName("Qh.c"));
-            Object forceCase = ProbeSupport.allocate(force);
-            Object suggestCase = ProbeSupport.allocate(suggest);
+            // ShouldForceNewAppVersionUseCase and ShouldSuggestNewAppVersionUseCase, as the patch matched them.
+            Method forceCheck = ProbeSupport.method("rumble.block_update_prompts.force_check",
+                    "LFe/l;->a(Ljava/lang/String;)Z");
+            Method suggestCheck = ProbeSupport.method("rumble.block_update_prompts.suggest_check",
+                    "LFe/m;->a(Ljava/lang/String;LQh/c;)Ljava/lang/Object;");
+            Object forceCase = ProbeSupport.allocate(forceCheck.getDeclaringClass());
+            Object suggestCase = ProbeSupport.allocate(suggestCheck.getDeclaringClass());
 
             ProbeSupport.check(Boolean.FALSE.equals(forceCheck.invoke(forceCase, "0.0.1")),
                     "forced update check must return false with the switch on (its default)");

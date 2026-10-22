@@ -20,7 +20,7 @@ public final class RNBridgeProbe {
   Class<?> settings=Class.forName("io.github.jordanwoodson.extension.shared.settings.Settings");
   Field f=settings.getDeclaredField("context");f.setAccessible(true);f.set(null,context);
   Class<?> keywords=Class.forName("io.github.jordanwoodson.extension.shared.twitch.TwitchChatKeywords");
-  f=keywords.getDeclaredField("application");f.setAccessible(true);f.set(null,context);
+  f=Class.forName("io.github.jordanwoodson.extension.shared.twitch.TwitchContext").getDeclaredField("application");f.setAccessible(true);f.set(null,context);
   Method exchange=helper.getMethod("exchange",Object.class,String.class);Object owner=new Object();
   JSONObject config=new JSONObject((String)exchange.invoke(null,owner,"{\"op\":\"config\"}"));
   check(config.getInt("version")==1&&config.getBoolean("timestamps")&&config.getBoolean("deleted"),"included defaults");

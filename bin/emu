@@ -40,7 +40,8 @@ running() { adb devices 2>/dev/null | grep -q "^$ANDROID_SERIAL[[:space:]]"; }
 qemu_pid() {
     local pid
     for pid in $(pgrep -f "^[^ ]*/qemu-system[^ ]* .*-port $PORT( |$)" 2>/dev/null); do
-        tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q -- ' -read-only ' || echo "$pid"
+        # ps instead of /proc/<pid>/cmdline, which macOS doesn't have; -ww keeps the line whole.
+        ps -ww -o args= -p "$pid" 2>/dev/null | grep -qE -- ' -read-only( |$)' || echo "$pid"
     done | tail -1
 }
 has_snapshot() { [[ -f "$AVD_DIR/snapshots/$1/snapshot.pb" ]]; }
@@ -59,7 +60,13 @@ configure_avd() {
     for kv in "${PROFILE[@]}"; do
         key="${kv%%=*}"
         grep -q "^$key=${kv#*=}\$" "$ini" && continue
-        if grep -q "^$key=" "$ini"; then sed -i "s|^$key=.*|$kv|" "$ini"; else echo "$kv" >>"$ini"; fi
+        if grep -q "^$key=" "$ini"; then
+            # Rewrite through a temporary file: sed -i takes different arguments on macOS and Linux.
+            awk -v key="$key" -v kv="$kv" 'index($0, key "=") == 1 { print kv; next } { print }' "$ini" >"$ini.new"
+            mv "$ini.new" "$ini"
+        else
+            echo "$kv" >>"$ini"
+        fi
         changed=1
     done
     if [[ -n "$changed" && -d "$AVD_DIR/snapshots" ]]; then
@@ -93,8 +100,8 @@ case "$cmd" in
             args+=(-snapshot "$snapshot" -no-snapshot-save)
         fi
         # The host renderer keeps graphics memory for every app process that is killed (~400 MB per
-        # force-stop and relaunch of a video app). The cap ends the emulator instead of the server
-        # running out of memory; `status` shows the size, `restart` releases it without losing state.
+        # force-stop and relaunch of a video app). The cap (Linux with systemd only) ends the emulator
+        # instead of the host running out of memory; `status` shows the size, `restart` releases it.
         cap=()
         command -v systemd-run >/dev/null && cap=(systemd-run --user --scope --quiet -p MemoryMax=16G -p MemorySwapMax=0)
         nohup "${cap[@]}" "$EMULATOR" "${args[@]}" >"$LOG" 2>&1 &

@@ -1,7 +1,11 @@
 package io.github.jordanwoodson.extension.shared.rumble;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.text.NumberFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 
 import io.github.jordanwoodson.extension.shared.ChatFilter;
@@ -27,6 +31,101 @@ public final class RumbleInterface {
             countLocale = locale;
         }
         return countFormat.format(count);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Channel action buttons (Hide tipping and Rants, Hide Join and Shop buttons)
+
+    static final String HIDE_TIPPING = "hide_tipping";
+    static final String HIDE_JOIN = "hide_join_button";
+    static final String HIDE_SHOP = "hide_shop_button";
+
+    /** The last lists handed out, so a composable drawn again with the same list gets the same list back. */
+    private static final int REMEMBERED = 8;
+    private static final Object[][] BUTTONS = new Object[REMEMBERED][];
+    private static int nextButtons;
+
+    /** Whether a switch of an included patch is on. Keys of patches left out count as off here. */
+    static boolean on(String key) {
+        return Settings.isRegistered(key) && Settings.isEnabled(key);
+    }
+
+    /**
+     * Injection point: the start of the composable that draws a channel's or video's action buttons, with the
+     * list of buttons it may draw and Rumble's Tip, Join and Shop constants. Returns the list without the
+     * buttons whose switch is on: the same list while none is, and the same filtered list as last time for the
+     * same list, so Compose can still skip the buttons when nothing changed.
+     */
+    public static List<?> actionButtons(List<?> buttons, Object tip, Object join, Object shop) {
+        if (buttons == null || buttons.isEmpty()) return buttons;
+        boolean hideTip = tip != null && on(HIDE_TIPPING);
+        boolean hideJoin = join != null && on(HIDE_JOIN);
+        boolean hideShop = shop != null && on(HIDE_SHOP);
+        if (!hideTip && !hideJoin && !hideShop) return buttons;
+        int settings = (hideTip ? 1 : 0) | (hideJoin ? 2 : 0) | (hideShop ? 4 : 0);
+        synchronized (BUTTONS) {
+            for (Object[] remembered : BUTTONS) {
+                if (remembered != null && ((WeakReference<?>) remembered[0]).get() == buttons
+                        && (Integer) remembered[1] == settings) {
+                    return (List<?>) remembered[2];
+                }
+            }
+        }
+        List<Object> kept = new ArrayList<>(buttons.size());
+        for (Object button : buttons) {
+            if ((hideTip && button == tip) || (hideJoin && button == join) || (hideShop && button == shop)) continue;
+            kept.add(button);
+        }
+        List<?> result = kept.size() == buttons.size() ? buttons : Collections.unmodifiableList(kept);
+        synchronized (BUTTONS) {
+            BUTTONS[nextButtons] = new Object[]{new WeakReference<>(buttons), settings, result};
+            nextButtons = (nextButtons + 1) % REMEMBERED;
+        }
+        return result;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Video lists (Block ads, Hide premium-only videos, Hide related videos)
+
+    /** RumbleInterface.videos list kinds, as the patch passes them. */
+    static final int LIST = 0;
+    static final int RELATED = 1;
+
+    /**
+     * Injection point: a list of videos from Rumble's server (Home sections, related videos, search, categories),
+     * with its kind. Leaves out Boosted videos (Block ads), premium-only videos you have no access to (Hide
+     * premium-only videos), and every related video (Hide related videos). Rumble's own list while none applies.
+     */
+    public static List<?> videos(List<?> videos, int kind) {
+        if (videos == null || videos.isEmpty()) return videos;
+        if (kind == RELATED && on("hide_related_videos")) return Collections.emptyList();
+        boolean boosted = on("block_ads");
+        boolean premiumOnly = on("hide_premium_only");
+        if (!boosted && !premiumOnly) return videos;
+        try {
+            List<Object> kept = null;
+            for (int i = 0; i < videos.size(); i++) {
+                Object video = videos.get(i);
+                boolean drop = video != null && ((boosted && RumbleChat.read(video, "boosted") != null)
+                        || (premiumOnly && premiumOnly(video)));
+                if (drop && kept == null) {
+                    kept = new ArrayList<>(videos.size());
+                    for (int j = 0; j < i; j++) kept.add(videos.get(j));
+                } else if (!drop && kept != null) {
+                    kept.add(video);
+                }
+            }
+            return kept == null ? videos : kept;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return videos;
+        }
+    }
+
+    /** Whether a Video DTO is premium-only (availability "premium", as Rumble's mapper reads it) and locked. */
+    static boolean premiumOnly(Object video) throws ReflectiveOperationException {
+        Object availability = RumbleChat.read(video, "availability");
+        if (!(availability instanceof String) || !((String) availability).equalsIgnoreCase("premium")) return false;
+        return !Boolean.TRUE.equals(RumbleChat.read(video, "hasAccessToPremium"));
     }
 
     // ---------------------------------------------------------------------------------------------

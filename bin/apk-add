@@ -47,8 +47,20 @@ elif [[ -n "$copy" ]]; then
 else
     mv "$file" "$dest/"
 fi
+stored="$dest/$(basename "$file")"
 note "$package $version ($version_code) stored as apks/$slug/$version/$(basename "$file")"
-note "variant: $(apk_py variant "$dest/$(basename "$file")")"
+note "variant: $(apk_py variant "$stored")"
+# React Native apps: the Hermes patches only run on the bundle whose SHA-256 Hermes.kt pins.
+if hermes="$(apk_py hermes-sha "$stored")"; then
+    read -r bundle_sha bytecode <<<"$hermes"
+    note "React Native bundle SHA-256: $bundle_sha (Hermes bytecode v$bytecode)"
+    hermes_kt="$PATCHES_SRC/$slug/shared/Hermes.kt"
+    if [[ -f "$hermes_kt" ]] && ! grep -q "\"$bundle_sha\"" "$hermes_kt"; then
+        note "Hermes.kt pins another bundle: bin/hermes-pin $slug $version updates it, bin/bump $slug $version shows what still matches"
+    elif [[ -f "$hermes_kt" ]]; then
+        note "matches the bundle Hermes.kt pins"
+    fi
+fi
 (( $(app_inputs "$slug" "$version" | wc -l) > 1 )) &&
     note "several variants of $version are stored; bin/patch --abi=... picks one (emulator installs take x86_64 by themselves)"
 grep -q "\"$version\"" "$constants" ||

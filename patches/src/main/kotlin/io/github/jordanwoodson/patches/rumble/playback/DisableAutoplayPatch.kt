@@ -31,25 +31,24 @@ val disableAutoplayPatch = bytecodePatch(
     name = "Disable autoplay",
     description = "Stops Rumble from playing the next video when one ends, and from playing muted previews in " +
         "feeds, including the featured video on Home. Only the defaults change: Settings > Playback can turn " +
-        "either back on.",
-    default = false,
+        "either back on. Starts off. Turn them on in Lurk settings > Playback.",
 ) {
     compatibleWith(COMPATIBILITY_RUMBLE)
     dependsOn(settingsPatch)
 
     val nextVideo by booleanOption(
         key = "nextVideo",
-        default = true,
+        default = false,
         title = "Next video",
         description = "Don't play the next video when one ends (Autoplay next video). Can be changed later in " +
-            "Settings > Lurk.",
+            "Lurk settings > Playback.",
     )
     val feedPreviews by booleanOption(
         key = "feedPreviews",
-        default = true,
+        default = false,
         title = "Feed previews",
         description = "Don't play muted previews in feeds or the featured video on Home (Playback in feeds: Off). " +
-            "Can be changed later in Settings > Lurk.",
+            "Can be changed later in Lurk settings > Playback.",
     )
 
     execute {

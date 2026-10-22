@@ -21,7 +21,7 @@ internal fun HermesBundle.hideClipDiscoveryTabs() {
     replace(model, "hide_clips", model.body.copyOfRange(0x7a, 0x9a),
         hex("90 07 ${id16("clips")} 63 07 05 07 00 48 04 03 00 $objectId 44 03 04 02 $keys 6e 04 03 04 05 10 01 04 93 00 93 00"))
 
-    // DiscoveryFeedContent's offsets and registers are the compiler's for 31.7.0: its pager children
+    // DiscoveryFeedContent's offsets and registers are the compiler's for the supported version: its pager children
     // array is r89, built from r90; the page after the second child starts at 0x6802.
     val content = function("DiscoveryFeedContent")
     replace(content, "hide_clips", hex("08 59 03 00 5a 59 5a 00"), hex("08 59 02 00 5a 59 5a 00"))
@@ -92,30 +92,10 @@ internal fun HermesBundle.hideClipDiscoveryTabs() {
     replace(initial, "hide_clips", initial.body, initialBody)
 }
 
-/** Replace a reviewed presentation prop read while keeping every unrelated prop and hook. */
-private fun HermesBundle.falseProperty(functionName: String, property: String) {
-    val function = function(functionName)
-    val id = stringId(property)
-    if (id !in 0..65535) throw PatchException("Twitch: $property needs a larger Hermes instruction")
-    val matches = (0..function.body.size - 6).filter { offset ->
-        (function.body[offset].toInt() and 255) == 0x45 &&
-            (function.body[offset + 4].toInt() and 255) == (id and 255) &&
-            (function.body[offset + 5].toInt() and 255) == (id ushr 8)
-    }
-    val offset = matches.singleOrNull() ?: throw PatchException("Twitch: expected one $property read in $functionName")
-    val register = function.body[offset + 1]
-    if ((register.toInt() and 255) < function.numberRegisters + function.nonPointerRegisters) {
-        throw PatchException("Twitch: $property result has no general register")
-    }
-    replace(function, if (property == "isUpgrade") "hide_subscription_upsells" else "hide_tipping",
-        function.body.copyOfRange(offset, offset + 6),
-        byteArrayOf(0x96.toByte(), register, 0x96.toByte(), register, 0x96.toByte(), register))
-}
-
 internal fun HermesBundle.hideBitsInterface() {
-    falseProperty("ChatComposerBar", "showBitsButton")
-    falseProperty("OneChatOverlayHost", "showCheerButton")
-    falseProperty("OverlayActionButtons", "showCheerButton")
+    falseProperty("ChatComposerBar", "showBitsButton", "hide_tipping")
+    falseProperty("OneChatOverlayHost", "showCheerButton", "hide_tipping")
+    falseProperty("OverlayActionButtons", "showCheerButton", "hide_tipping")
     listOf("AddBitsChipButton", "BuyBitsCard", "BitsTrayContainer", "QuickCheeringSurface").forEach {
         returnNull(it, "hide_tipping")
     }
@@ -126,7 +106,7 @@ internal fun HermesBundle.hideSubscriptionInterface() {
     listOf("GiftButton", "GiftSubLink", "TurboUpsellButton", "TheatreSDAUpsell").forEach {
         returnNull(it, "hide_subscription_upsells")
     }
-    falseProperty("SubscribeButton", "isUpgrade")
+    falseProperty("SubscribeButton", "isUpgrade", "hide_subscription_upsells")
 
     // SubscribeButton renders either a text button or an icon button. Both paths have a compiler
     // memo-cache save block immediately before return. Use its last 19 bytes for a result guard,

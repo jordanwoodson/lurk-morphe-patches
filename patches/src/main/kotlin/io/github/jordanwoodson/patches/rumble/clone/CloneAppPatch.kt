@@ -11,6 +11,8 @@ import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.StringReference
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.rumble.shared.childElements
+import io.github.jordanwoodson.patches.rumble.shared.descendants
 import org.w3c.dom.Element
 
 private const val RUMBLE_PACKAGE = "com.rumble.battles"
@@ -84,7 +86,7 @@ val cloneAppPatch = resourcePatch(
             manifest.setAttribute("package", packageName!!)
 
             // Permissions Rumble declares, and every reference to them.
-            val declared = manifest.elements("permission").map { it.getAttribute("android:name") }.toSet()
+            val declared = manifest.childElements("permission").map { it.getAttribute("android:name") }.toSet()
             val attributes = listOf("android:name", "android:permission", "android:readPermission",
                 "android:writePermission")
             manifest.descendants().forEach { element ->
@@ -109,10 +111,3 @@ val cloneAppPatch = resourcePatch(
 
 private fun Element.renameAttribute(name: String, rename: (String) -> String) =
     setAttribute(name, rename(getAttribute(name)))
-
-private fun Element.elements(tag: String) = descendants().filter { it.tagName == tag && it.parentNode == this }
-
-private fun Element.descendants(): List<Element> {
-    val nodes = getElementsByTagName("*")
-    return (0 until nodes.length).map { nodes.item(it) as Element }
-}

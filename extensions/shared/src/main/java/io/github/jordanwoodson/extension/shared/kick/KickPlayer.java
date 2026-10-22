@@ -2,6 +2,8 @@ package io.github.jordanwoodson.extension.shared.kick;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.ContextWrapper;
+import android.content.res.Configuration;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
@@ -14,13 +16,14 @@ import io.github.jordanwoodson.extension.shared.SleepTimer;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
 
 /**
- * Kick's native player: background audio, automatic picture-in-picture, normal latency, the sleep timer and
- * the mobile-data quality ceiling. Each hook returns Kick's own value, or does nothing, while its setting is
+ * Kick's native player: background audio, automatic picture-in-picture, normal latency, the sleep timer, the
+ * mobile-data quality ceiling and Fill screen. Each hook returns Kick's own value, or does nothing, while its setting is
  * off. The bridges are filled in at patch time with calls into Kick's player classes.
  */
 @SuppressWarnings("unused")
 public final class KickPlayer {
     private static final String BACKGROUND_AUDIO = "background_audio";
+    private static final String FILL_SCREEN = "fill_screen";
     private static final String NO_AUTO_PIP = "no_auto_pip";
     private static final String NORMAL_LATENCY = "normal_latency";
     private static final String QUALITY_METERED = "quality_metered";
@@ -141,6 +144,46 @@ public final class KickPlayer {
         int capped = height == null ? cap : Math.min(height, cap);
         Logger.d("quality on mobile data: starting ceiling " + height + " -> " + capped);
         return capped;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Fill screen
+
+    /**
+     * Injection point: KickIvsPlayerV2View.updateSurfaceViewTransform(), where it checks its IVS resize mode
+     * against FIT, with the video's and the view's width / height. Kick keeps FIT. In landscape, outside
+     * picture-in-picture, Fill screen hands back FILL when FIT would leave bars at the sides of a video wider than
+     * tall (a 16:9 stream on a 20:9 screen): the video fills the width and its top and bottom are cropped. A
+     * player next to the chat, which FIT letterboxes, and vertical videos keep FIT. The view runs this on every
+     * layout, so rotating back to portrait restores FIT.
+     */
+    public static Object resizeMode(View view, Object mode, float videoAspect, float viewAspect) {
+        if (!(mode instanceof Enum) || !"FIT".equals(((Enum<?>) mode).name()) || view == null || videoAspect <= 1f
+                || viewAspect <= videoAspect || !enabled(FILL_SCREEN)) {
+            return mode;
+        }
+        try {
+            if (view.getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE) return mode;
+            Activity activity = activity(view.getContext());
+            if (activity != null && activity.isInPictureInPictureMode()) return mode;
+            return fill((Enum<?>) mode);
+        } catch (RuntimeException e) {
+            Logger.d("fill screen: " + e);
+            return mode;
+        }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object fill(Enum<?> fit) {
+        return Enum.valueOf((Class) fit.getDeclaringClass(), "FILL");
+    }
+
+    private static Activity activity(Context context) {
+        while (context instanceof ContextWrapper) {
+            if (context instanceof Activity) return (Activity) context;
+            context = ((ContextWrapper) context).getBaseContext();
+        }
+        return null;
     }
 
     // ---------------------------------------------------------------------------------------------

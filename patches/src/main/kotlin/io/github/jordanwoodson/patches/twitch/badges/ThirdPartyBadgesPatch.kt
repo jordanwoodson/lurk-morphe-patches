@@ -2,7 +2,7 @@ package io.github.jordanwoodson.patches.twitch.badges
 
 import io.github.jordanwoodson.patches.twitch.chat.twitchRNChatPatch
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import com.android.tools.smali.dexlib2.Opcode
@@ -15,6 +15,7 @@ import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.emotes.chatImageSizePatch
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
+import io.github.jordanwoodson.patches.twitch.chat.ChatLineSenderFingerprint
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
 private const val BADGES = "Lio/github/jordanwoodson/extension/shared/twitch/TwitchBadges;"
@@ -25,16 +26,18 @@ val thirdPartyBadgesPatch = bytecodePatch(
     description = "Adds switches that show FrankerFaceZ and Chatterino badges and pronouns.alejo.io pronouns next " +
         "to chatters' names in native and React Native chat. Each switch is off until turned on in Lurk settings. The badge " +
         "switches download that service's public list of all badge holders (api.frankerfacez.com, " +
-        "api.chatterino.com) about once an hour and check it on the phone. The pronouns switch sends the " +
+        "api.chatterino.com) about once an hour and check it on the phone, then load each badge's image from " +
+        "the https address the list names (FrankerFaceZ: cdn.frankerfacez.com; Chatterino: currently " +
+        "fourtf.com, but any host its list gives). The pronouns switch sends the " +
         "username of each chatter whose message you see to pronouns.alejo.io. 7TV badges are not included.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
     dependsOn(twitchRNChatPatch, twitchSettingsPatch, chatImageSizePatch)
     execute {
         val spanGroup = SpanGroupFingerprint.twitchMatch("chat line span group").classDef.type
-        val user = ChatMessageUserFingerprint.twitchMatch("chat message user").classDef.type
+        val user = ChatLineSenderFingerprint.twitchMatch("chat message user").classDef.type
         val badge = BadgeViewModelFingerprint.twitchMatch("badge view model").classDef.type
-        val method = ChatLineSpansFingerprint.twitchMatch("chat line span builder").method
+        val method = ChatLineSpanBuilderFingerprint.twitchMatch("chat line span builder").method
         if (method.returnType != spanGroup || method.parameterTypes[3].toString() != user) {
             throw PatchException("Twitch: chat line span builder changed")
         }
@@ -59,7 +62,8 @@ val thirdPartyBadgesPatch = bytecodePatch(
                 Section.CHAT, default = false),
             SwitchSetting("badges_chatterino", "Chatterino badges",
                 "Shows Chatterino supporter and contributor badges in chat. Downloads Chatterino's list of badge " +
-                    "holders from api.chatterino.com and the badge images from fourtf.com.",
+                    "holders from api.chatterino.com and the badge images from the https hosts that list names " +
+                    "(fourtf.com today).",
                 Section.CHAT, default = false),
             SwitchSetting("badges_pronouns", "Pronouns",
                 "Shows chatters' pronouns from pronouns.alejo.io as a badge. Sends the username of each chatter " +

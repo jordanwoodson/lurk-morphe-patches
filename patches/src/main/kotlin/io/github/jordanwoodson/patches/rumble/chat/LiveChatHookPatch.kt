@@ -8,8 +8,9 @@ import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.RUMBLE_CHAT
-import io.github.jordanwoodson.patches.rumble.shared.parameterRegister
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.rumble.shared.single
 
 /**
@@ -25,10 +26,11 @@ internal val liveChatHookPatch = bytecodePatch(
 
     execute {
         listOf(
-            LiveChatMessagesFingerprint to "live chat messages getter",
-            LiveChatHistoryFingerprint to "live chat history getter",
-        ).forEach { (fingerprint, what) ->
+            Triple(LiveChatMessagesFingerprint, "live chat messages getter", "messages_getter"),
+            Triple(LiveChatHistoryFingerprint, "live chat history getter", "history_getter"),
+        ).forEach { (fingerprint, what, locator) ->
             fingerprint.single(what).method.apply {
+                Locators.record("rumble.chat.$locator", this)
                 val code = implementation!!.instructions
                 if (code.size != 2 || code[0].opcode != Opcode.IGET_OBJECT || code[1].opcode != Opcode.RETURN_OBJECT) {
                     throw PatchException("Rumble: unexpected $what")

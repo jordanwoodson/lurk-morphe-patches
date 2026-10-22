@@ -35,7 +35,7 @@ public final class CompiledBundle {
             Logger.d("Compiled Hermes: queued " + name);
             return true;
         } catch (Exception e) {
-            Logger.d("Compiled Hermes: load failed " + e.getClass().getSimpleName());
+            Logger.w("Compiled Hermes: load failed " + e.getClass().getSimpleName());
             return false;
         }
     }
@@ -57,7 +57,7 @@ public final class CompiledBundle {
             instance.getClass().getMethod("callFunctionOnModule", String.class, String.class,
                     Class.forName("com.facebook.react.bridge.NativeArray", true, loader)).invoke(instance, module, method, arguments);
         } catch (Exception e) {
-            Logger.d("Compiled Hermes: delivery failed " + e.getClass().getSimpleName());
+            Logger.w("Compiled Hermes: delivery failed " + e.getClass().getSimpleName());
         }
     }
 

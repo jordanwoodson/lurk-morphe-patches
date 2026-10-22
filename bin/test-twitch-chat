@@ -11,7 +11,7 @@ remote=/data/local/tmp/lurk-twitch-chat
 mkdir -p "$out/classes" "$out/dex" "$WORK/tmp"
 export TMPDIR="$WORK/tmp"
 android="$ANDROID_HOME/platforms/android-36/android.jar"
-javac --release 17 -classpath "$android" -d "$out/classes" "$ROOT/tests/twitch/ChatArtProbe.java"
+javac --release 17 -classpath "$android" -d "$out/classes" "$ROOT/tests/twitch/ChatArtProbe.java" "$ROOT/tests/twitch/ProbeLocators.java"
 "$(build_tool d8)" --min-api 29 --lib "$android" --output "$out/dex" "$out/classes/"*.class
 (cd "$out/dex" && jar cf "$out/probe.jar" classes.dex)
 if $compile_only; then

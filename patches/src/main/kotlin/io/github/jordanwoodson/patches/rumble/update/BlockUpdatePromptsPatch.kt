@@ -4,6 +4,7 @@ import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.rumble.settings.rumbleSettings
 import io.github.jordanwoodson.patches.rumble.settings.settingsPatch
 import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUMBLE
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
@@ -22,14 +23,18 @@ val blockUpdatePromptsPatch = bytecodePatch(
     dependsOn(settingsPatch)
 
     execute {
-        ForceUpdateFingerprint.single("forced update check").method.addInstructionsIfEnabled(
+        ForceUpdateFingerprint.single("forced update check").method
+            .also { Locators.record("rumble.block_update_prompts.force_check", it) }
+            .addInstructionsIfEnabled(
             KEY,
             """
                 const/4 v0, 0x0
                 return v0
             """,
         )
-        SuggestUpdateFingerprint.single("suggested update check").method.addInstructionsIfEnabled(
+        SuggestUpdateFingerprint.single("suggested update check").method
+            .also { Locators.record("rumble.block_update_prompts.suggest_check", it) }
+            .addInstructionsIfEnabled(
             KEY,
             """
                 sget-object v0, Ljava/lang/Boolean;->FALSE:Ljava/lang/Boolean;

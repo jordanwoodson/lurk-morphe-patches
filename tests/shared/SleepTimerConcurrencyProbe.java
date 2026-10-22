@@ -22,9 +22,19 @@ public final class SleepTimerConcurrencyProbe {
         }
     }
 
+    /** Waiting for a lock: a monitor (BLOCKED) or the bounded dispatch gate (TIMED_WAITING). */
+    private static boolean held(Thread thread) {
+        Thread.State state = thread.getState();
+        return state == Thread.State.BLOCKED || state == Thread.State.WAITING || state == Thread.State.TIMED_WAITING;
+    }
+
     public static void run(String boundary) throws Exception {
         if (boundary.startsWith("queued-")) {
             queued(boundary);
+            return;
+        }
+        if (boundary.startsWith("lockfree-")) {
+            lockFree(boundary);
             return;
         }
         Player player = new Player();
@@ -47,9 +57,10 @@ public final class SleepTimerConcurrencyProbe {
             resumer.start();
             await(attempting, "resumer did not reach onPlay");
             // Stop at the precise contention boundary, with no timing-based sleep. The pause callback
-            // can now proceed if onPlay is blocked; the broken dispatch lets the resume finish first.
+            // can now proceed if onPlay is held at the dispatch gate (a monitor or a timed lock wait); the
+            // broken dispatch lets the resume finish first.
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-            while (resumed.getCount() != 0 && resumer.getState() != Thread.State.BLOCKED) {
+            while (resumed.getCount() != 0 && !held(resumer)) {
                 if (System.nanoTime() >= deadline) throw new AssertionError("resumer made no bounded progress");
                 Thread.yield();
             }
@@ -81,6 +92,57 @@ public final class SleepTimerConcurrencyProbe {
                     + player.pauses + " playing=" + player.playing);
         }
         System.out.println("PASS concurrency: " + boundary + " pause precedes resume; reentrant stop completed");
+    }
+
+    /**
+     * The app's pause action waits for another thread that reports a player stopping (lockfree-stop) or
+     * starting (lockfree-play), as a pause path that hands the work to a player thread would. The timer must
+     * not hold its bookkeeping lock while app code runs: a stop goes straight through, and a play waits at
+     * the dispatch gate for its bound at most, so the action always finishes.
+     */
+    private static void lockFree(String boundary) throws Exception {
+        Player player = new Player();
+        Player other = new Player();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        long[] waited = {-1};
+        SleepTimer.setPauseAction(() -> {
+            CountDownLatch done = new CountDownLatch(1);
+            Thread worker = new Thread(() -> {
+                try {
+                    if (boundary.equals("lockfree-stop")) {
+                        SleepTimer.onStop(player);
+                        SleepTimer.started();
+                    } else if (boundary.equals("lockfree-play")) {
+                        SleepTimer.onPlay(other);
+                    } else {
+                        throw new AssertionError(boundary);
+                    }
+                } catch (Throwable t) {
+                    failure.set(t);
+                } finally {
+                    done.countDown();
+                }
+            }, "sleep-test-player-thread");
+            worker.setDaemon(true);
+            long start = System.nanoTime();
+            worker.start();
+            await(done, boundary + ": the pause action deadlocked waiting on a player thread");
+            waited[0] = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+            player.pauses++;
+            player.playing = false;
+        });
+        SleepTimer.onPlay(player);
+        fireTimer();
+        if (failure.get() != null) throw new AssertionError(boundary + ": player thread failed", failure.get());
+        if (player.pauses != 1 || waited[0] < 0) throw new AssertionError(boundary + ": the pause action did not run");
+        if (boundary.equals("lockfree-stop")) {
+            // A stop never waits at the gate (one second), only for the bookkeeping, which is free.
+            if (waited[0] >= 900) throw new AssertionError("a stop waited " + waited[0] + " ms for the pause");
+            if (SleepTimer.started().contains(player)) throw new AssertionError("the stop was not recorded");
+        } else if (!SleepTimer.started().contains(other)) {
+            throw new AssertionError("the play that waited at the gate was not recorded");
+        }
+        System.out.println("PASS lock-free pause: " + boundary + " finished after " + waited[0] + " ms");
     }
 
     private static void fireTimer() throws Exception {

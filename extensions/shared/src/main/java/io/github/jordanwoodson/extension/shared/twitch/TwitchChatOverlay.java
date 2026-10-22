@@ -3,7 +3,6 @@ package io.github.jordanwoodson.extension.shared.twitch;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
-import android.content.ContextWrapper;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -29,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
@@ -53,8 +53,10 @@ public final class TwitchChatOverlay {
     private static final Field NO_FIELD;
     private static volatile Field nameField;
     private static volatile Class<?> nameClass;
-    /** The attached overlay. Main thread only. */
-    private static Overlay overlay;
+    /** The attached overlay. Written on the main thread only; chat threads read whether there is one. */
+    private static volatile Overlay overlay;
+    /** A switched-off detach is queued for the main thread. */
+    private static final AtomicBoolean DETACH_QUEUED = new AtomicBoolean();
     private static final Map<Object,Owner> OWNERS = new WeakHashMap<>();
     private static final class Owner {
         String room = "";
@@ -92,10 +94,17 @@ public final class TwitchChatOverlay {
     public static void onMessage(Context context, Object sender, List tokens, Map tags, Object feeder) {
         try {
             if (!Settings.isEnabled(KEY)) {
-                MAIN.post(() -> { if (!Settings.isEnabled(KEY)) detach(); });
+                // Switched off: remove an overlay still on screen, with one queued task, and otherwise do
+                // nothing per message.
+                if (overlay != null && DETACH_QUEUED.compareAndSet(false, true)) {
+                    MAIN.post(() -> {
+                        DETACH_QUEUED.set(false);
+                        if (!Settings.isEnabled(KEY)) detach();
+                    });
+                }
                 return;
             }
-            Activity activity = activity(context);
+            Activity activity = TwitchContext.activity(context);
             if (activity == null || tokens == null) return;
             Object tagged = tags == null ? null : tags.get("room-id");
             String room = tagged instanceof String && ((String) tagged).matches("[0-9]{1,12}") ? (String) tagged : "";
@@ -159,14 +168,6 @@ public final class TwitchChatOverlay {
 
     private static void detach(Owner owner) {
         MAIN.post(() -> { if (overlay != null && overlay.owner == owner) detach(); });
-    }
-
-    private static Activity activity(Context context) {
-        while (context instanceof ContextWrapper) {
-            if (context instanceof Activity) return (Activity) context;
-            context = ((ContextWrapper) context).getBaseContext();
-        }
-        return null;
     }
 
     /** Landscape and full size: not in portrait, and not in picture-in-picture or multi-window. */
