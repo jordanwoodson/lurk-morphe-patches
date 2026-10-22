@@ -395,6 +395,21 @@ the usher URL in its query, isn't consumed.
 so real ad delivery is verified only through the probe and the emitted bytecode. The proxy was checked
 end to end with a local test proxy.
 
+### Clip download
+
+*Clip download* (`clip_download`, off by default) adds "Download clip" to the menu (⋮) of a clip in the clips
+feed, where clip links and Home's Clips tab open. The menu is `DiscoveryFeedOverflowMenuFragment`, whose
+`onCreateView` binds the sheet's view delegate to its presenter; right after that call,
+`TwitchClips.overflowMenu(presenter, viewDelegate)` reads the presenter's `FragmentArguments` (feed item →
+`getClipModel()` → slug, title, broadcaster; all unobfuscated model getters) and adds a row in the sheet's style
+above Cancel. A tap closes the sheet and, on a background thread, asks gql.twitch.tv with the app's Client-ID
+only for `clip(slug) { videoQualities { quality sourceURL } playbackAccessToken(params: {platform: "android",
+playerType: "mobile_player"}) { signature value } }`. The clip CDN answers 401 without the signed token, so the
+best quality's address gets `?sig=…&token=…` and goes to Android's `DownloadManager`, which saves it as
+`Downloads/Twitch/<channel>-<title>-<slug>.mp4` with its own notification. Clips opened elsewhere (the theatre's
+clip player, React Native) have no row. Verified on the emulator, signed out: the row appeared in a clip's menu,
+and two clips downloaded as MP4s of 21.7 MB and 37.6 MB (`ftyp` header) into Downloads/Twitch.
+
 ### Interface: chat highlights, player buttons, Home and mature labels
 
 Native Home is not React Native: RN Home and the Ultralight theatre run only with `android-ultralight`.
