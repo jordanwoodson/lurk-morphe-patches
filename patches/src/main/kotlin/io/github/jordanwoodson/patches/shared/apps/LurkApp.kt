@@ -16,6 +16,8 @@ internal class LurkApp(
     val compatibility: Compatibility,
     /** The launcher icon Lurk icon installs. */
     val icon: LauncherIcon,
+    /** What Clone app renames besides the package and the names under it. */
+    val cloneRules: List<CloneRule> = emptyList(),
     /** The `<uses-permission>` entries Remove tracking permissions takes out. Each must be in the manifest. */
     val trackingPermissions: Set<String>,
     /** The `<queries>` entries Remove tracking permissions takes out with them. */

@@ -11,6 +11,8 @@ internal val TWITCH = LurkApp(
     compatibility = COMPATIBILITY_TWITCH,
     // Twitch requires Android 12L, so every supported device understands adaptive vector icons.
     icon = RecoloredFigure("#9146FF"),
+    // Android refuses a second install whose provider authority is already used by the original app.
+    cloneRules = listOf(AmazonSignIn),
     trackingPermissions = setOf(
         "com.google.android.gms.permission.AD_ID",
         "com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE",
@@ -45,6 +47,13 @@ internal val RUMBLE = LurkApp(
         ) + listOf("mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi").flatMap { dpi ->
             listOf("mipmap-$dpi/ic_launcher.webp", "mipmap-$dpi/ic_launcher_round.webp")
         },
+    ),
+    // Rumble also declares names outside its package: a content provider its other apps read, and the
+    // permission guarding it. A second install with the same names would be refused, so they move too.
+    // Rumble's code uses the provider's authority as a constant, so it changes there as well.
+    cloneRules = listOf(
+        OutsideName("com.rumble.provider", "provider", inCode = true),
+        OutsideName("com.rumble.READ_RUMBLE_DATA", "READ_RUMBLE_DATA"),
     ),
     // Permissions only trackers use. Without AD_ID, Google Play services hands every SDK, and Rumble's own
     // requests (ad_device_id, watch progress), the all-zero advertising ID on Android 13 and newer (API 33,
