@@ -1,6 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.playback
 
 import app.morphe.patcher.Fingerprint
+import app.morphe.patcher.InstructionLocation.MatchAfterWithin
 import app.morphe.patcher.methodCall
 import com.android.tools.smali.dexlib2.AccessFlags
 
@@ -59,4 +60,21 @@ internal object BackgroundAudioSettingFingerprint : Fingerprint(
 internal object VideoDebugPanelFingerprint : Fingerprint(
     returnType = "Z", parameters = emptyList(), strings = listOf("showVideoDebugPanel"),
     filters = listOf(methodCall(definingClass = "Landroid/content/SharedPreferences;", name = "getBoolean")),
+)
+
+// Twitch's master playlist parser: reads EXT-X-TWITCH-INFO, whose STREAM-TIME (the stream's age) it drops.
+internal object MasterPlaylistFingerprint : Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
+    returnType = "L", parameters = listOf("Ljava/lang/String;"),
+    strings = listOf("#EXT-X-TWITCH-INFO:", "STREAM-TIME", "SERVING-ID"),
+)
+
+// The stats panel's rows: each entry of the panel's state becomes a row from its label and value.
+internal object VideoStatsRowsFingerprint : Fingerprint(
+    name = "invoke", returnType = "Ljava/lang/Object;", parameters = listOf("Ljava/lang/Object;"),
+    filters = listOf(
+        methodCall(name = "getLabel", parameters = emptyList(), returnType = "Ljava/lang/String;"),
+        methodCall(name = "<init>", parameters = listOf("Ljava/lang/String;", "Ljava/lang/String;"),
+            location = MatchAfterWithin(2)),
+    ),
 )

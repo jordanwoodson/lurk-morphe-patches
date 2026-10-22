@@ -1,6 +1,8 @@
 package io.github.jordanwoodson.patches.twitch.emotes
 
 import app.morphe.patcher.Fingerprint
+import app.morphe.patcher.checkCast
+import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.methodCall
 import com.android.tools.smali.dexlib2.AccessFlags
 
@@ -85,4 +87,46 @@ internal object ChatConnectFingerprint : Fingerprint(
     returnType = "V",
     parameters = listOf(TUID),
     strings = listOf("chat_connectingfor_channel", "chat_connecting"),
+)
+
+// The emote picker's presenter (EmotePickerPresenter): its state machine names its reducer and action handler.
+internal object EmotePickerFingerprint : Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.CONSTRUCTOR),
+    strings = listOf("createEmotePickerState", "actionHandler"),
+)
+
+// An emote set owned by a channel (OwnerEmoteSet): the picker gives each owner a section with a named header.
+internal object OwnerEmoteSetFingerprint : Fingerprint(
+    name = "toString",
+    returnType = "Ljava/lang/String;",
+    parameters = emptyList(),
+    strings = listOf("OwnerEmoteSet(emoteOwner=", ", setId="),
+)
+
+// The owner of such a set (EmoteOwner): ID, login, display name and avatar URL, shown in the section header.
+internal object EmoteOwnerFingerprint : Fingerprint(
+    name = "toString",
+    returnType = "Ljava/lang/String;",
+    parameters = emptyList(),
+    strings = listOf("EmoteOwner(id=", ", login="),
+)
+
+// The chat input's autocomplete filter: asks its current source (users, emotes or commands) for matches.
+internal object AutocompleteFilterFingerprint : Fingerprint(
+    name = "performFiltering",
+    returnType = "Landroid/widget/Filter\$FilterResults;",
+    parameters = listOf("Ljava/lang/CharSequence;"),
+    filters = listOf(methodCall(parameters = listOf("Ljava/lang/CharSequence;"), returnType = "Ljava/util/ArrayList;")),
+    custom = { _, classDef -> classDef.superclass == "Landroid/widget/Filter;" },
+)
+
+// The emote autocomplete source: the user's emotes by code, matched after an optional leading ':'.
+internal object EmoteAutocompleteFingerprint : Fingerprint(
+    returnType = "Ljava/util/ArrayList;",
+    parameters = listOf("Ljava/lang/CharSequence;"),
+    strings = listOf(":"),
+    filters = listOf(
+        checkCast("Ljava/util/LinkedHashMap;"),
+        fieldAccess(definingClass = "Ljava/util/Locale;", name = "ROOT"),
+    ),
 )

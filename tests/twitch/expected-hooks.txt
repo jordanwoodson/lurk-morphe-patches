@@ -20,8 +20,8 @@ TwitchBundle.prepare
 TwitchStartup.firstRoute
 TwitchStartup.watchStart
 
-# if refresh_stream vod_chapters
-# The player-view attach hook both patches share.
+# if refresh_stream vod_chapters latency_badge force_landscape
+# The player-view attach hook these patches share.
 TwitchPlayerViews.attached
 
 # if fix_notifications
@@ -87,6 +87,18 @@ TwitchChat.timestamps
 # if chat_auto_claim
 TwitchChat.autoClaim
 
+# if drops_auto_claim
+TwitchDrops.presented
+
+# if chat_hide_badges
+TwitchChatCompact.badges
+
+# if chat_first_chatters
+TwitchChatCompact.beginLine
+TwitchChatCompact.bindRow
+TwitchChatCompact.ircTags
+TwitchChatCompact.markLine
+
 # if chat_keywords
 TwitchChatKeywords.beginLine
 TwitchChatKeywords.bindRow
@@ -113,6 +125,10 @@ TwitchEmotes.messageTokens
 TwitchEmotes.onChatChannel
 TwitchEmotes.rnFrame
 TwitchEmotes.url
+
+# if emotes_picker
+TwitchEmotes.autocomplete
+TwitchEmotes.pickerSets
 
 # if badges_ffz
 TwitchBadges.badges
@@ -142,12 +158,18 @@ TwitchHighlights.storiesShelf
 # if hide_tipping
 TwitchInterface.bitsVisible
 
+# if clip_download
+TwitchClips.overflowMenu
+
 # if hide_clips
 TwitchInterface.clipTabs
 TwitchInterface.homeTabs
 
 # if default_tab
 TwitchInterface.startDestination
+
+# if amoled_black
+TwitchTheme.init
 
 # if force_exoplayer
 TwitchLayout.forceExoPlayer
@@ -179,6 +201,10 @@ TwitchPlayback.storageQualityDefault
 
 # if native_player
 TwitchPlayback.routeLiveToReactNative
+
+# if video_stats
+TwitchStats.masterPlaylist
+TwitchStats.statsRows
 
 # if refresh_stream
 TwitchPlayer.bindRefresh

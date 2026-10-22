@@ -7,6 +7,8 @@ import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.Locale;
 
+import io.github.jordanwoodson.extension.shared.Logger;
+import io.github.jordanwoodson.extension.shared.Network;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
 
 /** Preference fallbacks only: Twitch continues to read and write the user's own choices. */
@@ -103,8 +105,42 @@ public final class TwitchPlayback {
         }
     }
 
+    /**
+     * The chosen default rendition, or null for Twitch's own. On a metered network (mobile data, or Wi-Fi
+     * marked as metered) the "On mobile data" choice replaces it when that one is lower; Twitch's own default
+     * (Auto) counts as the highest.
+     */
     private static String selectedQuality() {
-        switch (Settings.getInt("video_quality")) {
+        int quality = Settings.getInt("video_quality");
+        int metered = Settings.getInt("video_quality_metered");
+        boolean mobile = name(metered) != null && rank(metered) < rank(quality) && Network.isMetered(Settings.appContext());
+        if (mobile != meteredLogged) {
+            meteredLogged = mobile;
+            Logger.d(mobile ? "quality: metered network, " + name(metered) + " instead of " + name(quality)
+                    : "quality: the default applies");
+        }
+        return name(mobile ? metered : quality);
+    }
+
+    /** Whether the last quality asked for was the mobile one, so the log says when that changes. */
+    private static volatile boolean meteredLogged;
+
+    /** How high a quality choice is: Source and Twitch's own default (Auto, or anything unknown) are highest. */
+    private static int rank(int quality) {
+        switch (quality) {
+            case 108060: return 6;
+            case 1080: return 5;
+            case 72060: return 4;
+            case 720: return 3;
+            case 480: return 2;
+            case 360: return 1;
+            case 160: return 0;
+            default: return 7;
+        }
+    }
+
+    private static String name(int quality) {
+        switch (quality) {
             case 1: return SOURCE;
             case 108060: return "1080p60";
             case 1080: return "1080p";

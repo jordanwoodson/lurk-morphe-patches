@@ -38,9 +38,12 @@ private const val EMOTES = "Lio/github/jordanwoodson/extension/shared/twitch/Twi
 val thirdPartyEmotesPatch = bytecodePatch(
     name = "Third-party emotes",
     description = "Adds switches that show 7TV, BetterTTV and FrankerFaceZ emotes in chat, Twitch's chat history " +
-        "and VOD chat replay. Each switch is off until turned on in Lurk settings; when on, it sends the ID of the " +
-        "channel you watch to that service (7tv.io, api.betterttv.net, api.frankerfacez.com) for its emote lists " +
-        "and loads the emote images from its CDN. Not in the emote picker or autocomplete.",
+        "and VOD chat replay. When on, each sends the ID of the channel you watch to that service (7tv.io, " +
+        "api.betterttv.net, api.frankerfacez.com) for its emote lists and loads the emote images from its CDN. " +
+        "\"Emotes in the picker\" also lists them in the emote picker, one section per service, and in " +
+        "autocomplete after ':', from the same lists; that part was checked with Twitch's own picker and " +
+        "autocomplete code on Android's runtime, not in the app, which needs an account to open the picker. " +
+        "Starts off. Turn it on in Lurk settings > Chat.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
     dependsOn(twitchRNChatPatch, twitchSettingsPatch, chatImageSizePatch)
@@ -50,6 +53,7 @@ val thirdPartyEmotesPatch = bytecodePatch(
         hookEmoteUrl()
         hookEmoteClick()
         hookReactNative()
+        hookEmotePicker(ClientEmoteFingerprint.twitchMatch("client emote class").classDef.type)
         ChatConnectFingerprint.twitchMatch("chat connect").method.apply {
             val channel = parameterRegister(1)
             addInstructions(0, "invoke-static/range { v$channel .. v$channel }, $EMOTES->onChatChannel(Ljava/lang/Object;)V")
@@ -63,6 +67,10 @@ val thirdPartyEmotesPatch = bytecodePatch(
                 Section.CHAT, default = false),
             SwitchSetting("emotes_ffz", "FrankerFaceZ emotes",
                 "Shows FrankerFaceZ emotes in chat. Sends the ID of the channel you watch to api.frankerfacez.com and loads images from cdn.frankerfacez.com.",
+                Section.CHAT, default = false),
+            SwitchSetting("emotes_picker", "Emotes in the picker",
+                "Lists the emotes of the services turned on above in the emote picker, one section each, and in " +
+                    "autocomplete after ':'. Uses the lists chat already loads and sends nothing else.",
                 Section.CHAT, default = false),
         )
     }
