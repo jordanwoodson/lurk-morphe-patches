@@ -914,6 +914,14 @@ chosen. At "15 seconds (Rumble's)" the buttons and icons are Rumble's own.
 `PlayerProbe` runs the real speed store with the switch on and off, and the focus and keep-screen-on
 decisions. `RefreshProbe` checks the clickable panel modifier and the silent callback.
 
+## AMOLED black (not built)
+
+`RumbleTheme` (`com.rumble.theme.RumbleTheme`) wraps Material's theme, whose dark colors already use
+`#000000` for background and surface, and a CompositionLocal of Rumble's own colors. In dark mode those draw the
+screens black too; only the floating bottom bar, sheets and some cards use dark greys (`#1B2127`, `#283139`) to
+stand out from the black. Checked on 2026-10-22 with the emulator in dark mode: Home's background is black. A
+patch would only blacken those raised surfaces, which would hide their edges, so none was built.
+
 ## Live chat
 
 Rumble's live chat arrives as JSON events on a chat endpoint (`web7.rumble.com` in testing). Gson parses
