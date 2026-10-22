@@ -3,9 +3,11 @@ package io.github.jordanwoodson.patches.shared.settings
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.PatchException
+import app.morphe.patcher.patch.ResourcePatchContext
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
 import app.morphe.patcher.util.smali.ExternalLabel
 import com.android.tools.smali.dexlib2.AccessFlags
+import io.github.jordanwoodson.patches.shared.Locators
 import java.net.URLDecoder
 import java.util.jar.JarFile
 
@@ -161,6 +163,19 @@ private fun bundleVersion(): String = runCatching {
     val jar = URLDecoder.decode(url.removePrefix("jar:file:").substringBefore('!'), "UTF-8")
     JarFile(jar).use { it.manifest.mainAttributes.getValue("Version") }
 }.getOrNull().orEmpty()
+
+/**
+ * Writes what the patches matched for [app] (see [Locators]) to `assets/lurk/locators.json` in the patched
+ * APK, then forgets it for the next run. Called from each app's settings patch when it finalizes, after every
+ * other patch.
+ */
+internal fun ResourcePatchContext.writeLocators(app: String) {
+    get(LOCATORS_ASSET).apply { parentFile.mkdirs() }.writeText(Locators.json(app))
+    Locators.clear()
+}
+
+/** Where [writeLocators] puts the matched names; probes open it from the APK's assets. */
+internal const val LOCATORS_ASSET = "assets/lurk/locators.json"
 
 /** Smali that leaves in [register] (any v or p register) whether the switch [key] is on. */
 internal fun isEnabled(key: String, register: String) = """

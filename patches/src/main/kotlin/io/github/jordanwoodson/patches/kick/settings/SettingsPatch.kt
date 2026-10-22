@@ -18,7 +18,9 @@ import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.immutable.reference.ImmutableStringReference
 import io.github.jordanwoodson.patches.kick.shared.Constants.COMPATIBILITY_KICK
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.shared.SHARED_EXTENSION
+import io.github.jordanwoodson.patches.shared.settings.writeLocators
 import io.github.jordanwoodson.patches.shared.settings.SETTINGS_CLASS
 import io.github.jordanwoodson.patches.shared.settings.SettingsScreen
 import io.github.jordanwoodson.patches.shared.settings.debugLoggingSetting
@@ -38,6 +40,7 @@ internal val kickSettingsPatch = bytecodePatch(
     extendWith(SHARED_EXTENSION)
     dependsOn(resourcePatch {
         execute {
+            Locators.clear()
             document("AndroidManifest.xml").use { doc ->
                 val app = doc.getElementsByTagName("application").item(0) as Element
                 app.appendChild(doc.createElement("activity").apply {
@@ -49,6 +52,8 @@ internal val kickSettingsPatch = bytecodePatch(
                 })
             }
         }
+        // Finalized after every other patch, so everything they matched is recorded.
+        finalize { writeLocators("kick") }
     })
     execute {
         kickSettings.clear()
@@ -81,6 +86,7 @@ internal val kickBundleLoaderPatch = bytecodePatch {
             throw PatchException("Kick: unexpected bundle loader interface")
         }
         val method = match.method
+        Locators.record("kick.settings.bundle_loader", method)
         val instructions = method.implementation!!.instructions.toList()
         val index = instructions.indices.singleOrNull { index ->
             val instruction = instructions[index]

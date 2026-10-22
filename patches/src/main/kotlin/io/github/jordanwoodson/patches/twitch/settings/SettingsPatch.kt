@@ -16,7 +16,9 @@ import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.immutable.reference.ImmutableStringReference
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.shared.SHARED_EXTENSION
+import io.github.jordanwoodson.patches.shared.settings.writeLocators
 import io.github.jordanwoodson.patches.shared.settings.SETTINGS_CLASS
 import io.github.jordanwoodson.patches.shared.settings.SettingsScreen
 import io.github.jordanwoodson.patches.shared.settings.debugLoggingSetting
@@ -32,6 +34,7 @@ internal val twitchSettingsPatch = bytecodePatch(
     extendWith(SHARED_EXTENSION)
     dependsOn(resourcePatch {
         execute {
+            Locators.clear()
             document("AndroidManifest.xml").use { doc ->
                 val app = doc.getElementsByTagName("application").item(0) as Element
                 app.appendChild(doc.createElement("activity").apply {
@@ -43,6 +46,8 @@ internal val twitchSettingsPatch = bytecodePatch(
                 })
             }
         }
+        // Finalized after every other patch, so everything they matched is recorded.
+        finalize { writeLocators("twitch") }
     })
     execute {
         twitchSettings.clear()
@@ -75,6 +80,7 @@ internal val twitchBundleLoaderPatch = bytecodePatch {
             throw PatchException("Twitch: unexpected bundle loader interface")
         }
         val method = match.method
+        Locators.record("twitch.settings.bundle_loader", method)
         val instructions = method.implementation!!.instructions.toList()
         val index = instructions.indices.singleOrNull { index ->
             val instruction = instructions[index]

@@ -201,6 +201,12 @@ bash bin/test-twitch-privacy "$MORPHE_WORK/out/twitch-31.7.0-patched.apk"
 - `bin/test-<app>` and the other `bin/test-twitch-*` scripts compile a probe from `tests/<app>/`
   with the Android SDK, push it with the patched APK and run it with `app_process`, so the
   probe calls the app's real, patched methods on ART. Several accept `--compile-only`.
+- Every patched APK carries `assets/lurk/locators.json`: the obfuscated classes and methods the
+  patches matched, as a JSON object keyed `<app>.<patch>.<what>` (for example
+  `rumble.settings.app_info_section`) with smali descriptors as values. A patch adds an entry with
+  `Locators.record(...)` (`patches/shared/Locators.kt`); the app's settings patch writes the file
+  after every other patch has finished. Probes read it from the APK's assets instead of pinning R8
+  names, so they keep working when the app is rebuilt.
 - `tests/<app>/verify_*.py` and `test_*.py` are standalone Python scripts: they diff stock and
   patched apktool output, decode Hermes bundles, or compile an extension helper against small
   stubs and run it on the JVM. Each docstring gives the usage. They honor `MORPHE_WORK` and

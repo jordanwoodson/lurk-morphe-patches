@@ -23,7 +23,9 @@ import io.github.jordanwoodson.patches.rumble.shared.Constants.COMPATIBILITY_RUM
 import io.github.jordanwoodson.patches.rumble.shared.clickableCall
 import io.github.jordanwoodson.patches.rumble.shared.single
 import io.github.jordanwoodson.patches.rumble.shared.staticRangeCalls
+import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.shared.SHARED_EXTENSION
+import io.github.jordanwoodson.patches.shared.settings.writeLocators
 import io.github.jordanwoodson.patches.shared.settings.SETTINGS_CLASS
 import io.github.jordanwoodson.patches.shared.settings.SettingsScreen
 import io.github.jordanwoodson.patches.shared.settings.debugLoggingSetting
@@ -49,6 +51,7 @@ val settingsPatch = bytecodePatch(
     dependsOn(
         resourcePatch {
             execute {
+                Locators.clear()
                 document("AndroidManifest.xml").use { document ->
                     val application = document.getElementsByTagName("application").item(0) as Element
                     application.appendChild(
@@ -65,6 +68,8 @@ val settingsPatch = bytecodePatch(
                     )
                 }
             }
+            // Finalized after every other patch, so everything they matched is recorded.
+            finalize { writeLocators("rumble") }
         },
     )
 
@@ -119,6 +124,8 @@ private fun BytecodePatchContext.addLurkRow() {
     if (row == null || rows.size != 3) {
         throw PatchException("Rumble: expected three rows from one composable in App Info, found ${rows.size}")
     }
+    Locators.record("rumble.settings.app_info_section", section)
+    Locators.record("rumble.settings.row", rows.first().second)
     val rowParameters = rows.first().second.parameters()
     val modifier = rowParameters[0]
     val composer = rowParameters[4]
