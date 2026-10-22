@@ -79,7 +79,8 @@ bash bin/test-rumble ~/build/lurk-morphe-patches/out/rumble-3.21.0-patched.apk
 | `HideProbe` | Hide Shorts (parser, channel tabs, `ShortsListView`), Hide Premium upsells, Hide tipping and Rants |
 | `PlaybackProbe` | Fill screen (Media3's real `AspectRatioFrameLayout` measured in landscape and portrait), Seek interval, the sleep timer's pause through the listener |
 | `ChatProbe`, `KeywordsProbe` | Hide chat clutter, Show deleted messages, Chat timestamps, Chat keywords |
-| `CountProbe`, `InterfaceProbe`, `SearchProbe`, `UpdateProbe` | Show exact counts, startup tab and Home sections, Don't save searches, Block update prompts || `PlayerProbe`, `QualityProbe`, `RefreshProbe` | Remember speed, audio focus, keep screen on; Default video quality; Refresh stream |
+| `CountProbe`, `InterfaceProbe`, `SearchProbe`, `UpdateProbe` | Show exact counts, startup tab and Home sections, Don't save searches, Block update prompts |
+| `ThemeProbe` | AMOLED black: the theme's color set and the palette || `PlayerProbe`, `QualityProbe`, `RefreshProbe` | Remember speed, audio focus, keep screen on; Default video quality; Refresh stream |
 | `PremiumProbe` | Unlock Premium's getter and mapper |
 
 Disable autoplay changes DataStore defaults inside coroutine readers that can't run under `app_process`;
@@ -807,7 +808,8 @@ unchanged, so a version that drops or moves the grey fails to patch instead of p
 Checked on 2026-10-22 on the emulator in dark mode, after Restart Rumble: the bottom bar (Home and Shorts) and
 the search field go from `#1B2127` to `#000000`, and to `#0B0B0C` with Near-black surfaces; the video menu's
 dividers stay `#283139`. In light mode with both switches on, Home's bar stays `#F6F7F9` and the Shorts bar is
-near-black.
+near-black. `ThemeProbe` runs the real color set constructor (off, on, near-black, Near-black surfaces alone,
+patch not included) and the palette's initializer with the switch on.
 
 ## Player
 
