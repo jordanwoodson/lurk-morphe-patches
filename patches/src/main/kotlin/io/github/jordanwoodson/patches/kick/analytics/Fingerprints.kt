@@ -55,6 +55,16 @@ internal object PalNonceFingerprint : Fingerprint(
     parameters = listOf("Landroid/content/Context;", "Lcom/kick/mobile/kickivsplayerv2/PalNonceRequestConfig;", EXPO_PROMISE),
     strings = listOf("INVALID_PAL_NONCE_REQUEST", "React context is unavailable"),
 )
+private const val FPJS_MODULE = "Lcom/fingerprintjs/reactnative/RNFingerprintjsProModule;"
+private val FPJS_PARAMETERS = listOf(READABLE_MAP, STRING, "Ljava/lang/Integer;", REACT_PROMISE)
+
+// FingerprintJS Pro's React Native module: getVisitorData and getVisitorId both go through these.
+internal object FingerprintDataFingerprint : Fingerprint(
+    definingClass = FPJS_MODULE, name = "getVisitorDataWithTimeout", returnType = "V", parameters = FPJS_PARAMETERS,
+)
+internal object FingerprintIdFingerprint : Fingerprint(
+    definingClass = FPJS_MODULE, name = "getVisitorIdWithTimeout", returnType = "V", parameters = FPJS_PARAMETERS,
+)
 internal object AnalyticsStartupFingerprint : Fingerprint(
     definingClass = "Lcom/kick/mobile/MainApplication;", name = "onCreate", returnType = "V",
     parameters = emptyList(), strings = listOf("experimental"),

@@ -1,9 +1,12 @@
 package io.github.jordanwoodson.patches.kick.analytics
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
+import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.resourcePatch
+import app.morphe.patcher.util.smali.ExternalLabel
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import io.github.jordanwoodson.patches.kick.settings.kickMatch
@@ -20,6 +23,7 @@ import io.github.jordanwoodson.patches.shared.settings.requireLocals
 import org.w3c.dom.Element
 
 private const val KEY = "disable_analytics"
+private const val BLOCK_FINGERPRINTING = "block_fingerprinting"
 private const val PRIVACY = "Lio/github/jordanwoodson/extension/shared/kick/KickPrivacy;"
 
 /**
@@ -42,9 +46,13 @@ private val firebaseStartsDisabledPatch = resourcePatch {
 @Suppress("unused")
 val disableAnalyticsPatch = bytecodePatch(
     name = "Disable analytics",
-    description = "Disables Firebase Analytics collection, Insider and Datadog initialization/events, " +
-        "Mux/Datazoom player analytics and PAL nonce requests. Playback API requests remain necessary " +
-        "to obtain streams. Restart Kick after changing this setting. This does not remove video ads.",
+    description = "Turns off Firebase Analytics, Insider (start-up, events and queued uploads), Datadog (its " +
+        "start-up, so its view, action, log and trace calls go nowhere), Mux and Datazoom player analytics, and " +
+        "Google PAL nonce requests. Kick's own API requests still run, including the playback request that returns " +
+        "the stream. A second switch, Block device fingerprinting, stops FingerprintJS Pro, which Kick uses to " +
+        "identify this device when you sign up, for age checks and when a signed-in session starts; it starts off " +
+        "because sign-up and age checks can fail while it is on. Disable analytics is on by default; turn it off in " +
+        "Lurk settings > Privacy and restart Kick. This does not remove video ads.",
 ) {
     compatibleWith(COMPATIBILITY_KICK)
     dependsOn(kickSettingsPatch, firebaseStartsDisabledPatch)
@@ -124,8 +132,36 @@ val disableAnalyticsPatch = bytecodePatch(
             invoke-virtual { v1, v0 }, $FIREBASE->setAnalyticsCollectionEnabled(Z)V
         """)
 
-        kickSettings.add(SwitchSetting(KEY, "Disable analytics",
-            "Disables Firebase, Insider, Datadog, Mux/Datazoom and PAL tracking. Playback requests still run.",
-            Section.PRIVACY, restart = true))
+        // FingerprintJS Pro: Kick fingerprints the device through its own proxy on kick.com when a signed-in session
+        // starts (tagged with the user ID and username, cached for a day) and for sign-up and age assurance, which
+        // send the request ID to Kick. Blocked, the request fails the way the SDK reports a network error. Both entry
+        // points keep the promise in p4 after seven locals: copy it low.
+        listOf(FingerprintDataFingerprint to "FingerprintJS visitor data", FingerprintIdFingerprint to "FingerprintJS visitor ID")
+            .forEach { (fingerprint, description) ->
+                fingerprint.kickMatch(description).method.apply {
+                    requireLocals(3)
+                    addInstructionsWithLabels(0, """
+                        invoke-static { }, $PRIVACY->blockFingerprint()Z
+                        move-result v0
+                        if-eqz v0, :lurk_fpjs
+                        move-object/from16 v0, p4
+                        const-string v1, "Error: "
+                        const-string v2, "NetworkError"
+                        invoke-interface { v0, v1, v2 }, $REACT_PROMISE->reject(Ljava/lang/String;Ljava/lang/String;)V
+                        return-void
+                    """, ExternalLabel("lurk_fpjs", getInstruction(0)))
+                }
+            }
+
+        kickSettings.add(
+            SwitchSetting(KEY, "Disable analytics",
+                "Turns off Firebase, Insider, Datadog, Mux, Datazoom and PAL. Kick's own requests, including playback, " +
+                    "still run.",
+                Section.PRIVACY, restart = true),
+            SwitchSetting(BLOCK_FINGERPRINTING, "Block device fingerprinting",
+                "Stops FingerprintJS Pro from identifying this device to Kick when signed in. Sign-up and age checks " +
+                    "use it and can fail while this is on.",
+                Section.PRIVACY, default = false),
+        )
     }
 }

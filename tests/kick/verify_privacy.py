@@ -39,11 +39,27 @@ def main():
                 public class Settings {
                     public static boolean analyticsEnabled = true;
                     public static boolean linksEnabled = true;
+                    public static boolean fingerprintingRegistered = true;
+                    public static boolean fingerprintingBlocked = false;
                     public static boolean isEnabled(String key) {
                         if (key.equals("disable_analytics")) return analyticsEnabled;
                         if (key.equals("clean_share_links")) return linksEnabled;
+                        // Production counts an unregistered key as on: the helper must check isRegistered first.
+                        if (key.equals("block_fingerprinting")) return !fingerprintingRegistered || fingerprintingBlocked;
                         throw new AssertionError("Unknown settings key: " + key);
                     }
+                    public static boolean isRegistered(String key) {
+                        if (key.equals("block_fingerprinting")) return fingerprintingRegistered;
+                        throw new AssertionError("Unexpected registry lookup: " + key);
+                    }
+                }
+            """,
+            "io/github/jordanwoodson/extension/shared/Logger.java": """
+                package io.github.jordanwoodson.extension.shared;
+                public class Logger {
+                    public static int blocked;
+                    public static void blocked(String what) { blocked++; }
+                    public static void d(String message) { }
                 }
             """,
         }

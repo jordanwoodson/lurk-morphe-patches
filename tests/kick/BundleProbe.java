@@ -67,10 +67,62 @@ public final class BundleProbe {
                 Object result = type.getMethod("onStartJob", parameters).invoke(service, new Object[]{null});
                 check(Boolean.FALSE.equals(result), name + " did not complete synchronously");
             }
+            System.out.println("PASS: two actual Insider job guards complete synchronously without SDK dispatch");
+            verifyPromises(unsafe, allocate);
         } finally {
             switches.remove("disable_analytics");
+            switches.remove("block_fingerprinting");
         }
-        System.out.println("PASS: two actual Insider job guards complete synchronously without SDK dispatch");
+    }
+
+    /**
+     * The Firebase event bridge, Datadog's React initialization and the PAL nonce bridge settle their promise at
+     * once, so JavaScript awaiting them carries on; FingerprintJS rejects as a network error only while its own
+     * switch is on. The real methods run on instances made without constructors.
+     */
+    @SuppressWarnings("deprecation")
+    private static void verifyPromises(Object unsafe, Method allocate) throws Exception {
+        // The PAL bridge makes a main-thread Handler when its class loads; app_process has no main Looper yet.
+        if (android.os.Looper.getMainLooper() == null) android.os.Looper.prepareMainLooper();
+        List<String> calls = new ArrayList<>();
+        Class<?> reactPromise = Class.forName("com.facebook.react.bridge.Promise");
+        Class<?> expoPromise = Class.forName("expo.modules.kotlin.Promise");
+        Class<?> readableMap = Class.forName("com.facebook.react.bridge.ReadableMap");
+        Object promise = Proxy.newProxyInstance(reactPromise.getClassLoader(), new Class<?>[]{reactPromise},
+            (proxy, method, values) -> { calls.add(method.getName() + Arrays.toString(values)); return null; });
+        Object expo = Proxy.newProxyInstance(expoPromise.getClassLoader(), new Class<?>[]{expoPromise},
+            (proxy, method, values) -> { calls.add(method.getName() + Arrays.toString(values)); return null; });
+
+        Class<?> firebase = Class.forName("io.invertase.firebase.analytics.NativeRNFBTurboAnalytics");
+        firebase.getMethod("logEvent", String.class, readableMap, reactPromise)
+            .invoke(allocate.invoke(unsafe, firebase), "screen_view", null, promise);
+        check(calls.equals(List.of("resolve[null]")), "Firebase logEvent: " + calls);
+        calls.clear();
+        Class<?> datadog = Class.forName("com.datadog.reactnative.DdSdkImplementation");
+        datadog.getMethod("initialize", readableMap, reactPromise).invoke(allocate.invoke(unsafe, datadog), null, promise);
+        check(calls.equals(List.of("resolve[null]")), "Datadog initialize: " + calls);
+        calls.clear();
+        Class<?> pal = Class.forName("com.kick.mobile.kickivsplayerv2.PalSDKModuleBridge");
+        pal.getMethod("generateNonce", Context.class, Class.forName("com.kick.mobile.kickivsplayerv2.PalNonceRequestConfig"),
+            expoPromise).invoke(allocate.invoke(unsafe, pal), null, null, expo);
+        check(calls.size() == 1 && calls.get(0).startsWith("resolve[{") && calls.get(0).contains("sdkAvailable=false"),
+            "PAL nonce: " + calls);
+        calls.clear();
+
+        Class<?> fpjs = Class.forName("com.fingerprintjs.reactnative.RNFingerprintjsProModule");
+        Object module = allocate.invoke(unsafe, fpjs);
+        for (String name : new String[]{"getVisitorDataWithTimeout", "getVisitorIdWithTimeout"}) {
+            Method method = fpjs.getMethod(name, readableMap, String.class, Integer.class, reactPromise);
+            switches.put("block_fingerprinting", false);
+            method.invoke(module, null, null, null, promise);
+            check(calls.isEmpty(), name + " ran Lurk's rejection with the switch off: " + calls);
+            switches.put("block_fingerprinting", true);
+            method.invoke(module, null, null, null, promise);
+            check(calls.equals(List.of("reject[Error: , NetworkError]")), name + ": " + calls);
+            calls.clear();
+        }
+        System.out.println("PASS: Firebase, Datadog and PAL stubs resolve their promise; FingerprintJS rejects only "
+            + "with its switch on");
     }
 
     /**

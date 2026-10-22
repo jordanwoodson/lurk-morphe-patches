@@ -159,8 +159,8 @@ Other concrete surfaces include:
   The analytics patch deliberately preserves this call.
 
 FingerprintJS integration also exists, including `RNFingerprintjsProModule` and
-`useFingerprintId`. Removing `AD_ID` does not disable this code. It needs separate
-dependency analysis before deciding whether to include it in an analytics patch.
+`useFingerprintId`. Removing `AD_ID` does not disable this code. (Disable analytics now
+covers it with its own opt-in switch; see [Disable analytics](#disable-analytics).)
 Likewise, do not remove Pusher/Centrifugo indiscriminately; the package contains chat
 transport integration, not just analytics libraries.
 
@@ -223,7 +223,7 @@ details and validation follow.
 | Lurk icon | Yes | None (patch time) | Adaptive Lurk icon in Kick green, including themed icon. |
 | Remove tracking permissions | Yes | None (patch time) | Removes the four verified advertising/referrer permissions. |
 | Clone app | No | None (patch time) | Separate package, permissions and 13 provider authorities; defaults to `com.kick.mobile.lurk`. |
-| Disable analytics | Yes | On | Firebase collection/event bridge, Insider initialization/events/queued jobs, Datadog initialization, Mux/Datazoom and PAL nonce suppression. Promise completion is preserved. |
+| Disable analytics | Yes | On; Block device fingerprinting, off | Firebase collection/event bridge, Insider initialization/events/queued jobs, Datadog initialization, Mux/Datazoom and PAL nonce suppression; optionally FingerprintJS Pro. Promise completion is preserved. |
 | Disable autoplay | Yes | On | Changes the initial feed-preview preference; saved preferences and Kick's own toggle take precedence. |
 | Default video quality | No | On; quality on mobile data, Same as on Wi-Fi | Configurable adaptive default/Auto ceiling, consistently applied to initialization, reset and cleanup. Explicit player selections retain Kick's normal rules. A lower starting ceiling can be set for mobile data. |
 | Hide KICKs tipping | Yes | Off | Gift-shop, purchase and leaderboard tipping entry points; received gifts remain. |
@@ -278,6 +278,50 @@ Each entry says what Kick does, what the patch changes and how it was checked. H
 switches take effect after **Restart Kick** on the Lurk settings screen; native ones apply
 at once. Function names are Kick's own JavaScript names; anonymous functions are found by
 the properties they read and the strings they load.
+
+### Disable analytics
+
+What the switch stops, each at its native boundary, with any React Native or Expo promise
+settled so the JavaScript awaiting it carries on:
+
+- Firebase Analytics: collection off from the first start (manifest default, then
+  `setAnalyticsCollectionEnabled(false)` in `MainApplication.onCreate`), and the event bridge
+  (`NativeRNFBTurboAnalytics.logEvent`) resolves without dispatching.
+- Insider: `RNInsiderModule.init`, the `InsiderEvent` builder, and the two job services that
+  upload queued sessions and events, which report synchronous completion.
+- Datadog: both initialization paths (`DdSdkImplementation.initialize`, which resolves its
+  promise, and `DdSdkNativeInitialization`). Without the SDK, the view, action, log and trace
+  calls Kick's JavaScript keeps making reach Datadog's own no-op objects
+  (`GlobalRumMonitor.get` returns `NoOpAdvancedRumMonitor`, `Logger.Builder` on the no-op core
+  builds a logger with no Datadog handler), so nothing is queued or sent.
+- Mux: `KickIvsPlayerV2View.initializeMuxAnalyticsListener` returns at once.
+  `setMuxAnalyticsConfig` still stores the config and calls it, but it is the only place a
+  `MuxAnalyticsListener`, and so `MuxStats`, is created.
+- Datazoom: `DatazoomAnalyticsManager.apply` returns at once. It is the only caller of
+  `Datazoom.init` and the only place the adapter is set; `sendDatazoomAnalyticsEvent` then only
+  records a fullscreen flag, and an ad click finds no adapter.
+- Google PAL: `PalSDKModuleBridge.generateNonce` resolves with Kick's own "SDK unavailable"
+  result, so the playback request goes out without a nonce, as on a device without PAL.
+
+Kick's own API requests are not touched, including `postPlayerTelemetry`, the playback request
+that returns the stream URLs (and tells Kick what you watch, as any streaming site's playback
+request does).
+
+"Block device fingerprinting" (`block_fingerprinting`, off by default) covers FingerprintJS Pro.
+Kick configures it with its own proxy endpoint on kick.com. The fingerprint is requested when a
+signed-in session starts (`FpjsUserSessionHandler`, tagged with the session type, user ID and
+username, cached for a day), when you sign up (its request ID goes with `api/v1/signup/complete`)
+and for age assurance (`useCheckAgeAssurance` reports `missing_fpjs_request_id` without one).
+The switch makes `getVisitorDataWithTimeout` and `getVisitorIdWithTimeout`, which every call goes
+through, reject the way the SDK reports a network error, before the SDK is reached. It starts
+off because sign-up and age checks can then fail. It is read on each request (no restart) and
+checks that it is registered, so an unreadable settings registry can't turn it on.
+
+Checked: `bin/test-kick` runs the real `logEvent`, Datadog `initialize`, PAL `generateNonce` and
+both FingerprintJS methods on ART and checks the promise calls; `verify_privacy.py` covers the
+switch logic. On the emulator, signed out, Kick started and loaded Home with fingerprinting blocked,
+and made no FingerprintJS request at start either way; the signed-in, sign-up and age-check paths
+need an account and were checked statically only.
 
 ### Block update prompts
 
