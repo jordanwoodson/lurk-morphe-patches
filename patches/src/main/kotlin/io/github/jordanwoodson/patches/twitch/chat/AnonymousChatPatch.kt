@@ -1,7 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.chat
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException

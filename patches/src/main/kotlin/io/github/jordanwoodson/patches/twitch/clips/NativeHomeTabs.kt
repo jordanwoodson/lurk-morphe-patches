@@ -1,6 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.clips
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod

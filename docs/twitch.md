@@ -216,9 +216,19 @@ and a late Branch answer is then ignored. With the patch, 16 cold starts gave 0 
 fired twice.
 
 Implementing this exposed a patcher pitfall. A non-range `invoke-static { p0, v0 }` in a method whose
-`p0` maps above v15 (here v30) is dropped from the output without an error or warning. Injected
-calls therefore use `/range` or low registers, and a scan of the patched DEX lists every extension
-method that app code calls (`~/build/lurk-morphe-patches/twitch-gap/scripts/ext_calls.py`).
+`p0` maps above v15 (here v30) is dropped from the output without an error or warning. The same
+happens to every instruction with four-bit register fields (`iget`, `instance-of`, `move-object`,
+`const/4`, `if-eq`): Morphe's inline smali compiler prints the rejection to stderr and leaves the line
+out. Two checks guard against it:
+
+- The Twitch patches insert smali through `twitch/shared/Smali.kt`, which compiles each snippet,
+  counts the instructions that came out and fails the patch unless every instruction line compiled.
+  Calls are built with `invokeStatic()` (plain form up to v15, `/range` above), and entry hooks that
+  need a parameter in a four-bit form copy it into a local first (`lowParameters()`).
+- `tests/twitch/expected-hooks.txt` lists every extension method the patches call from app code,
+  grouped by the settings key of the patch that injects it. `bin/test-twitch` runs
+  `tests/twitch/verify_hooks.py`, which keeps the groups of the patches the APK includes (read from
+  its settings registry) and checks each call is in the patched dex.
 
 ### Player: sleep timer, refresh, gestures and latency
 
@@ -659,8 +669,9 @@ manifest. The independent interface/playback selection also patches successfully
 Android probes execute the injected loader and actual app classes, not stand-ins
 for the target methods:
 
-- `bash bin/test-twitch <patched.apk>`: embedded defaults, process snapshot,
-  independent switches and exact all-off reconstruction of the original bundle.
+- `bash bin/test-twitch <patched.apk>`: every injected extension call of the included patches
+  (`expected-hooks.txt`), then embedded defaults, process snapshot, independent switches and exact
+  all-off reconstruction of the original bundle.
 - `bash bin/test-twitch-privacy <patched.apk>`: real Spade callback once/null/off
   paths, completed client-ad emitter, Crashlytics upload permission and four
   dispatch guards. Disabled controls reach the deliberately empty original

@@ -1,6 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.account
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch

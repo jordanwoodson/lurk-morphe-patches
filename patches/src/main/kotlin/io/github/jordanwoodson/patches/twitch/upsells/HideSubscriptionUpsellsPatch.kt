@@ -1,6 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.upsells
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
@@ -18,11 +18,15 @@ import app.morphe.patcher.resource.ResourceType
 import app.morphe.patcher.resource.resourceId
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
-import io.github.jordanwoodson.patches.shared.settings.addInstructionsIfEnabled
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsIfEnabled
 import io.github.jordanwoodson.patches.shared.settings.isEnabled
 import io.github.jordanwoodson.patches.twitch.clips.hideSubscriptionInterface
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
+import io.github.jordanwoodson.patches.twitch.shared.lowParameters
+import io.github.jordanwoodson.patches.shared.invoke
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.twitchHermes
 import io.github.jordanwoodson.patches.twitch.shared.twitchHermesPatch
@@ -94,15 +98,18 @@ private fun BytecodePatchContext.hideNativeSubscribeButtons() {
     val view = method.implementation!!.instructions.mapNotNull {
         ((it as? ReferenceInstruction)?.reference as? FieldReference)?.takeIf { field -> field.definingClass == type && field.type == "Landroid/view/ViewGroup;" }
     }.distinctBy { it.toString() }.singleOrNull() ?: throw PatchException("Twitch: Subscribe renderer has no unique button ViewGroup")
+    // v0 holds the switch; parameters above v15 are copied from v1 up first.
+    val p = method.lowParameters(0, 1, firstLocal = 1)
     method.addInstructionsIfEnabled(KEY, """
-        instance-of v0, p1, $subscribe
+        ${p.prologue}
+        instance-of v0, v${p[1]}, $subscribe
         if-nez v0, :lurk_hide_subscription_button
-        instance-of v0, p1, $gift
+        instance-of v0, v${p[1]}, $gift
         if-eqz v0, :lurk_off
         :lurk_hide_subscription_button
-        iget-object v0, p0, $view
-        const/16 p1, 0x8
-        invoke-virtual { v0, p1 }, Landroid/view/View;->setVisibility(I)V
+        iget-object v0, v${p[0]}, $view
+        const/16 v${p[1]}, 0x8
+        ${invoke("invoke-virtual", "Landroid/view/View;->setVisibility(I)V", 0, p[1])}
         return-void
     """)
 }

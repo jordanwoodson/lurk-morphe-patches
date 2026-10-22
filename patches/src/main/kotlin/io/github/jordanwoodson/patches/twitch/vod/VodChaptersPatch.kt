@@ -1,7 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.vod
 
 import app.morphe.patcher.Fingerprint
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.methodCall
 import app.morphe.patcher.patch.PatchException
@@ -16,7 +16,8 @@ import com.android.tools.smali.dexlib2.iface.reference.TypeReference
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.twitch.player.VodPlayerOverlayFingerprint
-import io.github.jordanwoodson.patches.twitch.player.parameterRegister
+import io.github.jordanwoodson.patches.shared.parameterRegister
+import io.github.jordanwoodson.patches.shared.invokeStatic
 import io.github.jordanwoodson.patches.twitch.player.playerPresenterClass
 import io.github.jordanwoodson.patches.twitch.player.requireNoBranchTo
 import io.github.jordanwoodson.patches.twitch.player.requireUnwritten
@@ -63,7 +64,8 @@ val vodChaptersPatch = bytecodePatch(
                 method.parameterTypes.map { it.toString() } == listOf(VOD_MODEL, "I", "Ljava/lang/String;")
         } ?: throw PatchException("Twitch: the VOD load method changed")
         load.requireNoBranchTo(0, "the VOD load method")
-        load.addInstructions(0, "invoke-static { p0, p1 }, $VOD->vodLoaded(Ljava/lang/Object;Ljava/lang/Object;)V")
+        load.addInstructions(0, invokeStatic("$VOD->vodLoaded(Ljava/lang/Object;Ljava/lang/Object;)V",
+            load.parameterRegister(0), load.parameterRegister(1)))
 
         // Every native player presenter (live, VOD, clip) attaching its player view, so a tapped overlay
         // resolves to the presenter under it rather than to a preloaded neighbour. The VOD presenter is
@@ -88,7 +90,7 @@ val vodChaptersPatch = bytecodePatch(
             // A non-range invoke above v15 is dropped silently, so refuse rather than lose the call.
             if (self > 15 || view > 15) throw PatchException("Twitch: player view attach registers are too high")
             attach.method.addInstructions(read.index + 1,
-                "invoke-static { v$self, v$view }, $VOD->playerView(Ljava/lang/Object;Landroid/view/View;)V")
+                invokeStatic("$VOD->playerView(Ljava/lang/Object;Landroid/view/View;)V", self, view))
         }
 
         // Seek exactly as Twitch does, through the presenter's own interface method.

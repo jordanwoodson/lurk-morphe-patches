@@ -2,7 +2,7 @@ package io.github.jordanwoodson.patches.twitch.emotes
 
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
-import com.android.tools.smali.dexlib2.AccessFlags
+import io.github.jordanwoodson.patches.shared.parameterRegisters
 import com.android.tools.smali.dexlib2.builder.BuilderOffsetInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
@@ -11,14 +11,6 @@ import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ThreeRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
-
-/** The register number of parameter [index] (0 = this for instance methods), as a v register. */
-internal fun MutableMethod.parameterRegister(index: Int): Int {
-    val implementation = implementation!!
-    val sizes = (if (AccessFlags.STATIC.isSet(accessFlags)) emptyList() else listOf(1)) +
-        parameterTypes.map { if (it.toString() == "J" || it.toString() == "D") 2 else 1 }
-    return implementation.registerCount - sizes.sum() + sizes.take(index).sum()
-}
 
 /** Fails if a branch, switch or try block jumps to [index]: code inserted there would be skipped. */
 internal fun MutableMethod.requireNotBranchTarget(index: Int, what: String) {
@@ -54,7 +46,7 @@ internal fun MutableMethod.requireFreeRegister(index: Int, register: Int, what: 
 /** A local register below v16 that is dead at [index] and not in [exclude]. */
 internal fun MutableMethod.freeRegister(index: Int, exclude: Collection<Int>, what: String): Int {
     // The first parameter register (or this) is the number of locals.
-    val locals = parameterRegister(0)
+    val locals = parameterRegisters().firstOrNull() ?: implementation!!.registerCount
     return (0 until minOf(locals, 16)).firstOrNull { it !in exclude && isFreeRegister(index, it) }
         ?: throw PatchException("Twitch: no free register for $what")
 }

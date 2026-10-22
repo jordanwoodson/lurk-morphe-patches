@@ -1,7 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.analytics
 
 import app.morphe.patcher.Fingerprint
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import com.android.tools.smali.dexlib2.AccessFlags
@@ -13,7 +13,7 @@ import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.iface.reference.StringReference
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
-import io.github.jordanwoodson.patches.shared.settings.addInstructionsIfEnabled
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsIfEnabled
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.hex

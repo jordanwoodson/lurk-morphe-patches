@@ -1,13 +1,15 @@
 package io.github.jordanwoodson.patches.twitch.startup
 
 import app.morphe.patcher.Fingerprint
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.util.smali.ExternalLabel
 import io.github.jordanwoodson.patches.shared.settings.requireLocals
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
@@ -38,7 +40,7 @@ val fixStuckStartScreenPatch = bytecodePatch(
         // Route once per start screen: when Branch answers after the fallback, its route is skipped.
         route.requireLocals(1)
         route.addInstructionsWithLabels(0, """
-            invoke-static { p0 }, $STARTUP->firstRoute(Landroid/app/Activity;)Z
+            ${invokeStatic("$STARTUP->firstRoute(Landroid/app/Activity;)Z", route.parameterRegister(0))}
             move-result v0
             if-nez v0, :lurk_route
             return-void
@@ -49,7 +51,7 @@ val fixStuckStartScreenPatch = bytecodePatch(
         create.addInstructions(0, """
             move-object/from16 v0, p0
             const-string v1, "${route.name}"
-            invoke-static { v0, v1 }, $STARTUP->watchStart(Landroid/app/Activity;Ljava/lang/String;)V
+            ${invokeStatic("$STARTUP->watchStart(Landroid/app/Activity;Ljava/lang/String;)V", 0, 1)}
         """)
     }
 }

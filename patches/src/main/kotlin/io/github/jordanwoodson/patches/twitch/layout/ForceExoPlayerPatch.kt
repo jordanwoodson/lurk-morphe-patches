@@ -1,6 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.layout
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import io.github.jordanwoodson.patches.shared.settings.Section

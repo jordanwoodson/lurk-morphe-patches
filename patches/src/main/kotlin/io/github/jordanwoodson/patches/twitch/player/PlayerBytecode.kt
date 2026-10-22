@@ -1,6 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.player
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
@@ -38,13 +38,6 @@ internal fun MutableMethod.requireUnwritten(register: Int, end: Int, what: Strin
             throw PatchException("Twitch: $what is overwritten")
         }
     }
-}
-
-/** The register number of parameter [index] (0 is `this` in an instance method). */
-internal fun MutableMethod.parameterRegister(index: Int): Int {
-    val sizes = (if (AccessFlags.STATIC.isSet(accessFlags)) emptyList() else listOf(1)) +
-        parameterTypes.map { if (it.toString() == "J" || it.toString() == "D") 2 else 1 }
-    return implementation!!.registerCount - sizes.sum() + sizes.take(index).sum()
 }
 
 /**

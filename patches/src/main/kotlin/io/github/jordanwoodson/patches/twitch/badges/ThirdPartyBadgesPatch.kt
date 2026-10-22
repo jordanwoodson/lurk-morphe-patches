@@ -2,7 +2,7 @@ package io.github.jordanwoodson.patches.twitch.badges
 
 import io.github.jordanwoodson.patches.twitch.chat.twitchRNChatPatch
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import com.android.tools.smali.dexlib2.Opcode

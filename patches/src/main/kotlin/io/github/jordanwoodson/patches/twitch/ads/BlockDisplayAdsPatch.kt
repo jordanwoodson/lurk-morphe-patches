@@ -1,6 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.ads
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -11,7 +11,7 @@ import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.iface.reference.TypeReference
 import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
-import io.github.jordanwoodson.patches.shared.settings.addInstructionsIfEnabled
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsIfEnabled
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH

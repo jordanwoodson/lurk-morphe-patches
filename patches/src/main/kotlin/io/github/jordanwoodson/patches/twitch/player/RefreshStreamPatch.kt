@@ -1,7 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.player
 
 import app.morphe.patcher.Fingerprint
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.methodCall
 import app.morphe.patcher.patch.PatchException
@@ -17,6 +17,9 @@ import io.github.jordanwoodson.patches.shared.settings.Section
 import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
+import io.github.jordanwoodson.patches.shared.requireLowRegisters
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
@@ -62,8 +65,10 @@ val refreshStreamPatch = bytecodePatch(
             val self = match.method.parameterRegister(0)
             match.method.requireUnwritten(self, read.index, "player presenter")
             match.method.requireNoBranchTo(read.index + 1, "player view attach")
+            // Mid-method, with no register proven free: fail rather than emit a call that would be dropped.
+            match.method.requireLowRegisters("player view attach", self, view)
             match.method.addInstructions(read.index + 1,
-                "invoke-static { v$self, v$view }, $PLAYER->playerView(Ljava/lang/Object;Landroid/view/View;)V")
+                invokeStatic("$PLAYER->playerView(Ljava/lang/Object;Landroid/view/View;)V", self, view))
         }
 
         // The settings gear of the classic overlays, live and VOD/clips: long-press refreshes.
@@ -95,7 +100,7 @@ val refreshStreamPatch = bytecodePatch(
         // Long-pressing the native player view: Twitch emits it and ignores it.
         PlayerLongPressFingerprint.twitchMatch("player long press").method.apply {
             requireNoBranchTo(0, "the player's long press")
-            addInstructions(0, "invoke-static { p1 }, $PLAYER->videoLongPress(Landroid/view/MotionEvent;)V")
+            addInstructions(0, invokeStatic("$PLAYER->videoLongPress(Landroid/view/MotionEvent;)V", parameterRegister(1)))
         }
 
         twitchSettings.add(

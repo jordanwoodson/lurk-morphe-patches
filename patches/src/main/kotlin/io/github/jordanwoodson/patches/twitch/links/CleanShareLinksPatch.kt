@@ -1,7 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.links
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.replaceInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction

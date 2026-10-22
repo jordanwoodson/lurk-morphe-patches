@@ -1,6 +1,6 @@
 package io.github.jordanwoodson.patches.twitch.ads
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -15,6 +15,10 @@ import io.github.jordanwoodson.patches.shared.settings.isEnabled
 import io.github.jordanwoodson.patches.shared.settings.requireLocals
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
+import io.github.jordanwoodson.patches.shared.invoke
+import io.github.jordanwoodson.patches.shared.requireLowRegisters
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 
@@ -45,13 +49,14 @@ val blockClientAdsPatch = bytecodePatch(
             .filter { it.definingClass == emitter && it.returnType == "V" &&
                 it.parameterTypes.map { type -> type.toString() } == listOf("Ljava/lang/Object;") }
             .distinct().singleOrNull() ?: throw PatchException("Twitch: ad eligibility emitter changed")
+        method.requireLowRegisters("client ad eligibility emitter", method.parameterRegister(1))
         method.addInstructionsWithLabels(start, """
             ${isEnabled("block_client_ads", "v0")}
             if-eqz v0, :lurk_ads_off
             sget-object v0, Ljava/lang/Boolean;->FALSE:Ljava/lang/Boolean;
             new-instance v2, Ltv/twitch/android/util/Optional;
             invoke-direct { v2, v0 }, Ltv/twitch/android/util/Optional;-><init>(Ljava/lang/Object;)V
-            invoke-virtual { p1, v2 }, $onSuccess
+            ${invoke("invoke-virtual", onSuccess.toString(), method.parameterRegister(1), 2)}
             return-void
         """, ExternalLabel("lurk_ads_off", method.getInstruction(start)))
         twitchSettings.add(SwitchSetting("block_client_ads", "Block client ads",

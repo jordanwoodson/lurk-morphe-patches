@@ -1,7 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.player
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
+import io.github.jordanwoodson.patches.twitch.shared.addInstructions
+import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.ResourcePatchContext
@@ -26,6 +26,8 @@ import io.github.jordanwoodson.patches.shared.settings.SwitchSetting
 import io.github.jordanwoodson.patches.shared.settings.requireLocals
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettings
 import io.github.jordanwoodson.patches.twitch.settings.twitchSettingsPatch
+import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.twitch.shared.Constants.COMPATIBILITY_TWITCH
 import io.github.jordanwoodson.patches.twitch.shared.twitchMatch
 import org.w3c.dom.Element
@@ -150,7 +152,8 @@ val playerGesturesPatch = bytecodePatch(
                 fingerprint.twitchMatch("theatre $hook").method.apply {
                     requireLocals(1)
                     addInstructionsWithLabels(0, """
-                        invoke-static { p0, p1 }, $PLAYER->$hook(Landroid/view/ViewGroup;Landroid/view/MotionEvent;)Z
+                        ${invokeStatic("$PLAYER->$hook(Landroid/view/ViewGroup;Landroid/view/MotionEvent;)Z",
+                            parameterRegister(0), parameterRegister(1))}
                         move-result v0
                         if-eqz v0, :stock
                         return v0
