@@ -17,15 +17,18 @@ The Chrome profile lives under $MORPHE_WORK (default ~/build/lurk-morphe-patches
 import asyncio
 import argparse
 import base64
+import contextlib
 import json
 import os
 import re
 from pathlib import Path
 import shutil
+import signal
 import socket
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.parse
 import urllib.request
 
@@ -88,6 +91,33 @@ def chrome():
         if name and shutil.which(name):
             return shutil.which(name)
     sys.exit("FAIL: no Chrome or Chromium (set CHROME)")
+
+
+def group_exited(pgid, seconds):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def stop_chrome(process):
+    """Stop Chrome and every helper in its process group. The network service still writes to the profile
+    for a moment after the browser process exits, so removing the profile any earlier left part of it behind."""
+    if process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+    if not group_exited(process.pid, 5):
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        group_exited(process.pid, 2)
 
 
 class Page:
@@ -560,13 +590,16 @@ async def main():
     command = [chrome(), "--headless=new", f"--remote-debugging-port={port}", f"--user-data-dir={profile}",
                "--no-first-run", "--disable-gpu", "about:blank"]
     stderr = profile / "chrome.log"
-    process = None
+    processes = []
     try:
         # A loaded CI runner can take well over ten seconds to bring up headless Chrome; wait up to a
         # minute, and launch once more if the first process dies, keeping its stderr for the message.
         url = None
         for attempt in range(2):
-            process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=stderr.open("ab"))
+            # Its own process group, so stop_chrome can wait for the helpers Chrome starts.
+            with stderr.open("ab") as log:
+                process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=log, start_new_session=True)
+            processes.append(process)
             for _ in range(600):
                 if process.poll() is not None:
                     break
@@ -578,9 +611,7 @@ async def main():
                     await asyncio.sleep(0.1)
             if url:
                 break
-            if process.poll() is None:
-                process.kill()
-                process.wait()
+            stop_chrome(process)
         if not url:
             sys.exit("FAIL: Chrome didn't start: " + stderr.read_text(errors="replace")[-2000:])
         async with websockets.connect(url, max_size=None) as ws:
@@ -603,9 +634,8 @@ async def main():
             finally:
                 reader.cancel()
     finally:
-        if process is not None and process.poll() is None:
-            process.terminate()
-            process.wait()
+        for process in processes:
+            stop_chrome(process)
         shutil.rmtree(profile, ignore_errors=True)
     print("PASS: chat page script")
 
