@@ -1,3 +1,11 @@
+## [1.14.2-dev.1](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.14.1...v1.14.2-dev.1) (2026-10-23)
+
+### Shared
+
+#### 🐛 Bug Fixes
+
+* **tests:** stop the Kick chat page test leaving Chrome profiles behind ([7fb844a](https://github.com/jordanwoodson/lurk-morphe-patches/commit/7fb844a35f874dd4a93281cc97ffcbe808fc0173))
+
 ## [1.14.1](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.14.0...v1.14.1) (2026-10-22)
 
 ### Shared
