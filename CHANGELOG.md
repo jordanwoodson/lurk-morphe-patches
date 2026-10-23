@@ -1,3 +1,11 @@
+## [1.14.3](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.14.2...v1.14.3) (2026-10-23)
+
+### Twitch
+
+#### 🐛 Bug Fixes
+
+* **Third-party emotes:** always log why an emote list can't load ([ef6de9c](https://github.com/jordanwoodson/lurk-morphe-patches/commit/ef6de9cc805533f2ce3255cb0328eb3084770494))
+
 ## [1.14.3-dev.1](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.14.2...v1.14.3-dev.1) (2026-10-23)
 
 ### Twitch
