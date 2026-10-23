@@ -649,7 +649,10 @@ public final class TwitchEmotes {
         } catch (IOException | RuntimeException e) {
             Entry old = SETS.get(key);
             put(key, old != null ? old.emotes : NONE, RETRY_MS);
-            Logger.d("emotes: " + NAMES[provider] + " " + scope + " unavailable: " + e);
+            // Always written, since the emotes then stay text and a bug report needs the reason; without the
+            // channel's ID. At most once a minute per list: the next try waits RETRY_MS.
+            String reason = global ? String.valueOf(e) : String.valueOf(e).replace(scope, "<channel>");
+            Logger.w("emotes: " + NAMES[provider] + (global ? " global" : " channel") + " list unavailable: " + reason);
         }
     }
 
