@@ -676,6 +676,15 @@ emotes as Twitch emote objects with synthetic `lurk…` IDs, and the central emo
 those IDs to each provider's CDN. Animated emotes use GIF; static ones, or all of them when Twitch's
 animated-emotes setting is off, use PNG.
 
+Native live chat builds every message's line model in one place (the mapper that turns chat events into
+`LiveChatMessage`s calls the matcher for chat, notices, replies and shared chat), whether an account is signed
+in or not; signing in changes the IRC login, not that path (checked in the bytecode; not run signed in). A
+service turned on while a channel is open loads its lists with the next message, without rejoining (checked on
+the emulator: xQc's 7TV list arrived about a second after the switch, and the next lines had 7TV emotes). A
+channel with no set on a service still gets the service's global emotes; a 404 for the channel is an empty list,
+not a failure (checked on a channel none of the three services knows: three empty channel lists, then the
+global ones). The landscape one-chat overlay of the native theatre is native too and gets the same emotes.
+
 VOD replay splits its named message tokens. React Native chat gets `emotes=` ranges added to incoming
 IRC frames, and its `ImageSource` maps the same URLs. Compiled RN row wrappers additionally enrich
 history with cached emote/badge/pronoun snapshots. Offsets use Unicode code points, matching Twitch's
