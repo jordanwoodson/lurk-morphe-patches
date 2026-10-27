@@ -115,6 +115,12 @@ TwitchChatStyle.landscapeChatGuide
 TwitchChatStyle.markLine
 TwitchChatStyle.onMessage
 
+# if chat_emote_info
+TwitchChatInfo.badges
+TwitchChatInfo.message
+TwitchChatInfo.twitchChannelBadge
+TwitchChatInfo.twitchGlobalBadge
+
 # if chat_overlay
 TwitchChatOverlay.channel
 TwitchChatOverlay.dispose

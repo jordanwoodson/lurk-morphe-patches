@@ -84,6 +84,7 @@ ReVive, bttv-android, TwitchMod, Xtra, Twire and Frosty.
 | Highlights and blacklist | Chat keywords |
 | Chat appearance | Chat appearance |
 | Badge, emote and message scale and spacing (Frosty) | Chat appearance |
+| Emote and badge info sheet (Frosty) | Emote and badge info |
 | 7TV/BTTV/FFZ emotes | Third-party emotes (opt-in), in the emote picker and autocomplete too |
 | Third-party badges and pronouns | Third-party badges, with pronouns (opt-in) |
 | Recent chat history | Declined: Twitch already loads it |
@@ -737,6 +738,57 @@ costs one settings read: the main thread gets a task only to remove an overlay s
 Twitch already loads recent chat history on join (native
 `ChatHistory`, RN preload) and replays VOD chat, so a third-party history service isn't used.
 
+### Emote and badge info
+
+*Emote and badge info* (`chat_emote_info`, a patch of its own, selected by default, switch off) shows a small
+sheet when an emote or a badge is tapped in native live chat, chat history or VOD chat replay: the image larger,
+its name (the emote's code, or the badge's title), where it comes from ("7TV channel emote", "Twitch global
+badge", "FrankerFaceZ badge", "Pronouns from pronouns.alejo.io"...), who made or added it when the service's list
+says (7TV's `data.owner`, BetterTTV's shared emotes' `user`, FrankerFaceZ's `owner`), and a *Copy name* button.
+The sheet is a plain framework `Dialog` with views made in code, at the bottom of the screen, in the colors of
+Twitch's dark or light theme (the activity's night mode, which Twitch's theme setting sets).
+
+What Twitch does on a tap:
+- an emote carries a click span that opens Twitch's emote card, but Twitch opens the card only for a signed-in
+  account (`isLoggedIn` before the card's fragment); signed out, the tap does nothing;
+- a username opens the viewer card (signed out, nothing showed on the emulator, with or without the patch);
+- a badge has no tap action;
+- a long press anywhere on a line opens Twitch's message menu (Reply, Copy). The chat text view's movement
+  method sees the long press first and swallows its release, so spans never get it.
+
+The hook sits where the line builder puts a line's spans together (`ChatMessageSpanGroup`, the same point Compact
+chat uses): the badge span and the message span go through `TwitchChatInfo.badges`/`message`, which put a tap
+span (`ClickableSpan`) over every image span without a tap of its own: all badges, and emotes whose image URL is
+Twitch's or a service's (cheermotes and GIFs keep Twitch's handling). Twitch emotes keep Twitch's emote card span
+while an account is signed in (Twitch's user preferences hold its login); signed out, Lurk's span goes over it with
+the highest span priority, so the chat's `LinkMovementMethod` picks it and the tap shows Lurk's sheet instead of
+nothing. Turning the switch on applies to lines built from then on; with it off, a tap span left on an older line
+does nothing.
+
+The URL and size class of an image span come from Twitch's placeholder drawable (the class the chat image box
+takes, with a single `String` field) through two bridge stubs, `isPlaceholder` and `placeholderUrl`, filled at
+patch time. Badge titles come from Twitch's badge registry: the method that looks a badge key (set ID and version)
+up in the channel's badges, then the global ones, gets a hook right after each lookup's cast
+(`twitchChannelBadge`, `twitchGlobalBadge`), which keeps the last 512 URLs with their set, version and scope. The
+key's `BadgeKey(setId=…, version=…)` toString is checked at patch time and parsed at run time. The title follows
+Twitch's own where it's known ("1-Year Subscriber", "Tier 3 6-Month Subscriber", "cheer 1000", "50 Gift Subs",
+"Prime Gaming", "Verified"), else the set ID in words. Third-party emotes are found in Lurk's cached lists by the ID
+in their CDN URL, preferring the channel whose chat is open, then any channel, then the global list; third-party
+badges and pronouns by their image URL. Opening the sheet loads one larger copy of the image (Twitch 3.0, 7TV 4x,
+BetterTTV 3x, FrankerFaceZ 4, falling back to the chat's URL) from the host the chat image came from, at most 4 MB,
+decoded with `ImageDecoder` so animated emotes move; nothing else is sent.
+
+React Native chat is unchanged: its emotes have their own `onPressEmote` callbacks and no native spans.
+`bin/test-twitch-chat-style` (`ChatStyleArtProbe`) runs the real line builder with a Twitch badge view model and
+checks the tap span with the switch on and off, the tap spans over Twitch, 7TV, cheermote and GIF images signed
+in and out (including the span order), the badge registry hook's titles and the larger-image URLs;
+`test_providers.py` checks which list a third-party emote came from, and `bin/test-twitch-providers` the owner and
+title fields of each service's list. Verified on the emulator, signed out, light and dark: a 7TV channel emote
+("NAHH", "by itsCerv"), a Twitch emote ("LUL"), a channel subscriber badge ("2-Month Subscriber", "Twitch channel
+badge"), a global badge ("Twitch Recap 2025"), FrankerFaceZ's supporter badge, a pronoun badge and a 7TV emote in
+VOD chat replay; *Copy name* put the name on the clipboard; a long press on an emote opened Twitch's Reply/Copy
+menu, not the sheet. Twitch's emote card and viewer card for a signed-in account were not checked: no account.
+
 ### VOD chapters
 
 *VOD chapters* (on by default) adds a Chapters button next to the rotate button in the native VOD
@@ -1015,7 +1067,8 @@ patched APK as `assets/lurk/locators.json`:
   `twitch.block_cookie_notice.options_constructor`, `twitch.hide_chat_highlights.dispatch`/`highlight_*`,
   `twitch.hide_clips.home_tabs`, `twitch.hide_subscription_upsells.subscribe_renderer`/`turbo_dialog_route` and
   `twitch.emote_picker.section`/`autocomplete_map`/`autocomplete_order`/`autocomplete_order_type` and
-  `twitch.latency_badge.latency` and `twitch.auto_claim_drops.handler`/`handler_case`.
+  `twitch.latency_badge.latency` and `twitch.auto_claim_drops.handler`/`handler_case` and
+  `twitch.emote_badge_info.placeholder`.
 
 `ChatArtProbe`, `AdsProbe`, `PrivacyAdsProbe` and `HighlightsArtProbe` read the file through
 `ProbeLocators.java`, and `verify_privacy.py` and `verify_interface_emitted.py` through `locators.py`;

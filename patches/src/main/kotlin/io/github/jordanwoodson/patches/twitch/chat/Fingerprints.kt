@@ -195,6 +195,21 @@ internal object ChatImageBoxFingerprint : Fingerprint(
     ),
 )
 
+// Emote and badge info.
+
+// Twitch's badge image registry: a badge set and version's image URL for a channel, from the channel's badges
+// first, then the global ones (two map lookups each).
+internal object BadgeUrlFingerprint : Fingerprint(
+    returnType = "Ljava/lang/String;",
+    parameters = listOf("Ljava/lang/String;", "Ljava/lang/String;", "Ltv/twitch/android/models/Tuid;"),
+    filters = listOf(
+        methodCall(definingClass = "Ljava/util/concurrent/ConcurrentHashMap;", name = "get"),
+        methodCall(definingClass = "Ljava/util/Map;", name = "get"),
+        methodCall(definingClass = "Ljava/util/concurrent/ConcurrentHashMap;", name = "get"),
+        methodCall(definingClass = "Ljava/util/Map;", name = "get"),
+    ),
+)
+
 // Lays out the native theatre. In landscape the chat column starts at a guideline: 70% of the width, 80% on
 // tablets (the one-chat overlay is placed after).
 internal object TheatreLayoutFingerprint : Fingerprint(
