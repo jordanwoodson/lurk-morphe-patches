@@ -355,6 +355,98 @@ swipe with the switch on and leaves it to Twitch with the switch off. `overlay-d
 same for `VerticalTheatreFragment.onDestroyView`, whose injected call retires the view's chat feeder
 before Twitch's own teardown. Both fail on an APK without the hooks.
 
+### Fill screen
+
+*Fill screen* (`fill_screen`, Playback, off by default; the patch is selected by default, like Kick's and
+Rumble's of the same name) makes a landscape stream or video use the whole screen of a phone taller than 16:9,
+the strip beside the camera cutout included, cropping the video's top and bottom instead of showing bars at its
+sides.
+
+Where the bars come from: from Android 11, Twitch's activities call AndroidX's `enableEdgeToEdge`, so the window
+already reaches into the cutout area (`layoutInDisplayCutoutMode=always` in `dumpsys window`). But one insets
+listener pads Twitch's full-screen containers, `fullscreen_layout` (where the theatre lives) among them, by the
+WindowInsetsCompat types system bars, keyboard and display cutout (`0x28f`). In landscape the cutout's inset is
+a strip at the short edge, and the theatre then fits a 16:9 video into what's left: on the emulator (1600x720
+in landscape, a 136 px cutout inset) the theatre starts at x=136 and the video is 1280 wide at x=228, so the
+cutout side shows 228 px of black and the other side 92 px.
+
+One switch does both parts, as Kick's and Rumble's Fill screen is one switch: the issue asks for the zoom past
+the cutout, and the cutout strip without the zoom would only move a letterboxed 16:9 video and leave bars on
+both sides.
+
+Three hooks, all through `TwitchFillScreen`:
+
+- The insets listener, the `onApplyWindowInsets` lambda that pads by `0x28f` or, for other views, by its
+  cutout-less sibling `0x20f` (found by both literals and its `View.setPadding` call). Its types go through
+  `insetTypes`, which leaves the cutout out for the container of a player that qualifies. When a player starts
+  or stops qualifying the extension asks for an insets pass, and Twitch's own listener sets the padding, so
+  letting go gives Twitch's exact padding back.
+- The native player view delegate's video sizing: the delegate is found by its constructor's
+  `playback_view_container`, `error_frame` and `cc_tv` ids, and the method is its `(II)V` method that reads the
+  display type enum (`AspectRatio`, `ForceCrop`, `MatchWidth`, which keeps its constant names) and fits the
+  video container. The player's presenter calls it on every layout of the player view, so rotating, showing
+  the chat or entering picture-in-picture checks again. Its start hands `measure` the player and the video's
+  size.
+- The React Native player's surface sizing, `PlaybackSurface.measureForContent` (the class keeps its name):
+  its IVS resize mode goes through `surfaceResizeMode`.
+
+A player qualifies in landscape, outside picture-in-picture, when its video is wider than tall and the player
+covers at least 90% of the window apart from the cutout: not the player next to the chat (live's side chat,
+a video's chat replay), not a minimized one. A native player must also sit under `video_presenter_container`,
+the theatre's content (live, videos and clips; Home's feed previews are elsewhere).
+
+For a native player that qualifies:
+
+- Twitch fits its video container as usual, and the video surface inside it (a `TextureView`, or a
+  `SurfaceView` for protected streams) is scaled until it covers the player: 1.25 for a 16:9 video on the
+  emulator, the 1600x900 picture cropped to 1600x720. The player stops clipping its children so the container
+  shows the scaled surface, and the player's parent still clips it at the player's edge. Twitch's own crop to
+  fill (`ForceCrop`, its pinch to zoom) isn't used: Twitch takes the automatic picture-in-picture window's shape
+  from the video container's visible bounds, and with `ForceCrop` those became 1600x720, so picture-in-picture
+  opened at 20:9 with the video cropped. With the scale the container keeps its fitted size and
+  picture-in-picture opens at 16:9 as before.
+- Every view of the theatre beside the video (the control overlay, chat over the video, the stream's details,
+  captions and ad overlays, Lurk's latency badge) that reaches into the cutout strip is padded by as much, so it
+  stays where Twitch put it and only the video uses the strip. Views clear of the strip, such as a centered
+  banner, are left alone. When the player stops qualifying, each view gets its own padding back unless Twitch
+  changed it in the meantime.
+- On Android 10, Twitch leaves the window's cutout mode at its default (it only goes edge to edge from Android
+  11), so the extension sets `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` while a player qualifies and puts the
+  window's own mode back after.
+
+The React Native player (Twitch's Ultralight theatre, used only while *Use native player* is off and Twitch's
+server routes a channel there) gets `ZOOM`, the IVS mode React Native's own "cover" uses, instead of `FIT`, and
+its container's cutout strip in the same way. React Native keeps its own controls clear of the cutout, and its
+picture-in-picture window is a fixed 16:9.
+
+With the switch off, `measure` returns at once and the other two hooks hand back Twitch's value. Twitch's pinch
+to zoom still works; with Fill screen on, pinching in doesn't bring the bars back in landscape. The patch records
+`twitch.fill_screen.display_type`, `view_delegate`, `video_size`, `container_insets` and `rn_surface_measure` as
+locators.
+
+Checked: `tests/twitch/verify_fill_screen.py` (part of `bin/test-host`) runs the production helper against a
+view-tree double of the landscape theatre with a cutout: the switch off, the claim (container padding, scale,
+views beside the video), the player next to the chat, portrait, picture-in-picture, vertical and ultrawide
+videos, the cutout on the right, the player leaving the window, a padding Twitch changed meanwhile, Android 10's
+window mode and the React Native resize mode; breaking any of the claim's parts makes it fail. On the emulator,
+signed out with *Watch without signing in*, with Android's "tall" display cutout emulation (`cmd overlay`):
+
+- live, landscape, chat over the video or hidden: the theatre spans 0 to 1600, the fitted container is 1280x720
+  and its surface is scaled to 1600x900; the back button stays at x=136, the stream's details likewise; with the
+  cutout on the right (rotation 270) the settings button stays clear of it;
+- live with the side chat and a video with chat replay: the 136 px strip and the fitted video as without the
+  patch; with the chat hidden, a video fills the screen like a live stream;
+- portrait, leaving the theatre (it rotates and minimizes) and picture-in-picture (398x224, the whole video):
+  as without the patch, and returning from picture-in-picture fills the screen again;
+- the switch off: the same view bounds as an APK without the patch.
+
+The React Native theatre was reached only with a test build that forced Twitch's route decision (not part of
+the bundle). On the emulator's 914 dp wide landscape window it showed the chat or extensions beside the player,
+which Fill screen left alone; after React Native's own wide-player toggle the player covered the window, and
+Fill screen used the strip with `ZOOM` while React Native's controls stayed clear of the cutout. Not verified:
+a phone's real cutout (punch holes and notches only on the emulator's overlay), Android 10, protected
+(`SurfaceView`) streams, and signed-in playback.
+
 ### Display ads, stitched ads and the playlist proxy
 
 *Block display ads* wraps the four lazy creators of Twitch's `AdEdgeApi` Retrofit service
