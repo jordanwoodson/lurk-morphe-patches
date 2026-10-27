@@ -11,6 +11,10 @@
 # Settings patch: settings and the React Native bundle loader at Application.onCreate.
 TwitchPrivacy.initSettingsOnce
 TwitchBundle.init
+# Settings patch: the Lurk row in Twitch's Settings, Compose version (its onClick) and list version (row, tap).
+Settings.openAction
+TwitchSettingsRow.addMenuRow
+TwitchSettingsRow.menuRowClicked
 
 # if asset:assets/lurk-hermes.json
 # Hermes patches: the prepared React Native bundle.

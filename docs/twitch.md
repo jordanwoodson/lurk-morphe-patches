@@ -879,7 +879,44 @@ or account entitlement, so no `Unlock Turbo` patch is advertised.
 
 Only included patches register controls in Lurk's non-exported settings activity.
 Settings initialize before affected SDK providers and at Application startup, once
-per process. Long-pressing the launcher icon opens the Lurk shortcut.
+per process.
+
+The screen has three ways in. The settings patch adds a **Lurk** row to Twitch's own Settings
+screen, after Privacy Notice. That screen comes in two versions, and `SettingsActivity` picks one
+when it opens: signed in, the Compose `MainSettingsFragmentV2`; signed out with the logged-out
+experiment (which Watch without signing in turns on), the list `MainSettingsFragment`. Signed out
+without the experiment, Settings isn't reachable at all: the activity sends you to the landing
+screen. The gear on the signed-out Log In tab opens the list version.
+
+- Compose version: the section composable that draws System through Privacy Notice (found by those
+  five string resources) calls one row composable, `row(title, description, onClick, icon, ?,
+  composer, $changed, $default)`, for each. A method added to the section's class draws the Lurk
+  row the same way, with Twitch's `ghost` icon and an onClick from `Settings.openAction(Class)`:
+  R8 renamed Kotlin's `Function0` in Twitch, so the extension implements the type the row takes
+  as a proxy. The call goes right after the Privacy Notice row.
+- List version: the presenter's list builder (no parameters, the same five strings) adds a menu
+  row model per destination. After Privacy Notice, `TwitchSettingsRow.addMenuRow` adds one titled
+  Lurk with no destination, made by a bridged constructor call. Twitch's row tap handler (the one
+  `invoke-interface` taking the destination enum) ignores a row without a destination, so its
+  first instruction now asks `TwitchSettingsRow.menuRowClicked`, which opens Lurk settings for the
+  Lurk row (by identity) and lets every other row through.
+
+The launcher shortcut (`lurk_settings`) is pushed to the top of the app's dynamic shortcuts at
+every start on Android 11 and newer: Twitch publishes a conversation shortcut for each whisper
+notification with `pushDynamicShortcut`, which puts the newest first and moves the rest down, and
+launchers show only the first few. Before Android 11 it is added once and updated when the app or
+Lurk version changes. And an exported `activity-alias` of the settings activity answers
+`android.intent.action.APPLICATION_PREFERENCES`, which Android's App info page turns into
+"Additional settings in the app". The activity itself stays non-exported and reads nothing from
+the intent that starts it, so another app can only open the screen.
+
+Checked on the emulator, signed out: the list row opens Lurk settings and Back returns to
+Twitch's Settings; App info › Additional settings in the app opens it; a direct start of the
+settings activity from the shell is refused while the alias opens it; five conversation shortcuts
+pushed as the system user put the Lurk shortcut at rank 5, and the next start of Twitch puts it
+back at rank 0. The Compose version was checked signed out in a test build that swapped the
+fragment (not part of the bundle): the row draws with the ghost icon after Privacy Notice and
+opens Lurk settings. Reaching it the normal way, signed in, needs an account and wasn't checked.
 
 The original Hermes v98 bundle SHA-256 is
 `928f89c5766562e9cb266485282e90c058dd7947f73c9bcafa1d0fc626debf5e` (31.7.0).
@@ -919,7 +956,9 @@ update bypass is added.
 The test device is the disposable Android 16 x86_64 `emulator-5580`. Original
 Twitch and the patched clone install together. Resource checks cover the label,
 all icon layers, exact permission delta, nine provider authorities and their
-protection attributes, component class identities and non-exported settings.
+protection attributes, component class identities, the non-exported settings activity and its one
+exported alias, which answers only APPLICATION_PREFERENCES (`tests/twitch/verify_resources.py
+--settings`).
 The patched APK passes signature and 16 KiB alignment verification; Android's
 package compilation in verify mode succeeds.
 

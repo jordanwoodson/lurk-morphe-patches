@@ -83,13 +83,25 @@ updates, wait for a Lurk release that lists the new version.
 ## Lurk settings
 
 Patched apps get a **Lurk** settings screen that turns included patches off and on without
-patching again. Long-press the app icon › **Lurk settings**; Rumble also has Settings › App info ›
-Lurk. It has:
+patching again. Ways in:
+
+- **Inside the app**: Twitch's Settings › **Lurk**, after Privacy Notice (signed out, Settings is
+  the gear on the Log In tab). Rumble's Settings › App info › **Lurk**. Kick's account menu (tap
+  your profile picture) › **Lurk**, from the Lurk in account menu patch; signed out, Kick has no
+  such menu, so use one of the ways below.
+- **Long-press the app icon** › **Lurk settings**. Lurk puts this shortcut back at the top every
+  time the app starts, so the app's own shortcuts can't push it off the menu. Some launchers show
+  no app shortcuts at all.
+- **Android's App info page** for the app (long-press the icon › App info, or Settings › Apps) ›
+  **Additional settings in the app** (on some phones a gear icon).
+
+The screen has:
 
 - **Search** across every setting, with switches you can flip right in the results.
 - **Pause Lurk**: every switch off from the next start, to see whether Lurk causes a problem. Your
-  settings are kept, and lockout protection (Block update prompts) stays on. If the app stops three
-  times in a row within a minute of starting, Lurk pauses itself and says so on the screen.
+  settings are kept, and lockout protection (Block update prompts, Kick's Lurk row) stays on. If
+  the app stops three times in a row within a minute of starting, Lurk pauses itself and says so
+  on the screen.
 - **Restart** bar: settings the app reads at startup (Kick's and Twitch's JavaScript ones, for
   example) apply after a restart, which the bar at the top does for you.
 - **Export settings** and **Import settings**: a JSON file through the system file picker.
