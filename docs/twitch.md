@@ -83,6 +83,8 @@ ReVive, bttv-android, TwitchMod, Xtra, Twire and Frosty.
 | Chat timestamps | Chat timestamps |
 | Highlights and blacklist | Chat keywords |
 | Chat appearance | Chat appearance |
+| Badge, emote and message scale and spacing (Frosty) | Chat appearance |
+| Emote and badge info sheet (Frosty) | Emote and badge info |
 | 7TV/BTTV/FFZ emotes | Third-party emotes (opt-in), in the emote picker and autocomplete too |
 | Third-party badges and pronouns | Third-party badges, with pronouns (opt-in) |
 | Recent chat history | Declined: Twitch already loads it |
@@ -581,16 +583,45 @@ channel: no badges on any line, `LUL` and channel emotes shown as text, and a ro
 the log said `chat: first message <id>`.
 
 *Chat appearance* sets:
-- chat text size;
+- chat text size (`chat_text_size`, 70% to 200% of Twitch's; 85, 115 and 130, the first choices, stay valid);
+- emote size and badge size (`chat_emote_size`, `chat_badge_size`, 50% to 300%);
+- message spacing (`chat_message_spacing`, 25% to 300% of Twitch's space around a message);
 - alternating row shading, numbered by arrival and skipping hidden lines;
 - plain /me messages;
 - the landscape chat column's width (the theatre guideline) and background opacity.
+
+Every choice starts at "Twitch's default" (`0`). Text size and spacing are applied by the row binders' hook
+(`TwitchChatStyle.bindRow`), after Twitch binds a row: the text view's size and minimum height (24 dp in
+Twitch's style, which otherwise keeps small text from making rows shorter) are scaled, and so are the vertical
+padding and margins of the row and its text view (live chat's container padding, 3 or 4 dp, and VOD replay's
+text padding and top margin, 4 dp each). Twitch sets live chat's padding and size on every bind and VOD replay's
+only when the row is made, so the values Lurk gave last are remembered to tell its own from Twitch's.
+
+Emote and badge sizes are set where Twitch sizes every chat image span: the chat image loader's class has one
+method that turns a placeholder's size class (Twitch's enum: `Emote` 24 dp, `GigantifiedEmote` 72 dp, `Badge`
+18 dp, `Gif`, notice icons...) into a square box in pixels, used for the line's layout before the image loads and
+to fit the loaded image. At each of its returns, `TwitchChatStyle.imageSize` scales the box of `Emote` and
+`GigantifiedEmote` by the emote size and of `Badge` by the badge size; everything else keeps Twitch's size.
+Third-party emotes are Twitch emote objects and third-party badges and pronouns are Twitch badge view models, so
+they scale alike, and the wide-emote hook (`TwitchEmotes.sizeEmote`) widens the scaled box. The size class names
+are checked in the enum's static initializer at patch time. While emotes are larger than Twitch's size, the
+emote URL builder's scale (2 in chat) is raised to Twitch's largest image (3) at its start
+(`TwitchChatStyle.emoteScale`), so large emotes stay sharp. Static third-party emotes follow it; animated
+ones stay at 2x, as before, to keep their GIFs small. The image box is shared by every surface that draws
+chat-style images (whispers, notices), so they follow the emote and badge sizes too.
+
+React Native chat takes the finer text sizes through the same `scale` value (any whole percent from 50 to 200);
+emote and badge size and spacing are native only, since RN's emote and badge components size themselves from
+module constants.
 
 React Native wrappers use the actual row, body, timestamp, text-metrics, selector and landscape-column
 exports. History filtering preserves the original store and stable snapshots. Live keyword vibration
 subscribes only while its store is mounted; history, deleted lines and rerenders do not notify.
 All-off restores the original exports. `bin/test-twitch-chat-style` checks native styling on ART,
-including mentions with a fixture account; `bin/test-twitch-rn` checks native RN bridge ownership.
+including mentions with a fixture account, the real image box at each size class with the sizes on and off,
+and text size and spacing on real views bound twice (live) and once (replay) and then switched off;
+`bin/test-twitch-rn` checks native RN bridge ownership. Verified on the emulator, signed out, on xQc's live chat
+and a VOD's chat replay at 115% text, 175% emotes, 150% badges and 50% spacing.
 
 The original floating one-chat overlay projects away the message type and omits store/channel props.
 Its original host now publishes its genuine store and exact numeric destination/login through
@@ -644,6 +675,15 @@ Twitch's own whole-word matcher (`clientParsedEmotes`). They add 7TV, BetterTTV 
 emotes as Twitch emote objects with synthetic `lurk…` IDs, and the central emote URL builder maps
 those IDs to each provider's CDN. Animated emotes use GIF; static ones, or all of them when Twitch's
 animated-emotes setting is off, use PNG.
+
+Native live chat builds every message's line model in one place (the mapper that turns chat events into
+`LiveChatMessage`s calls the matcher for chat, notices, replies and shared chat), whether an account is signed
+in or not; signing in changes the IRC login, not that path (checked in the bytecode; not run signed in). A
+service turned on while a channel is open loads its lists with the next message, without rejoining (checked on
+the emulator: xQc's 7TV list arrived about a second after the switch, and the next lines had 7TV emotes). A
+channel with no set on a service still gets the service's global emotes; a 404 for the channel is an empty list,
+not a failure (checked on a channel none of the three services knows: three empty channel lists, then the
+global ones). The landscape one-chat overlay of the native theatre is native too and gets the same emotes.
 
 VOD replay splits its named message tokens. React Native chat gets `emotes=` ranges added to incoming
 IRC frames, and its `ImageSource` maps the same URLs. Compiled RN row wrappers additionally enrich
@@ -706,6 +746,57 @@ costs one settings read: the main thread gets a task only to remove an overlay s
 
 Twitch already loads recent chat history on join (native
 `ChatHistory`, RN preload) and replays VOD chat, so a third-party history service isn't used.
+
+### Emote and badge info
+
+*Emote and badge info* (`chat_emote_info`, a patch of its own, selected by default, switch off) shows a small
+sheet when an emote or a badge is tapped in native live chat, chat history or VOD chat replay: the image larger,
+its name (the emote's code, or the badge's title), where it comes from ("7TV channel emote", "Twitch global
+badge", "FrankerFaceZ badge", "Pronouns from pronouns.alejo.io"...), who made or added it when the service's list
+says (7TV's `data.owner`, BetterTTV's shared emotes' `user`, FrankerFaceZ's `owner`), and a *Copy name* button.
+The sheet is a plain framework `Dialog` with views made in code, at the bottom of the screen, in the colors of
+Twitch's dark or light theme (the activity's night mode, which Twitch's theme setting sets).
+
+What Twitch does on a tap:
+- an emote carries a click span that opens Twitch's emote card, but Twitch opens the card only for a signed-in
+  account (`isLoggedIn` before the card's fragment); signed out, the tap does nothing;
+- a username opens the viewer card (signed out, nothing showed on the emulator, with or without the patch);
+- a badge has no tap action;
+- a long press anywhere on a line opens Twitch's message menu (Reply, Copy). The chat text view's movement
+  method sees the long press first and swallows its release, so spans never get it.
+
+The hook sits where the line builder puts a line's spans together (`ChatMessageSpanGroup`, the same point Compact
+chat uses): the badge span and the message span go through `TwitchChatInfo.badges`/`message`, which put a tap
+span (`ClickableSpan`) over every image span without a tap of its own: all badges, and emotes whose image URL is
+Twitch's or a service's (cheermotes and GIFs keep Twitch's handling). Twitch emotes keep Twitch's emote card span
+while an account is signed in (Twitch's user preferences hold its login); signed out, Lurk's span goes over it with
+the highest span priority, so the chat's `LinkMovementMethod` picks it and the tap shows Lurk's sheet instead of
+nothing. Turning the switch on applies to lines built from then on; with it off, a tap span left on an older line
+does nothing.
+
+The URL and size class of an image span come from Twitch's placeholder drawable (the class the chat image box
+takes, with a single `String` field) through two bridge stubs, `isPlaceholder` and `placeholderUrl`, filled at
+patch time. Badge titles come from Twitch's badge registry: the method that looks a badge key (set ID and version)
+up in the channel's badges, then the global ones, gets a hook right after each lookup's cast
+(`twitchChannelBadge`, `twitchGlobalBadge`), which keeps the last 512 URLs with their set, version and scope. The
+key's `BadgeKey(setId=…, version=…)` toString is checked at patch time and parsed at run time. The title follows
+Twitch's own where it's known ("1-Year Subscriber", "Tier 3 6-Month Subscriber", "cheer 1000", "50 Gift Subs",
+"Prime Gaming", "Verified"), else the set ID in words. Third-party emotes are found in Lurk's cached lists by the ID
+in their CDN URL, preferring the channel whose chat is open, then any channel, then the global list; third-party
+badges and pronouns by their image URL. Opening the sheet loads one larger copy of the image (Twitch 3.0, 7TV 4x,
+BetterTTV 3x, FrankerFaceZ 4, falling back to the chat's URL) from the host the chat image came from, at most 4 MB,
+decoded with `ImageDecoder` so animated emotes move; nothing else is sent.
+
+React Native chat is unchanged: its emotes have their own `onPressEmote` callbacks and no native spans.
+`bin/test-twitch-chat-style` (`ChatStyleArtProbe`) runs the real line builder with a Twitch badge view model and
+checks the tap span with the switch on and off, the tap spans over Twitch, 7TV, cheermote and GIF images signed
+in and out (including the span order), the badge registry hook's titles and the larger-image URLs;
+`test_providers.py` checks which list a third-party emote came from, and `bin/test-twitch-providers` the owner and
+title fields of each service's list. Verified on the emulator, signed out, light and dark: a 7TV channel emote
+("NAHH", "by itsCerv"), a Twitch emote ("LUL"), a channel subscriber badge ("2-Month Subscriber", "Twitch channel
+badge"), a global badge ("Twitch Recap 2025"), FrankerFaceZ's supporter badge, a pronoun badge and a 7TV emote in
+VOD chat replay; *Copy name* put the name on the clipboard; a long press on an emote opened Twitch's Reply/Copy
+menu, not the sheet. Twitch's emote card and viewer card for a signed-in account were not checked: no account.
 
 ### VOD chapters
 
@@ -1024,7 +1115,8 @@ patched APK as `assets/lurk/locators.json`:
   `twitch.block_cookie_notice.options_constructor`, `twitch.hide_chat_highlights.dispatch`/`highlight_*`,
   `twitch.hide_clips.home_tabs`, `twitch.hide_subscription_upsells.subscribe_renderer`/`turbo_dialog_route` and
   `twitch.emote_picker.section`/`autocomplete_map`/`autocomplete_order`/`autocomplete_order_type` and
-  `twitch.latency_badge.latency` and `twitch.auto_claim_drops.handler`/`handler_case`.
+  `twitch.latency_badge.latency` and `twitch.auto_claim_drops.handler`/`handler_case` and
+  `twitch.emote_badge_info.placeholder`.
 
 `ChatArtProbe`, `AdsProbe`, `PrivacyAdsProbe` and `HighlightsArtProbe` read the file through
 `ProbeLocators.java`, and `verify_privacy.py` and `verify_interface_emitted.py` through `locators.py`;
@@ -1033,9 +1125,9 @@ method of a signature). Each lookup carries the 31.7.0 name as a fallback, used 
 locators. Still pinned: what no patch matches (in `HighlightsArtProbe` the state flag fields, the raid
 highlight, notice kinds and callout lambda; the deleted-message string ID in `ChatArtProbe`; the
 compile-time `kx50`/`akg` stubs of `PrivacyAdsProbe`; `verify_interface_emitted.py`'s preservation
-controls), and the probes not converted yet (`ChatStyleArtProbe`, `InterfaceArtProbe`,
-`PlaybackArtProbe`, `RNBridgeProbe`). `verify_playback_bytecode.py` finds its methods by content and
-pins no names.
+controls), and the probes not converted yet (`InterfaceArtProbe`, `PlaybackArtProbe`, `RNBridgeProbe`, and
+`ChatStyleArtProbe` apart from its chat image box, which it reads from `twitch.match.chat_image_box`).
+`verify_playback_bytecode.py` finds its methods by content and pins no names.
 
 Guest native VOD, replay, chapters and PiP, and the RN consumer, provider and reload paths, were
 checked on the emulator and on a phone on 2026-10-18. The following account limits remain:
