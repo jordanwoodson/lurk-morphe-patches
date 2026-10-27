@@ -17,10 +17,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Version-pinned integration test for Chat keywords and Chat appearance: Twitch 31.7.0's real chat line builder
- * (with the emitted hooks) and live message models, run on ART with a fake settings store and a fake signed-in
- * account. Each setting is checked on and off; off must give Twitch's own line.
- * The short class and field names below are Twitch 31.7.0's R8 output.
+ * Version-pinned integration test for Chat keywords and Chat appearance: Twitch 31.7.0's
+ * real chat line builder and chat image box (with the emitted hooks) and live message models, run on ART with a
+ * fake settings store and a fake signed-in account. Each setting is checked on and off; off must give Twitch's own
+ * line. The short class and field names below are Twitch 31.7.0's R8 output; the chat image box comes from the
+ * APK's locators (the first argument).
  */
 public final class ChatStyleArtProbe {
     private static final Map<String, Object> settings = new HashMap<>();
@@ -211,6 +212,107 @@ public final class ChatStyleArtProbe {
         check((float) guide.invoke(null, null, 0.8f) == 0.8f, "Off keeps Twitch's width");
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Chat appearance sizes. These look Twitch's classes up in the APK's locators.
+
+    /** Twitch's chat image box (the size in pixels of an image span's box) and its placeholder drawable. */
+    private static Method box() throws Exception {
+        String type = ProbeLocators.type("twitch.match.chat_image_box", "hlj");
+        String name = ProbeLocators.method("twitch.match.chat_image_box", "g");
+        for (Method method : Class.forName(type).getDeclaredMethods()) {
+            if (method.getName().equals(name) && method.getReturnType() == int.class && method.getParameterTypes().length == 2) {
+                method.setAccessible(true);
+                return method;
+            }
+        }
+        throw new AssertionError("No chat image box " + type + "." + name);
+    }
+
+    /** A real chat image placeholder for {@code url} of size class {@code kind} (Emote, Badge, Gif, ...). */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static android.graphics.drawable.Drawable placeholder(String url, String kind) throws Exception {
+        Class<?> type = box().getParameterTypes()[1];
+        Class kinds = null;
+        for (Field field : type.getDeclaredFields()) if (field.getType().isEnum()) kinds = field.getType();
+        check(kinds != null, "The chat image placeholder has no size class");
+        java.lang.reflect.Constructor<?> make = type.getDeclaredConstructor(String.class, kinds, boolean.class);
+        make.setAccessible(true);
+        return (android.graphics.drawable.Drawable) make.newInstance(url, Enum.valueOf(kinds, kind), false);
+    }
+
+    private static int boxSize(String kind) throws Exception {
+        return (int) box().invoke(null, context, placeholder("https://example.invalid/" + kind, kind));
+    }
+
+    private static void sizes() throws Exception {
+        reset();
+        int emote = boxSize("Emote"), badge = boxSize("Badge"), gif = boxSize("Gif"), giant = boxSize("GigantifiedEmote");
+        check(emote > 0 && badge > 0 && gif > 0, "Twitch sizes its chat images");
+        settings.put("chat_emote_size", "200");
+        settings.put("chat_badge_size", "50");
+        check(boxSize("Emote") == emote * 2 && boxSize("GigantifiedEmote") == giant * 2, "Emotes at 200%");
+        check(boxSize("Badge") == Math.round(badge * 0.5f), "Badges at 50%");
+        check(boxSize("Gif") == gif, "Other chat images keep Twitch's size");
+        settings.put("chat_appearance", false);
+        check(boxSize("Emote") == emote && boxSize("Badge") == badge, "Off keeps Twitch's sizes");
+
+        // Larger emotes ask Twitch's emote URL builder for its larger image.
+        Method scale = Class.forName(STYLE).getMethod("emoteScale", Float.class);
+        reset();
+        check(scale.invoke(null, 2f).equals(2f) && scale.invoke(null, (Object) null) == null, "Default keeps the scale");
+        settings.put("chat_emote_size", "150");
+        check(scale.invoke(null, 2f).equals(3f) && scale.invoke(null, 3f).equals(3f), "150% asks for Twitch's 3x");
+        settings.put("chat_emote_size", "75");
+        check(scale.invoke(null, 2f).equals(2f), "Smaller emotes keep the scale");
+
+        // Text size, minimum height and spacing on real views, as the row binders leave them.
+        android.content.Context views = viewContext();
+        android.widget.LinearLayout row = new android.widget.LinearLayout(views);
+        android.widget.TextView text = new android.widget.TextView(views);
+        row.addView(text, new android.widget.LinearLayout.LayoutParams(-1, -2));
+        android.widget.LinearLayout.LayoutParams params = (android.widget.LinearLayout.LayoutParams) text.getLayoutParams();
+        params.topMargin = 8;
+        text.setLayoutParams(params);
+        text.setPadding(0, 8, 0, 8);
+        text.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, 40);
+        text.setMinHeight(60);
+        Method bind = Class.forName(STYLE).getMethod("bindRow", android.view.View.class, android.widget.TextView.class);
+        reset();
+        settings.put("chat_text_size", "90");
+        settings.put("chat_message_spacing", "50");
+        for (int bound = 0; bound < 2; bound++) {
+            // Twitch sets a live row's padding on every bind; a replay row keeps what it was given.
+            row.setPadding(0, 6, 0, 6);
+            bind.invoke(null, row, text);
+            check(row.getPaddingTop() == 3 && row.getPaddingBottom() == 3, "Row padding at 50%, bind " + bound);
+            check(text.getPaddingTop() == 4 && ((android.widget.LinearLayout.LayoutParams) text.getLayoutParams()).topMargin == 4,
+                "Text padding and margin at 50% once, bind " + bound);
+            check(text.getTextSize() == 36f && text.getMinHeight() == 54, "Text and minimum height at 90% once, bind " + bound);
+        }
+        settings.put("chat_appearance", false);
+        row.setPadding(0, 6, 0, 6);
+        bind.invoke(null, row, text);
+        check(row.getPaddingTop() == 6 && text.getPaddingTop() == 8 && text.getTextSize() == 40f && text.getMinHeight() == 60
+            && ((android.widget.LinearLayout.LayoutParams) text.getLayoutParams()).topMargin == 8, "Off gives Twitch's own back");
+    }
+
+    private static android.content.Context viewContext() throws Exception {
+        if (android.os.Looper.getMainLooper() == null) android.os.Looper.prepareMainLooper();
+        // app_process has no preloaded fonts: give TextView a system font map, as UiBoundaryProbe does.
+        android.graphics.fonts.Font font = new android.graphics.fonts.Font.Builder(
+            new java.io.File("/system/fonts/Roboto-Regular.ttf")).build();
+        Method makeFace = Typeface.class.getDeclaredMethod("createFromFamilies", String.class,
+            android.graphics.fonts.FontFamily[].class);
+        makeFace.setAccessible(true);
+        Typeface face = (Typeface) makeFace.invoke(null, "sans-serif",
+            new android.graphics.fonts.FontFamily[]{new android.graphics.fonts.FontFamily.Builder(font).build()});
+        Method fonts = Typeface.class.getDeclaredMethod("setSystemFontMap", Map.class);
+        fonts.setAccessible(true);
+        fonts.invoke(null, Map.of("sans-serif", face, "serif", face, "monospace", face));
+        Object thread = Class.forName("android.app.ActivityThread").getMethod("systemMain").invoke(null);
+        return (android.content.Context) thread.getClass().getMethod("getSystemContext").invoke(thread);
+    }
+
     private interface Section {
         void run() throws Exception;
     }
@@ -230,9 +332,11 @@ public final class ChatStyleArtProbe {
     }
 
     public static void main(String[] args) throws Exception {
+        if (args.length > 0) ProbeLocators.load(args[0]);
         install();
         section("chat keywords: mentions, highlight and blocked words, blocked users, live drops", ChatStyleArtProbe::keywords);
         section("chat appearance: /me style, alternating rows, landscape width", ChatStyleArtProbe::appearance);
+        section("chat appearance: emote and badge size, emote image scale, text size and spacing on views", ChatStyleArtProbe::sizes);
         if (failures > 0) {
             System.out.println("FAILED: " + failures + " section(s)");
             System.exit(1);

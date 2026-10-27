@@ -83,6 +83,7 @@ ReVive, bttv-android, TwitchMod, Xtra, Twire and Frosty.
 | Chat timestamps | Chat timestamps |
 | Highlights and blacklist | Chat keywords |
 | Chat appearance | Chat appearance |
+| Badge, emote and message scale and spacing (Frosty) | Chat appearance |
 | 7TV/BTTV/FFZ emotes | Third-party emotes (opt-in), in the emote picker and autocomplete too |
 | Third-party badges and pronouns | Third-party badges, with pronouns (opt-in) |
 | Recent chat history | Declined: Twitch already loads it |
@@ -581,16 +582,45 @@ channel: no badges on any line, `LUL` and channel emotes shown as text, and a ro
 the log said `chat: first message <id>`.
 
 *Chat appearance* sets:
-- chat text size;
+- chat text size (`chat_text_size`, 70% to 200% of Twitch's; 85, 115 and 130, the first choices, stay valid);
+- emote size and badge size (`chat_emote_size`, `chat_badge_size`, 50% to 300%);
+- message spacing (`chat_message_spacing`, 25% to 300% of Twitch's space around a message);
 - alternating row shading, numbered by arrival and skipping hidden lines;
 - plain /me messages;
 - the landscape chat column's width (the theatre guideline) and background opacity.
+
+Every choice starts at "Twitch's default" (`0`). Text size and spacing are applied by the row binders' hook
+(`TwitchChatStyle.bindRow`), after Twitch binds a row: the text view's size and minimum height (24 dp in
+Twitch's style, which otherwise keeps small text from making rows shorter) are scaled, and so are the vertical
+padding and margins of the row and its text view (live chat's container padding, 3 or 4 dp, and VOD replay's
+text padding and top margin, 4 dp each). Twitch sets live chat's padding and size on every bind and VOD replay's
+only when the row is made, so the values Lurk gave last are remembered to tell its own from Twitch's.
+
+Emote and badge sizes are set where Twitch sizes every chat image span: the chat image loader's class has one
+method that turns a placeholder's size class (Twitch's enum: `Emote` 24 dp, `GigantifiedEmote` 72 dp, `Badge`
+18 dp, `Gif`, notice icons...) into a square box in pixels, used for the line's layout before the image loads and
+to fit the loaded image. At each of its returns, `TwitchChatStyle.imageSize` scales the box of `Emote` and
+`GigantifiedEmote` by the emote size and of `Badge` by the badge size; everything else keeps Twitch's size.
+Third-party emotes are Twitch emote objects and third-party badges and pronouns are Twitch badge view models, so
+they scale alike, and the wide-emote hook (`TwitchEmotes.sizeEmote`) widens the scaled box. The size class names
+are checked in the enum's static initializer at patch time. While emotes are larger than Twitch's size, the
+emote URL builder's scale (2 in chat) is raised to Twitch's largest image (3) at its start
+(`TwitchChatStyle.emoteScale`), so large emotes stay sharp. Static third-party emotes follow it; animated
+ones stay at 2x, as before, to keep their GIFs small. The image box is shared by every surface that draws
+chat-style images (whispers, notices), so they follow the emote and badge sizes too.
+
+React Native chat takes the finer text sizes through the same `scale` value (any whole percent from 50 to 200);
+emote and badge size and spacing are native only, since RN's emote and badge components size themselves from
+module constants.
 
 React Native wrappers use the actual row, body, timestamp, text-metrics, selector and landscape-column
 exports. History filtering preserves the original store and stable snapshots. Live keyword vibration
 subscribes only while its store is mounted; history, deleted lines and rerenders do not notify.
 All-off restores the original exports. `bin/test-twitch-chat-style` checks native styling on ART,
-including mentions with a fixture account; `bin/test-twitch-rn` checks native RN bridge ownership.
+including mentions with a fixture account, the real image box at each size class with the sizes on and off,
+and text size and spacing on real views bound twice (live) and once (replay) and then switched off;
+`bin/test-twitch-rn` checks native RN bridge ownership. Verified on the emulator, signed out, on xQc's live chat
+and a VOD's chat replay at 115% text, 175% emotes, 150% badges and 50% spacing.
 
 The original floating one-chat overlay projects away the message type and omits store/channel props.
 Its original host now publishes its genuine store and exact numeric destination/login through
@@ -994,9 +1024,9 @@ method of a signature). Each lookup carries the 31.7.0 name as a fallback, used 
 locators. Still pinned: what no patch matches (in `HighlightsArtProbe` the state flag fields, the raid
 highlight, notice kinds and callout lambda; the deleted-message string ID in `ChatArtProbe`; the
 compile-time `kx50`/`akg` stubs of `PrivacyAdsProbe`; `verify_interface_emitted.py`'s preservation
-controls), and the probes not converted yet (`ChatStyleArtProbe`, `InterfaceArtProbe`,
-`PlaybackArtProbe`, `RNBridgeProbe`). `verify_playback_bytecode.py` finds its methods by content and
-pins no names.
+controls), and the probes not converted yet (`InterfaceArtProbe`, `PlaybackArtProbe`, `RNBridgeProbe`, and
+`ChatStyleArtProbe` apart from its chat image box, which it reads from `twitch.match.chat_image_box`).
+`verify_playback_bytecode.py` finds its methods by content and pins no names.
 
 Guest native VOD, replay, chapters and PiP, and the RN consumer, provider and reload paths, were
 checked on the emulator and on a phone on 2026-10-18. The following account limits remain:

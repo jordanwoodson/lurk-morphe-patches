@@ -11,6 +11,7 @@ import app.morphe.patcher.resourceLiteral
 import app.morphe.patcher.string
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
+import io.github.jordanwoodson.patches.twitch.emotes.ChatImageLoaderFingerprint
 
 private const val EVENT_DISPATCHER = "Ltv/twitch/android/core/mvp/viewdelegate/EventDispatcher;"
 private const val RESTRICTIONS = "Ltv/twitch/android/shared/messageinput"
@@ -178,6 +179,19 @@ internal object LandscapeChatWidthFingerprint : Fingerprint(
         literal(20),
         literal(30),
         methodCall(parameters = listOf("I", "Landroid/view/View;"), returnType = "V", opcode = Opcode.INVOKE_STATIC),
+    ),
+)
+
+// The size in pixels of a chat image span's box (emote, badge, notice icon), in the chat image loader's class: its
+// size class's dp size, or the landscape one where the size class has one.
+internal object ChatImageBoxFingerprint : Fingerprint(
+    classFingerprint = ChatImageLoaderFingerprint,
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
+    returnType = "I",
+    parameters = listOf("Landroid/content/Context;", "L"),
+    filters = listOf(
+        methodCall(name = "getLandscapeSizeDp", parameters = emptyList(), returnType = "Ljava/lang/Float;"),
+        methodCall(name = "getSizeDp", parameters = emptyList(), returnType = "F"),
     ),
 )
 

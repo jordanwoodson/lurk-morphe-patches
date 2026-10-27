@@ -108,6 +108,8 @@ TwitchChatKeywords.onLiveMessage
 # if chat_appearance
 TwitchChatStyle.beginLine
 TwitchChatStyle.bindRow
+TwitchChatStyle.emoteScale
+TwitchChatStyle.imageSize
 TwitchChatStyle.landscapeChat
 TwitchChatStyle.landscapeChatGuide
 TwitchChatStyle.markLine
