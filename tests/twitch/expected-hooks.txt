@@ -28,6 +28,12 @@ TwitchStartup.watchStart
 # The player-view attach hook these patches share.
 TwitchPlayerViews.attached
 
+# if fill_screen
+# The native player's video sizing, the full-screen containers' insets and the React Native surface sizing.
+TwitchFillScreen.measure
+TwitchFillScreen.insetTypes
+TwitchFillScreen.surfaceResizeMode
+
 # if fix_notifications
 TwitchNotifications.firebaseHeader
 
