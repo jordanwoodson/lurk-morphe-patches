@@ -442,11 +442,21 @@ signed out with *Watch without signing in*, with Android's "tall" display cutout
   as without the patch, and returning from picture-in-picture fills the screen again;
 - the switch off: the same view bounds as an APK without the patch.
 
+A punch hole was checked the same way (#44, a Pixel 5): Android's "hole" emulation, a corner punch hole whose
+safe inset is 199 px, on a 1080x2340 display at 440 dpi (`wm size`, `wm density`). In landscape, live, with the
+chat hidden or over the video, and the hole on the left (rotation 90) or the right (rotation 270):
+
+- the switch off: the theatre leaves the hole's 199 px strip out, and the fitted 1920x1080 video sits off center,
+  309 to 311 px of black on the hole's side and 110 to 112 px on the other;
+- the switch on: the theatre spans 0 to 2340, the fitted container is centered (about 210 to 2130) and its surface is
+  scaled by 1.22, so the picture covers the whole screen; the chat over the video, the Follow, Bits and channel
+  points buttons and "Send chat" stay where they were, clear of the hole.
+
 The React Native theatre was reached only with a test build that forced Twitch's route decision (not part of
 the bundle). On the emulator's 914 dp wide landscape window it showed the chat or extensions beside the player,
 which Fill screen left alone; after React Native's own wide-player toggle the player covered the window, and
 Fill screen used the strip with `ZOOM` while React Native's controls stayed clear of the cutout. Not verified:
-a phone's real cutout (punch holes and notches only on the emulator's overlay), Android 10, protected
+a phone's real cutout (punch holes and notches only on the emulator's overlays), Android 10, protected
 (`SurfaceView`) streams, and signed-in playback.
 
 ### Display ads, stitched ads and the playlist proxy
