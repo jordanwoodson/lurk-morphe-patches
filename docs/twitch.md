@@ -262,12 +262,20 @@ seconds after the overlay's own counter read 4:23:32.
 
 Live channels open in the React Native "Ultralight" theatre only when
 `RNTheatreRouteDecisionKt.rnTheatreRouteDecision` returns `Route`. That needs the Eppo flag
-`android-ultralight`, which is off by default and server-controlled. Most Lurk playback, chat and
+`android-ultralight`. Twitch evaluates it, like its other per-account experiments, only for a signed-in
+account; signed out it reads its default, off. Twitch's flag configuration (October 2026) gives it to
+nearly every signed-in account on 31.5.2 or newer, so for them Home is React Native. A channel opened
+there still goes through the route decision (`openChannel` → `routeChannelOpen`). Most Lurk playback, chat and
 ad patches hook the native theatre. The method has no spare registers, so while the switch is on its
 `isLiveChannel` parameter goes through `TwitchPlayback.routeLiveToReactNative` and reads false.
 Twitch answers `RefuseNotLiveChannel`. Its two callers (`TwitchRNTheatreLauncher`,
 `TwitchRNHostNavigationModule.routeChannelOpen`) treat every refusal the same way and open the native
 theatre. VODs and clips are always native.
+
+Signed out, Ultralight can be switched on for a test with Twitch's staff override: `user_type` set to
+`staff` and `ultralight_enabled_override` to true in `twitch_user_prefs.xml`. Home is then React Native
+but its feed asks you to log in; channels still open in the native theatre while the switch is on, though
+Twitch's Ultralight splash can stay drawn over it.
 
 ### Fix stuck start screen
 
@@ -770,7 +778,11 @@ animated-emotes setting is off, use PNG.
 
 Native live chat builds every message's line model in one place (the mapper that turns chat events into
 `LiveChatMessage`s calls the matcher for chat, notices, replies and shared chat), whether an account is signed
-in or not; signing in changes the IRC login, not that path (checked in the bytecode; not run signed in). A
+in or not; signing in changes the IRC login, not that path (checked in the bytecode; not run signed in).
+Signed in, the set the matcher reads starts with the account's own emotes (Twitch's `UserEmotesQuery`) and
+Lurk's follow, so Twitch's emote wins a code both have. Twitch's per-account experiments make Home React Native
+for signed-in accounts (see [Use native player](#use-native-player)); the only one the matcher itself consults
+(`mcl-gifs-parsing-killswitch`) switches how GIF tokens render. A channel's chat delay holds the same message back without changing its path. A
 service turned on while a channel is open loads its lists with the next message, without rejoining (checked on
 the emulator: xQc's 7TV list arrived about a second after the switch, and the next lines had 7TV emotes). A
 channel with no set on a service still gets the service's global emotes; a 404 for the channel is an empty list,
