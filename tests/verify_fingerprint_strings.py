@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import re
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -80,8 +81,17 @@ def targets(app: str) -> list[str]:
     return re.findall(r'AppTarget\(version = "([^"]+)"', (PATCHES / app / "shared/Constants.kt").read_text(encoding="utf-8"))
 
 
+def apks_dir() -> Path:
+    """apks/ of this checkout, or of the main checkout from a git worktree (as bin/lib/common.sh does)."""
+    if (ROOT / "apks").is_dir():
+        return ROOT / "apks"
+    common = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                            capture_output=True, text=True).stdout.strip()
+    return Path(common).parent / "apks" if common else ROOT / "apks"
+
+
 def stored(app: str, version: str) -> Path | None:
-    files = sorted(p for p in (ROOT / "apks" / app / version).glob("*") if p.suffix in (".apk", ".apkm", ".apks", ".xapk"))
+    files = sorted(p for p in (apks_dir() / app / version).glob("*") if p.suffix in (".apk", ".apkm", ".apks", ".xapk"))
     return files[0] if files else None
 
 
