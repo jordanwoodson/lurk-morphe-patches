@@ -50,15 +50,15 @@ public final class InterfaceArtProbe {
         for (int index = 0; index < types.length; index++) {
             if (types[index] == boolean.class) arguments[index] = stockFlag;
             else if (types[index].isEnum()) arguments[index] = types[index].getEnumConstants()[0];
-            else if (types[index].getName().equals("rc9")) arguments[index] = Class.forName("qc9").getField("a").get(null);
+            else if (types[index].getName().equals("tb9")) arguments[index] = Class.forName("sb9").getField("a").get(null);
         }
         return constructor.newInstance(arguments);
     }
     public static void main(String[] args) throws Exception {
         boolean stock = args.length > 0 && args[0].equals("stock");
         if (!stock) settings();
-        // R8 names are Twitch 31.7.0's: profile tabs vpv, chat toolbar state px70, one-chat state zas.
-        Class<?> tabType = Class.forName("vpv");
+        // R8 names are Twitch 31.8.0's: profile tabs sov, chat toolbar state ix70, one-chat state t9s.
+        Class<?> tabType = Class.forName("sov");
         Object entries = tabType.getMethod("getEntries").invoke(null);
         List<String> original = Arrays.asList("HOME", "ABOUT", "CLIPS", "VIDEOS", "SCHEDULE", "CHAT");
         check(names((List<?>) entries).equals(original), "Unexpected stock profile tab list");
@@ -91,10 +91,10 @@ public final class InterfaceArtProbe {
             switches.put("hide_tipping", enabled);
             for (boolean initial : new boolean[]{false, true}) {
                 boolean expected = initial && (stock || !enabled);
-                Object toolbar = state("px70", initial);
+                Object toolbar = state("ix70", initial);
                 check(flag(toolbar, "k") == expected && flag(toolbar, "m") == expected, "Native chat Bits button/tray flags differ");
                 check(flag(toolbar, "n") == initial && flag(toolbar, "p") == initial, "Typed cheer/shared chat state changed");
-                Object oneChat = state("zas", initial);
+                Object oneChat = state("t9s", initial);
                 check(flag(oneChat, "e") == expected && flag(oneChat, "k") == expected, "Native OneChat Bits/one-tap flags differ");
                 check(flag(oneChat, "a") == initial && flag(oneChat, "b") == initial && flag(oneChat, "p") == initial, "Ordinary chat visibility changed");
             }
