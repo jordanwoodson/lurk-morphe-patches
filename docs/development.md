@@ -154,7 +154,11 @@ val disableAnalyticsPatch = bytecodePatch(
 Fingerprints match on strings, signatures and instruction patterns rather than class names,
 since R8 renames classes between versions. Each app's `shared/` folder has match helpers
 (`Bytecode.kt`, `Hermes.kt`) that require exactly one match and throw a `PatchException`
-otherwise, so a new app version fails to patch instead of patching the wrong method. See the patcher docs in
+otherwise, so a new app version fails to patch instead of patching the wrong method. Give each string in a
+fingerprint's `strings` whole, never a prefix: Morphe Patcher 2.0 compares them exactly whenever a bundle built
+for it is in the same run (Morphe Manager 2.x with Morphe Patches selected), even though Lurk's bundle and
+Morphe Desktop 1.18 still match a part. `tests/verify_fingerprint_strings.py` (in `bin/test-host`) checks them
+against the stored APK of each target version. See the patcher docs in
 `$MORPHE_WORK/refs/morphe-patcher/docs/` (after `bin/refs`) and the
 [fingerprinting guide](https://github.com/MorpheApp/morphe-patcher/blob/main/docs/2_2_1_fingerprinting.md).
 

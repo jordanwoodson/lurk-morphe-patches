@@ -53,6 +53,28 @@ def main():
             assert instructions[position - 1] == f"move-result {register}"
             assert "->bitsVisible(Z)Z" in instructions[position - 2]
         assert constructor.count("return-void") == 1, "UI-state constructor exit changed"
+    # The chat header's buttons state: Get Bits through bitsVisible (Hide Bits tipping), Upgrade and the
+    # subscription state (Subscribe, Gift A Sub) through the subscription upsell helpers, each right before its store.
+    header = loc.type("twitch.match.chat_header_buttons_state", "ex5") + ".smali"
+    assert helper not in source(stock, header), "Stock chat header state unexpectedly contains Lurk"
+    constructor = next(body for declaration, body in re.findall(r"^\.method ([^\n]+)\n(.*?)^\.end method",
+                                                                source(patched, header), re.M | re.S)
+                       if declaration.startswith("public constructor <init>"))
+    instructions = [line.strip() for line in constructor.splitlines()
+                    if line.strip() and not line.lstrip().startswith((".", "#", ":"))]
+    for key, fallback, call in [("twitch.ui_flag.chat_header_buttons_state.is_bits_button_enabled", "d", "->bitsVisible(Z)Z"),
+                                ("twitch.ui_flag.chat_header_buttons_state.can_show_upgrade_button", "e", "->subscriptionUpsellVisible(Z)Z"),
+                                ("twitch.hide_subscription_upsells.chat_header_subscription_state", "b",
+                                 "->subscriptionButtons(Ljava/lang/Enum;)Ljava/lang/Enum;")]:
+        field = loc.field(key, fallback)
+        store = next(i for i, line in enumerate(instructions) if line.startswith("iput") and f"->{field}:" in line)
+        register = instructions[store].split()[1].rstrip(",")
+        # An object result is cast back to the field's type between the move and the store.
+        cast = 1 if instructions[store - 1].startswith("check-cast") else 0
+        assert instructions[store - 1 - cast] == ("move-result-object " if cast else "move-result ") + register, key
+        assert call in instructions[store - 2 - cast], key
+        assert constructor.count(helper + call) == 1, key
+    assert constructor.count("return-void") == 1, "Chat header state constructor exit changed"
     profile = source(patched, loc.type("twitch.match.profile_tab_routes", "cov") + ".smali")
     assert helper + "->clipTabs(Ljava/lang/Object;Landroid/os/Bundle;)Ljava/lang/Object;" in profile
     assert re.search(r"invoke-static \{p1, p4\}, " + re.escape(helper) +

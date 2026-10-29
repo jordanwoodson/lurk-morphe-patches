@@ -60,8 +60,8 @@ Lurk is tested on these APKMirror variants. Other variants of the same version m
 to install, so take these:
 
 - **Twitch 31.8.0**: the [arm64-v8a bundle, 480-640dpi, Android 10+](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-31-8-0-release/twitch-live-streaming-31-8-0-android-apk-download/).
-- **Kick 40.32.5**: the arm64-v8a bundle, 480-640dpi, Android 10+, on the
-  [40.32.5 release page](https://www.apkmirror.com/apk/kick-live-streaming/kick-live-streaming/kick-live-streaming-40-32-5-release/)
+- **Kick 40.33.0**: the arm64-v8a bundle, 480-640dpi, Android 10+, on the
+  [40.33.0 release page](https://www.apkmirror.com/apk/kick-live-streaming/kick-live-streaming/kick-live-streaming-40-33-0-release/)
   (not one of the two universal builds).
 - **Rumble 3.21.0**: the universal bundle (all four architectures, 120-640dpi, Android 8.0+) on the
   [3.21.0 release page](https://www.apkmirror.com/apk/rumble-inc/rumble/rumble-stream-watch-videos-3-21-0-release/).
