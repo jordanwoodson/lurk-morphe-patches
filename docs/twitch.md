@@ -53,8 +53,8 @@ based on this APK; the Rumble and Kick fingerprints do not apply directly.
 | Disable autoplay | Separate switches for fresh feed-preview defaults and automatic next-video/clip advancement. Manual playback stays available. |
 | Default video quality | Opt-in default rendition, Source initially. Saved choices including Auto win; unavailable renditions use Twitch's fallback. |
 | Hide Shorts | `Hide Clips`: Home discovery and native channel-profile Clips tabs. Clip routes remain present. |
-| Hide tipping and Rants | `Hide Bits tipping`: purchase/cheering controls, including native and RN chat buttons. Received chat messages stay untouched. |
-| Hide Premium upsells | `Hide subscription upsells`: Subscribe/Gift prompts and Turbo promotions. Existing subscriber status and native member-management rows remain. |
+| Hide tipping and Rants | `Hide Bits tipping`: purchase/cheering controls, including native and RN chat buttons and the chat header's Get Bits. Received chat messages stay untouched. |
+| Hide Premium upsells | `Hide subscription upsells`: Subscribe/Gift prompts (the chat header's too) and Turbo promotions. Existing subscriber status and native member-management rows remain. |
 | Block cookie notice | Hides the automatic notice only. Does not accept consent, change saved consent or disable manual privacy settings. |
 | Block ads | `Block client ads`: takes the existing native client ad-decline path and completes its result. Does not remove ads stitched into streams or cover every RN ad path. |
 | Unlock Premium | No patch. Local Turbo state exists, but no useful equivalent entitlement change was established. Signed playback/account benefits are server controlled. |
@@ -442,11 +442,21 @@ signed out with *Watch without signing in*, with Android's "tall" display cutout
   as without the patch, and returning from picture-in-picture fills the screen again;
 - the switch off: the same view bounds as an APK without the patch.
 
+A punch hole was checked the same way (#44, a Pixel 5): Android's "hole" emulation, a corner punch hole whose
+safe inset is 199 px, on a 1080x2340 display at 440 dpi (`wm size`, `wm density`). In landscape, live, with the
+chat hidden or over the video, and the hole on the left (rotation 90) or the right (rotation 270):
+
+- the switch off: the theatre leaves the hole's 199 px strip out, and the fitted 1920x1080 video sits off center,
+  309 to 311 px of black on the hole's side and 110 to 112 px on the other;
+- the switch on: the theatre spans 0 to 2340, the fitted container is centered (about 210 to 2130) and its surface is
+  scaled by 1.22, so the picture covers the whole screen; the chat over the video, the Follow, Bits and channel
+  points buttons and "Send chat" stay where they were, clear of the hole.
+
 The React Native theatre was reached only with a test build that forced Twitch's route decision (not part of
 the bundle). On the emulator's 914 dp wide landscape window it showed the chat or extensions beside the player,
 which Fill screen left alone; after React Native's own wide-player toggle the player covered the window, and
 Fill screen used the strip with `ZOOM` while React Native's controls stayed clear of the cutout. Not verified:
-a phone's real cutout (punch holes and notches only on the emulator's overlay), Android 10, protected
+a phone's real cutout (punch holes and notches only on the emulator's overlays), Android 10, protected
 (`SurfaceView`) streams, and signed-in playback.
 
 ### Display ads, stitched ads and the playlist proxy
@@ -589,6 +599,32 @@ region, guardian and account gates still apply.
 
 *Hide Bits tipping* now also filters `ConfigureMessageInput(isBitsPickerVisible=)`. The classic chat
 input reads its Bits button and tray from that state, not from the toolbar states.
+
+The chat header, the row between the player and the chat (`ChatHeaderPresenter`: the channel's extensions on
+the left, buttons on the right), offers Follow, Subscribe, Gift A Sub, Get Bits or Upgrade. Twitch picks
+them from `ButtonsEligibilityState`, keeps the first two (three with Upgrade), and adds a Bits icon when Bits are
+for sale but Get Bits didn't fit. A signed-in viewer who follows and subscribes sees "Get Bits" and "Gift A
+Sub" there (#45); signed out it offers only Follow, since Bits and subscriptions need an account. The
+state's constructor now filters:
+
+- `isBitsButtonEnabled` through `bitsVisible` (*Hide Bits tipping*): no Get Bits and no Bits icon;
+- `canShowUpgradeButton` through `subscriptionUpsellVisible` and `subscriptionState` through
+  `subscriptionButtons` (*Hide subscription upsells*). The state is an enum whose constants keep their names
+  (the patch checks for them); with the switch on it becomes `SUBSCRIBED` for a subscriber and `DISABLED`
+  otherwise, the two values that offer neither Subscribe nor Gift A Sub.
+
+The remaining buttons move into the free places. With none left, Twitch hides the row and moves the extensions
+into the leaderboard row. Follow stays: it isn't a purchase. The patches record
+`twitch.match.chat_header_buttons_state`, its two `twitch.ui_flag.chat_header_buttons_state.*` fields and
+`twitch.hide_subscription_upsells.chat_header_subscription_state`.
+
+`bin/test-twitch-interface` builds the real state and runs Twitch's own mapper from it to the buttons on ART,
+for every combination of the two switches: a follower who subscribes (the issue's row), a viewer who neither
+follows nor subscribes, a subscriber who can upgrade, and a signed-out viewer; `--stock` checks that the original
+APK gives Twitch's buttons for all of them. On the emulator, signed out, a throwaway build (not part of the
+bundle) forced the state to a following subscriber with Bits for sale: with both switches off the row showed
+"Get Bits" and "Gift A Sub" as in the issue, with *Hide Bits tipping* only "Gift A Sub", and with both
+switches on the row was gone. Not verified: a real signed-in account.
 
 `bin/test-twitch-highlights` runs the real classes on ART with each switch on and off. Following
 sections, Hype Train and the RN paths are verified only statically.
@@ -1164,8 +1200,8 @@ for the target methods:
   dispatch guards. Disabled controls reach the deliberately empty original
   dependencies, proving they resume original execution.
 - `bash bin/test-twitch-interface <patched.apk>`: real enum ABI, ordering,
-  immutability and original-list identity, plus native Bits state constructors.
-  `--stock <base.apk>` runs the original enum/chat negative controls.
+  immutability and original-list identity, plus native Bits state constructors and the chat header's buttons
+  through Twitch's own mapper. `--stock <base.apk>` runs the original enum/chat/chat header negative controls.
 - `bash bin/test-twitch-playback <patched.apk>`: real recommendation binding with
   next-video suppression off must reach the original progress-bar operation.
   `--stock <base.apk>` runs the original control path.
@@ -1205,7 +1241,8 @@ patched APK as `assets/lurk/locators.json`:
   `twitch.show_deleted.name_span`, `twitch.mute_stitched_ads.native_player`/`root_view`,
   `twitch.block_client_ads.request`, `twitch.disable_analytics.crashlytics_permission`,
   `twitch.block_cookie_notice.options_constructor`, `twitch.hide_chat_highlights.dispatch`/`highlight_*`,
-  `twitch.hide_clips.home_tabs`, `twitch.hide_subscription_upsells.subscribe_renderer`/`turbo_dialog_route` and
+  `twitch.hide_clips.home_tabs`,
+  `twitch.hide_subscription_upsells.subscribe_renderer`/`turbo_dialog_route`/`chat_header_subscription_state` and
   `twitch.emote_picker.section`/`autocomplete_map`/`autocomplete_order`/`autocomplete_order_type` and
   `twitch.latency_badge.latency` and `twitch.auto_claim_drops.handler`/`handler_case` and
   `twitch.emote_badge_info.placeholder`.
@@ -1217,7 +1254,9 @@ method of a signature). Each lookup carries the 31.7.0 name as a fallback, used 
 locators. Still pinned: what no patch matches (in `HighlightsArtProbe` the state flag fields, the raid
 highlight, notice kinds and callout lambda; the deleted-message string ID in `ChatArtProbe`; the
 compile-time `kx50`/`akg` stubs of `PrivacyAdsProbe`; `verify_interface_emitted.py`'s preservation
-controls), and the probes not converted yet (`InterfaceArtProbe`, `PlaybackArtProbe`, `RNBridgeProbe`, and
+controls), and the probes not converted yet (`InterfaceArtProbe` apart from its chat header buttons state,
+which it reads from `twitch.match.chat_header_buttons_state` while pinning Twitch's mapper `dx5` and
+`NoDiscount` `gx5`, `PlaybackArtProbe`, `RNBridgeProbe`, and
 `ChatStyleArtProbe` apart from its chat image box, which it reads from `twitch.match.chat_image_box`).
 `verify_playback_bytecode.py` finds its methods by content and pins no names.
 

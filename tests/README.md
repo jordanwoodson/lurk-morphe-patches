@@ -29,7 +29,7 @@ need it rather than skipping them.
 
 | Check | What it covers |
 |---|---|
-| `tests/twitch/verify_interface.py` | Twitch's interface extension: startup destinations, Home and profile tabs, Clips routing, settings switched off. |
+| `tests/twitch/verify_interface.py` | Twitch's interface extension: startup destinations, Home and profile tabs, Clips routing, the chat header's Bits and subscription offers, settings switched off. |
 | `tests/twitch/verify_playback_links.py` | Twitch's playback and share-link helpers. |
 | `tests/twitch/verify_fill_screen.py` | Twitch's *Fill screen* on a view-tree double of the landscape theatre with a display cutout: the container's cutout padding, the scaled video, the views kept clear of the cutout, and everything given back next to the chat, in portrait, in picture-in-picture, for vertical videos and when the player leaves; Android 10's window cutout mode and the React Native player's resize mode. |
 | `tests/twitch/test_async.py` | The backup stream behind *Avoid stitched ads* against a slow local HTTP server: deadlines, cancellation, ad fallback, oversized and trickling responses, stale results. |
