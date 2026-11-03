@@ -2,6 +2,8 @@ package io.github.jordanwoodson.patches.twitch.clips
 
 import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.twitch.shared.addInstructions
+import app.morphe.patcher.Fingerprint
+import app.morphe.patcher.methodCall
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
@@ -42,15 +44,18 @@ internal fun BytecodePatchContext.hideNativeHomeClipsTab() {
     } ?: throw PatchException("Twitch: the Home tab interface does not declare the matched List(boolean) method")
     val call = "$provider->$name(Z)Ljava/util/List;"
     Locators.record("twitch.hide_clips.home_tabs", call)
-    val sites = mutableListOf<Pair<String, MethodReference>>()
-    classDefForEach { type ->
-        type.methods.forEach { method ->
-            if (method.implementation?.instructions?.any { it.opcode == Opcode.INVOKE_INTERFACE &&
-                    (it as ReferenceInstruction).reference.toString() == call } == true) {
-                sites += type.type to method
-            }
-        }
-    }
+    val sitesFingerprint = Fingerprint(
+        filters = listOf(
+            methodCall(
+                definingClass = provider,
+                name = name,
+                parameters = listOf("Z"),
+                returnType = "Ljava/util/List;",
+                opcode = Opcode.INVOKE_INTERFACE,
+            ),
+        ),
+    )
+    val sites = sitesFingerprint.matchAll().map { it.classDef.type to it.method }
     if (sites.size != 3) throw PatchException("Twitch: expected three Home tab list users, found ${sites.size}")
     sites.forEach { (type, reference) ->
         val method = mutableClassDefBy(type).methods.single { it.name == reference.name &&

@@ -1,5 +1,6 @@
 package io.github.jordanwoodson.patches.rumble.ads
 
+import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import com.android.tools.smali.dexlib2.iface.ClassDef
@@ -42,8 +43,8 @@ val blockAdsPatch = bytecodePatch(
                 "This patch targets Rumble ${RUMBLE.version}; recheck the ad code before updating compatibility.")
         val repositoryInterface = useCase.originalMethod.parameterTypes.first().toString()
 
-        val implementations = mutableListOf<ClassDef>()
-        classDefForEach { if (repositoryInterface in it.interfaces) implementations += it }
+        val implementations = Fingerprint(interfaces = listOf(repositoryInterface)).matchAll()
+            .map { it.classDef }.distinctBy { it.type }
         val repository = mutableClassDefBy(implementations.singleOrNull()
             ?: throw PatchException("Rumble: expected one ad repository, found ${implementations.size}"))
         Locators.record("rumble.block_ads.repository", repository.type)

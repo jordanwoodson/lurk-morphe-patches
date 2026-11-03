@@ -1,7 +1,10 @@
 package io.github.jordanwoodson.patches.rumble.player
 
+import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.StringComparisonType
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.instanceOf
+import app.morphe.patcher.methodCall
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import com.android.tools.smali.dexlib2.AccessFlags
@@ -45,15 +48,12 @@ val keepScreenOnPausedPatch = bytecodePatch(
         Locators.record("rumble.keep_screen_on_paused.paused_state", paused.type)
 
         // The player's state effect turns the screen on unless it is paused or finished (outside an ad).
-        val lambdas = mutableListOf<Pair<ClassDef, Method>>()
-        classDefForEach { classDef ->
-            classDef.methods.filter { method ->
-                method.calls(helperCall) &&
-                    method.implementation!!.instructions.any {
-                        it.opcode == Opcode.INSTANCE_OF && ((it as ReferenceInstruction).reference as TypeReference).type == paused.type
-                    }
-            }.forEach { lambdas += classDef to it }
-        }
+        val lambdas = Fingerprint(
+            filters = listOf(
+                methodCall(definingClass = helper.definingClass, name = helper.name),
+                instanceOf(paused.type),
+            ),
+        ).matchAll().map { it.classDef to it.method }
         val (lambdaClass, lambdaMethod) = lambdas.singleOrNull()
             ?: throw PatchException("Rumble: expected one player state effect, found ${lambdas.size}")
         if (AccessFlags.STATIC.isSet(lambdaMethod.accessFlags)) throw PatchException("Rumble: unexpected state effect")

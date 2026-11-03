@@ -71,22 +71,23 @@ internal object StitchedAdPlayingFingerprint : Fingerprint(
 // React Native's playback session: the one class that takes the player view's commands and the IVS
 // player's events. Twitch renamed it (PlaybackSession in 31.7.0, PlaybackSlot in 31.8.0), so it is found
 // by those two interfaces.
-private fun isRnPlaybackSession(classDef: ClassDef) =
-    classDef.interfaces.containsAll(listOf(RN_PLAYBACK_COMMANDS, RN_PLAYER_LISTENER_TARGET))
+private object RnPlaybackSessionClassFingerprint : Fingerprint(
+    interfaces = listOf(RN_PLAYBACK_COMMANDS, RN_PLAYER_LISTENER_TARGET),
+)
 
 internal object RnPlayerMetadataFingerprint : Fingerprint(
+    classFingerprint = RnPlaybackSessionClassFingerprint,
     name = "handleMetadata", returnType = "V", parameters = listOf("Ljava/lang/String;", "Ljava/nio/ByteBuffer;"),
-    custom = { _, classDef -> isRnPlaybackSession(classDef) },
 )
 
 internal object RnPlayerStreamUrlFingerprint : Fingerprint(
+    classFingerprint = RnPlaybackSessionClassFingerprint,
     name = "setStreamUrl", returnType = "V", parameters = listOf("Ljava/lang/String;"),
-    custom = { _, classDef -> isRnPlaybackSession(classDef) },
 )
 
 internal object RnPlayerReleaseFingerprint : Fingerprint(
+    classFingerprint = RnPlaybackSessionClassFingerprint,
     name = "release", returnType = "V", parameters = emptyList(),
-    custom = { _, classDef -> isRnPlaybackSession(classDef) },
 )
 
 // The native live playlist (usher) URL, built from the channel and its signed playback token.
@@ -96,13 +97,11 @@ internal object LivePlaylistUrlFingerprint : Fingerprint(
     strings = listOf("api/v2/channel/hls/", "api/channel/hls/"),
 )
 
-// React Native's player preloader, keyed by the stream URL the player view later asks for. It takes
-// (context, url, warm), and since 31.8.0 the preload's owner after them.
+// React Native's player preloader, keyed by the stream URL the player view later asks for.
 internal object RnPreloadFingerprint : Fingerprint(
-    definingClass = "Lcom/twitchrn/player/PreloadHolder;", name = "preload", returnType = "V",
-    custom = { method, _ ->
-        method.parameterTypes.map { it.toString() }.take(3) == listOf("Landroid/content/Context;", "Ljava/lang/String;", "Z")
-    },
+    definingClass = "Lcom/twitchrn/player/PreloadHolder;",
+    name = "preload",
+    returnType = "V",
 )
 
 internal object ProxyTemplateFingerprint : Fingerprint(

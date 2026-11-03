@@ -2,6 +2,7 @@ package io.github.jordanwoodson.patches.twitch.chat
 
 import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.twitch.shared.addInstructions
+import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -123,10 +124,7 @@ private fun BytecodePatchContext.autoClaimBonus() {
  * into a call on the parameter (getClass), and any field read or call on it would throw as well.
  */
 private fun BytecodePatchContext.requireNullableChatMode(action: String, claim: String) {
-    val implementations = mutableListOf<String>()
-    classDefForEach { type ->
-        if (action in type.interfaces) implementations += type.type
-    }
+    val implementations = Fingerprint(interfaces = listOf(action)).matchAll().map { it.classDef.type }.distinct()
     if (implementations.isEmpty()) throw PatchException("Twitch: no channel points claim implementation")
     implementations.forEach { type ->
         val method = mutableClassDefBy(type).methods.singleOrNull { it.name == claim &&

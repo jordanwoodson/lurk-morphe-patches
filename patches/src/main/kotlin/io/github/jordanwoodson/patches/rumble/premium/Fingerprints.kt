@@ -25,5 +25,4 @@ internal object ProfilePremiumFingerprint : Fingerprint(
         ),
         opcode(Opcode.RETURN, MatchAfterImmediately()),
     ),
-    custom = { method, _ -> method.implementation?.instructions?.count() == 2 },
 )

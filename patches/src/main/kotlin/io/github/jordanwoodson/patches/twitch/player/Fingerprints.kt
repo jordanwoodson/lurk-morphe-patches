@@ -54,12 +54,12 @@ internal object LivePlayerOverlayFingerprint : Fingerprint(
 
 // The native player's gesture listener: Twitch emits a long press with its position, then ignores it.
 internal object PlayerLongPressFingerprint : Fingerprint(
+    superclass = "Landroid/view/GestureDetector\$SimpleOnGestureListener;",
     name = "onLongPress", returnType = "V", parameters = listOf("Landroid/view/MotionEvent;"),
     filters = listOf(
         methodCall(definingClass = "Landroid/view/MotionEvent;", name = "getX", parameters = emptyList()),
         methodCall(definingClass = "Landroid/view/MotionEvent;", name = "getY", parameters = emptyList()),
     ),
-    custom = { _, classDef -> classDef.superclass == "Landroid/view/GestureDetector\$SimpleOnGestureListener;" },
 )
 
 // The classic VOD overlay's rewind and forward buttons: -10 and +30 seconds, sent on touch down.

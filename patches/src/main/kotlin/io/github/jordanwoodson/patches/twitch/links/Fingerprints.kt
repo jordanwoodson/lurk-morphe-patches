@@ -25,14 +25,15 @@ internal object GenericShareFingerprint : Fingerprint(
 )
 
 internal object ReactVideoShareFingerprint : Fingerprint(
+    name = "videoShareIntent",
     parameters = listOf("Landroid/net/Uri;", "Ljava/lang/String;"), returnType = "Landroid/content/Intent;",
     strings = listOf("android.intent.extra.TEXT", "video/mp4"),
-    custom = { _, classDef -> classDef.type.endsWith("/TwitchRNHostShareModule;") },
 )
 
 internal object ReactShareFingerprint : Fingerprint(
+    definingClass = "Lcom/facebook/react/modules/share/ShareModule;",
+    name = "share",
     returnType = "V", strings = listOf("android.intent.extra.TEXT", "Failed to open share dialog"),
-    custom = { _, classDef -> classDef.type == "Lcom/facebook/react/modules/share/ShareModule;" },
 )
 
 internal object CopyShareLinkFingerprint : Fingerprint(
@@ -45,8 +46,7 @@ internal object NativeClipboardFingerprint : Fingerprint(
 )
 
 internal object ReactClipboardFingerprint : Fingerprint(
+    definingClass = "Lcom/facebook/react/modules/clipboard/ClipboardModule;",
+    name = "setString",
     parameters = listOf("Ljava/lang/String;"), returnType = "V",
-    custom = { method, classDef ->
-        classDef.type == "Lcom/facebook/react/modules/clipboard/ClipboardModule;" && method.name == "setString"
-    },
 )

@@ -27,7 +27,7 @@ def dexdump():
     if not os.environ.get("ANDROID_HOME"):
         sys.exit("Set ANDROID_HOME to the Android SDK (dexdump comes from its build-tools)")
     home = Path(os.environ["ANDROID_HOME"])
-    tools = sorted((home / "build-tools").glob("*/dexdump"), key=lambda p: [int(x) for x in re.findall(r"\d+", p.parent.name)])
+    tools = sorted([p for p in (home / "build-tools").glob("*/dexdump*") if p.name in ("dexdump", "dexdump.exe")], key=lambda p: [int(x) for x in re.findall(r"\d+", p.parent.name)])
     if not tools:
         sys.exit(f"dexdump not found under {home}/build-tools")
     return str(tools[-1])

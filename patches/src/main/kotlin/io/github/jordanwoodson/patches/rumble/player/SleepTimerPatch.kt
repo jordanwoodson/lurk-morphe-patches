@@ -1,7 +1,12 @@
 package io.github.jordanwoodson.patches.rumble.player
 
+import app.morphe.patcher.Fingerprint
+import app.morphe.patcher.InstructionLocation.MatchAfterImmediately
 import app.morphe.patcher.extensions.InstructionExtensions.addInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.literal
+import app.morphe.patcher.methodCall
+import app.morphe.patcher.opcode
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -41,21 +46,19 @@ val sleepTimerPatch = bytecodePatch(
     execute {
         // The player service's Player.Listener: onPlaybackStateChanged(int) checks IDLE (1) and ENDED (4),
         // and onIsPlayingChanged(boolean) is the other method taking one boolean.
-        val listeners = mutableListOf<ClassDef>()
-        classDefForEach { classDef ->
-            if (!classDef.type.startsWith(PLAYER_SERVICE.removeSuffix(";") + "$")) return@classDefForEach
-            val checksStates = classDef.methods.any { method ->
-                val literals = method.implementation?.instructions?.mapNotNull {
-                    (it as? NarrowLiteralInstruction)?.narrowLiteral
-                }.orEmpty()
-                method.parameterTypes.map(CharSequence::toString) == listOf("I") && method.returnType == "V" &&
-                    1 in literals && 4 in literals
+        val stateMethodMatches = Fingerprint(
+            parameters = listOf("I"),
+            returnType = "V",
+            filters = listOf(literal(1), literal(4)),
+        ).matchAll().filter { it.classDef.type.startsWith(PLAYER_SERVICE.removeSuffix(";") + "$") }
+        val listeners = stateMethodMatches
+            .map { it.classDef }
+            .distinctBy { it.type }
+            .filter { classDef ->
+                classDef.methods.count {
+                    it.parameterTypes.map(CharSequence::toString) == listOf("Z") && it.returnType == "V"
+                } == 1
             }
-            val playing = classDef.methods.count {
-                it.parameterTypes.map(CharSequence::toString) == listOf("Z") && it.returnType == "V"
-            }
-            if (checksStates && playing == 1) listeners += classDef
-        }
         val listener = listeners.singleOrNull()
             ?: throw PatchException("Rumble: expected one player service listener, found ${listeners.size}")
         mutableClassDefBy(listener).methods.single {
@@ -95,40 +98,45 @@ private fun BytecodePatchContext.addListenerPause(listener: ClassDef) {
     // is setPlayWhenReady(false).
     val player = classDefBy(EXO_PLAYER).interfaces.singleOrNull()
         ?: throw PatchException("Rumble: ExoPlayer doesn't extend exactly one interface")
-    val pauses = mutableSetOf<String>()
-    classDefForEach { classDef ->
-        if (player !in classDef.interfaces) return@classDefForEach
-        classDef.methods.forEach { method ->
-            val code = method.implementation?.instructions?.toList() ?: return@forEach
-            if (method.parameterTypes.isNotEmpty() || method.returnType != "V" || code.size != 3) return@forEach
-            val call = (code[1] as? ReferenceInstruction)?.reference as? MethodReference
-            if (code[0].opcode == Opcode.CONST_4 && (code[0] as NarrowLiteralInstruction).narrowLiteral == 0 &&
-                code[1].opcode == Opcode.INVOKE_INTERFACE && call?.definingClass == player &&
-                call.parameterTypes.map(CharSequence::toString) == listOf("Z") && code[2].opcode == Opcode.RETURN_VOID
-            ) {
-                pauses += method.name
-            }
-        }
-    }
+    val pauses = Fingerprint(
+        interfaces = listOf(player),
+        parameters = emptyList(),
+        returnType = "V",
+        filters = listOf(
+            literal(0),
+            methodCall(definingClass = player, parameters = listOf("Z")),
+            opcode(Opcode.RETURN_VOID, MatchAfterImmediately()),
+        ),
+    ).matchAll().map { it.method.name }.toSet()
     val pause = pauses.singleOrNull() ?: throw PatchException("Rumble: expected one Media3 pause(), found $pauses")
 
     // Rumble's player (RumblePlayer) and the media session's player, an inner class of the service overriding
     // pause() with a call to Rumble's own pause.
     val rumblePlayer = QualitySwitchFingerprint.single("player quality switch").classDef.type
-    val rumblePauses = mutableSetOf<String>()
-    classDefForEach { classDef ->
-        if (!classDef.type.startsWith(PLAYER_SERVICE.removeSuffix(";") + "$")) return@classDefForEach
-        classDef.methods.filter { it.name == pause && it.parameterTypes.isEmpty() && it.returnType == "V" }.forEach { method ->
-            method.implementation?.instructions?.forEach { instruction ->
-                val call = (instruction as? ReferenceInstruction)?.reference as? MethodReference ?: return@forEach
+    val rumblePauses = Fingerprint(
+        name = pause,
+        parameters = emptyList(),
+        returnType = "V",
+        filters = listOf(
+            methodCall(
+                definingClass = rumblePlayer,
+                parameters = emptyList(),
+                returnType = "V",
+                opcode = Opcode.INVOKE_VIRTUAL,
+            ),
+        ),
+    ).matchAll()
+        .filter { it.classDef.type.startsWith(PLAYER_SERVICE.removeSuffix(";") + "$") }
+        .mapNotNull { match ->
+            match.method.implementation?.instructions?.firstNotNullOfOrNull { instruction ->
+                val call = (instruction as? ReferenceInstruction)?.reference as? MethodReference ?: return@firstNotNullOfOrNull null
                 if (instruction.opcode == Opcode.INVOKE_VIRTUAL && call.definingClass == rumblePlayer &&
                     call.parameterTypes.isEmpty() && call.returnType == "V"
                 ) {
-                    rumblePauses += call.name
-                }
+                    call.name
+                } else null
             }
-        }
-    }
+        }.toSet()
     val rumblePause = rumblePauses.singleOrNull()
         ?: throw PatchException("Rumble: expected the media session's pause to call one player method, found $rumblePauses")
     Locators.record("rumble.sleep_timer.listener", listener.type)

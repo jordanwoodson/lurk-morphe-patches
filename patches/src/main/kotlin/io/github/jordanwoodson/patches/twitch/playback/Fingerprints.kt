@@ -32,11 +32,10 @@ internal object PlayerQualityByNameFingerprint : Fingerprint(
 
 // Stable React Native library boundary. Exactly one pushNull produces an absent-key result row.
 internal object MissingAsyncStorageValueFingerprint : Fingerprint(
-    returnType = "V", strings = listOf("catalystLocalStorage", "key", "value"),
-    custom = { method, classDef ->
-        classDef.type.startsWith("Lcom/reactnativecommunity/asyncstorage/AsyncStorageModule$") &&
-            method.name == "doInBackgroundGuarded"
-    },
+    name = "doInBackgroundGuarded",
+    returnType = "V",
+    parameters = listOf("[Ljava/lang/Void;"),
+    strings = listOf("catalystLocalStorage", "key", "value"),
 )
 
 internal object RecommendationAutoplayFingerprint : Fingerprint(

@@ -69,7 +69,7 @@ internal object RnWebSocketTextFingerprint : Fingerprint(
     returnType = "V",
     parameters = listOf("L", "Ljava/lang/String;"),
     strings = listOf("websocketMessage", "data", "text"),
-    custom = { _, classDef -> classDef.fields.any { it.type == "Lcom/facebook/react/modules/websocket/WebSocketModule;" } },
+    filters = listOf(fieldAccess(definingClass = "this", type = "Lcom/facebook/react/modules/websocket/WebSocketModule;")),
 )
 
 // React Native's image source: every RN image URI (including chat emotes) is parsed here.
@@ -113,11 +113,11 @@ internal object EmoteOwnerFingerprint : Fingerprint(
 
 // The chat input's autocomplete filter: asks its current source (users, emotes or commands) for matches.
 internal object AutocompleteFilterFingerprint : Fingerprint(
+    superclass = "Landroid/widget/Filter;",
     name = "performFiltering",
     returnType = "Landroid/widget/Filter\$FilterResults;",
     parameters = listOf("Ljava/lang/CharSequence;"),
     filters = listOf(methodCall(parameters = listOf("Ljava/lang/CharSequence;"), returnType = "Ljava/util/ArrayList;")),
-    custom = { _, classDef -> classDef.superclass == "Landroid/widget/Filter;" },
 )
 
 // The emote autocomplete source: the user's emotes by code, matched after an optional leading ':'.

@@ -1,6 +1,8 @@
 package io.github.jordanwoodson.patches.rumble.player
 
+import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.resourcePatch
@@ -79,19 +81,25 @@ val seekIntervalPatch = bytecodePatch(
         // The buttons' icons, read from the R class fields holding their IDs.
         mapOf("ic_backward" to "seekBackIcon", "ic_forward" to "seekForwardIcon").forEach { (icon, helper) ->
             val id = resourceId(ResourceType.DRAWABLE, icon).toInt()
+            val rDrawable = classDefByOrNull("Lcom/rumble/battles/R\$drawable;")
             val fields = mutableListOf<String>()
-            classDefForEach { classDef ->
-                classDef.staticFields.filter { (it.initialValue as? IntEncodedValue)?.value == id && it.type == "I" }
-                    .forEach { fields += "${classDef.type}->${it.name}:I" }
+            if (rDrawable != null) {
+                rDrawable.staticFields.filter { (it.initialValue as? IntEncodedValue)?.value == id && it.type == "I" }
+                    .forEach { fields += "${rDrawable.type}->${it.name}:I" }
             }
-            val sites = mutableListOf<Pair<ClassDef, Method>>()
-            classDefForEach { classDef ->
-                classDef.methods.filter { method ->
-                    method.implementation?.instructions?.any {
-                        it.opcode == Opcode.SGET && (it as ReferenceInstruction).reference.toString() in fields
-                    } == true
-                }.forEach { sites += classDef to it }
+            if (fields.isEmpty()) {
+                classDefForEach { classDef ->
+                    classDef.staticFields.filter { (it.initialValue as? IntEncodedValue)?.value == id && it.type == "I" }
+                        .forEach { fields += "${classDef.type}->${it.name}:I" }
+                }
             }
+            val sites = fields.flatMap { fieldStr ->
+                val defClass = fieldStr.substringBefore("->")
+                val fName = fieldStr.substringAfter("->").substringBefore(":")
+                Fingerprint(
+                    filters = listOf(fieldAccess(definingClass = defClass, name = fName, type = "I", opcode = Opcode.SGET)),
+                ).matchAll().map { it.classDef to it.method }
+            }.distinctBy { it.first.type to it.second.name }
             if (sites.isEmpty()) throw PatchException("Rumble: nothing draws the $icon icon")
             sites.forEach { (classDef, site) ->
                 val method = mutableTwin(classDef, site)

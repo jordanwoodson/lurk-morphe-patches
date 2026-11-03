@@ -2,6 +2,7 @@ package io.github.jordanwoodson.patches.twitch.layout
 
 import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.anyInstruction
+import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.methodCall
 import app.morphe.patcher.resource.ResourceType
 import app.morphe.patcher.resourceLiteral

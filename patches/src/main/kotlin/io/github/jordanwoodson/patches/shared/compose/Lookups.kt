@@ -1,9 +1,11 @@
 package io.github.jordanwoodson.patches.shared.compose
 
 import app.morphe.patcher.Fingerprint
+import app.morphe.patcher.InstructionLocation.MatchAfterImmediately
 import app.morphe.patcher.Match
 import app.morphe.patcher.StringComparisonType
 import app.morphe.patcher.fieldAccess
+import app.morphe.patcher.opcode
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.string
 import app.morphe.patcher.util.proxy.mutableTypes.MutableClass
@@ -58,8 +60,7 @@ internal fun Method.methodCalls(): List<Pair<Int, MethodReference>> =
     }.orEmpty()
 
 /**
- * The patchable twin of [method] of [classDef], a class found while iterating (classDefForEach), which hands out
- * immutable definitions.
+ * The patchable twin of [method] of [classDef], which hands out immutable definitions.
  */
 internal fun BytecodePatchContext.mutableTwin(classDef: ClassDef, method: Method): MutableMethod =
     mutableClassDefBy(classDef).methods.single {
@@ -117,14 +118,23 @@ internal class ComposableFingerprint(val label: String) : Fingerprint(
  * The getter of a field in a Gson DTO. R8 keeps those classes' names and field names, since Gson needs them,
  * but renames the getters.
  */
-internal fun dtoGetterFingerprint(dtoClass: String, field: String, type: String) = Fingerprint(
-    definingClass = dtoClass,
-    returnType = type,
-    parameters = emptyList(),
-    filters = listOf(fieldAccess(definingClass = "this", name = field, type = type)),
-    // toString() reads every field too.
-    custom = { method, _ -> method.name != "toString" },
-)
+internal fun dtoGetterFingerprint(dtoClass: String, field: String, type: String): Fingerprint {
+    val returnOpcode = when {
+        type.startsWith("L") || type.startsWith("[") -> Opcode.RETURN_OBJECT
+        type == "J" || type == "D" -> Opcode.RETURN_WIDE
+        type == "V" -> Opcode.RETURN_VOID
+        else -> Opcode.RETURN
+    }
+    return Fingerprint(
+        definingClass = dtoClass,
+        returnType = type,
+        parameters = emptyList(),
+        filters = listOf(
+            fieldAccess(definingClass = "this", name = field, type = type),
+            opcode(returnOpcode, MatchAfterImmediately()),
+        ),
+    )
+}
 
 /** The static field holding the enum constant named [name] (R8 renames the fields, not the names). */
 internal fun ClassDef.enumConstant(app: AppCode, name: String): String {

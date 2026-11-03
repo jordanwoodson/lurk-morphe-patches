@@ -66,14 +66,15 @@ internal class RecoloredFigure(private val color: String) : LauncherIcon {
  */
 internal class LauncherArtwork(private val directory: String, private val files: List<String>) : LauncherIcon {
     override fun ResourcePatchContext.install(app: LurkApp) {
-        val targets = files.associateWith { get("res/$it") }
-        val missing = targets.filterValues { !it.isFile }.keys
+        val decodable = listDecodableFiles("res/**").toSet()
+        val missing = files.filter { "res/$it" !in decodable }
         if (missing.isNotEmpty()) {
             throw PatchException("${app.name}: launcher icon files not found: ${missing.joinToString()}. " +
                 "This patch targets ${app.name} ${app.version}; recheck res/ before updating compatibility.")
         }
 
-        targets.forEach { (path, target) ->
+        files.forEach { path ->
+            val target = get("res/$path")
             val icon = bundleResources.getResourceAsStream("$directory/$path")
                 ?: throw PatchException("Bundled icon file missing: $directory/$path")
             icon.use { Files.copy(it, target.toPath(), StandardCopyOption.REPLACE_EXISTING) }

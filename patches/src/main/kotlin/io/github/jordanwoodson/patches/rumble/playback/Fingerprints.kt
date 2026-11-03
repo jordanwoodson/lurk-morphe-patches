@@ -3,7 +3,6 @@ package io.github.jordanwoodson.patches.rumble.playback
 import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.string
 import com.android.tools.smali.dexlib2.AccessFlags
-import io.github.jordanwoodson.patches.shared.compose.constStrings
 
 // Rumble's UserPreferenceManager. Its constructor creates the DataStore keys by name.
 internal object UserPreferencesFingerprint : Fingerprint(
@@ -15,12 +14,15 @@ internal object UserPreferencesFingerprint : Fingerprint(
 // Builds the player for Home's featured video: (video, screen, playEvenIfFeedPlaybackIsOff, ...). Its class
 // gets the "Playback in feeds" check injected, like the builder for ordinary feed cards, which takes more
 // parameters.
+private object FeaturedVideoPlayerClassFingerprint : Fingerprint(
+    name = "<init>",
+    strings = listOf("playbackInFeedsEnabledUseCase"),
+)
+
 internal object FeaturedVideoPlayerFingerprint : Fingerprint(
+    classFingerprint = FeaturedVideoPlayerClassFingerprint,
     returnType = "Ljava/lang/Object;",
     parameters = listOf("L", "Ljava/lang/String;", "Z", "Lkotlin/jvm/functions/Function2;", "L"),
-    custom = { _, classDef ->
-        classDef.methods.any { it.name == "<init>" && "playbackInFeedsEnabledUseCase" in it.constStrings() }
-    },
 )
 
 // Picks the source (one URL per quality) a video starts with:
@@ -34,13 +36,13 @@ internal object VideoSourceSelectionFingerprint : Fingerprint(
 
 // DefineCurrentWatchPositionUseCase(video, resume, continuation): where a video starts. It reads the position
 // kept on the phone, then uses the server's position signed in and 0 signed out.
+private object WatchPositionClassFingerprint : Fingerprint(
+    name = "<init>",
+    strings = listOf("getLastPositionUseCase", "sessionManager"),
+)
+
 internal object WatchPositionFingerprint : Fingerprint(
+    classFingerprint = WatchPositionClassFingerprint,
     returnType = "Ljava/lang/Object;",
     parameters = listOf("L", "Z", "L"),
-    custom = { method, classDef ->
-        method.name != "<init>" && classDef.methods.any { constructor ->
-            constructor.name == "<init>" &&
-                constructor.constStrings().containsAll(listOf("getLastPositionUseCase", "sessionManager"))
-        }
-    },
 )

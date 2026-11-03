@@ -3,7 +3,9 @@ package io.github.jordanwoodson.patches.twitch.upsells
 import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
+import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
+import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -100,11 +102,11 @@ private fun BytecodePatchContext.hideNativeSubscribeButtons() {
     val gift = GiftStateFingerprint.twitchMatch("native Gift a Sub UI state").method.definingClass
     val state = classDefBy(subscribe).superclass ?: throw PatchException("Twitch: Subscribe state has no parent")
     if (classDefBy(gift).superclass != state) throw PatchException("Twitch: Subscribe and Gift state parents differ")
-    val renderers = mutableListOf<Pair<String, String>>()
-    classDefForEach { type ->
-        type.methods.filter { it.parameterTypes.map { parameter -> parameter.toString() } == listOf(state) && it.returnType == "V" && !AccessFlags.STATIC.isSet(it.accessFlags) }
-            .forEach { renderers += type.type to it.name }
-    }
+    val renderers = Fingerprint(
+        isStatic = false,
+        returnType = "V",
+        parameters = listOf(state),
+    ).matchAll().map { it.classDef.type to it.method.name }
     val (type, name) = renderers.singleOrNull() ?: throw PatchException("Twitch: expected one native Subscribe renderer, found ${renderers.size}")
     val method = mutableClassDefBy(type).methods.single { it.name == name && it.parameterTypes.map { it.toString() } == listOf(state) }
     Locators.record("twitch.hide_subscription_upsells.subscribe_renderer", method)
@@ -172,12 +174,9 @@ private fun BytecodePatchContext.hideTurboStartDialog() {
     val action = TurboAppStartActionFingerprint.twitchMatch("Turbo app-start dialog action").method.definingClass
     val singleton = classDefBy(action).fields.single { AccessFlags.STATIC.isSet(it.accessFlags) && it.type == action }
     val reference = "$action->${singleton.name}:$action"
-    val callers = mutableListOf<Pair<String, String>>()
-    classDefForEach { type ->
-        type.methods.filter { method -> method.implementation?.instructions?.any {
-            it.opcode == Opcode.SGET_OBJECT && (it as ReferenceInstruction).reference.toString() == reference
-        } == true }.forEach { callers += type.type to it.name }
-    }
+    val callers = Fingerprint(
+        filters = listOf(fieldAccess(definingClass = action, name = singleton.name, type = action, opcode = Opcode.SGET_OBJECT)),
+    ).matchAll().map { it.classDef.type to it.method.name }
     val (type, name) = callers.singleOrNull() ?: throw PatchException("Twitch: expected one Turbo start dialog caller, found ${callers.size}")
     val method = mutableClassDefBy(type).methods.single { it.name == name }
     Locators.record("twitch.hide_subscription_upsells.turbo_dialog_route", method)

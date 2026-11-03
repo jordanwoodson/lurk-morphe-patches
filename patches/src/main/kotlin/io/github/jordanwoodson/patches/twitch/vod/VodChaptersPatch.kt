@@ -36,7 +36,7 @@ private val chaptersIconPatch = resourcePatch {
     execute {
         val source = get("res/drawable/list.xml")
         if (!source.exists()) throw PatchException("Twitch: no list icon")
-        get("res/drawable/lurk_chapters.xml").writeBytes(source.readBytes())
+        get("res/drawable/lurk_chapters.xml").apply { parentFile.mkdirs() }.writeBytes(source.readBytes())
     }
 }
 
