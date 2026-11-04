@@ -37,6 +37,7 @@ need it rather than skipping them.
 | `tests/twitch/test_vod_requests.py` | *VOD chapters* requests: shared loads, retries, bounded queues and waiters, player and owner changes, switching off. |
 | `tests/twitch/test_privacy_consent.py` | Twitch's privacy and consent helper. |
 | `tests/twitch/test_providers.py` | Third-party emote, badge and pronoun providers: scheduling, ownership, both response orders. |
+| `tests/twitch/test_seventv_badges.py` | *7TV badges*: cosmetic and entitlement events into the badge pipeline (native models, React Native snapshots, Emote and badge info, deletes, the holder bound, the switch off), and the WebSocket client against a local server: handshake, masking, 2- and 8-byte lengths, ping, fragmentation, resubscribing to another channel, close, and no connection while off or without a channel. |
 | `tests/twitch/test_rn_chat.py` | The compiled React Native chat helpers, the chat overlay's context and the landscape chat column's opacity. |
 | `tests/shared/test_settings.py` | The real `Settings`, `Registry` and settings screen helpers against each app's registered settings (`tests/shared/registry/`): JSON round trip, parent ordering, defaults, restart flags, stored and wrongly typed values, the unreadable-registry fallback. |
 | `tests/shared/test_sleep_timer.py` | *Sleep timer* in Kick and Twitch on a virtual clock: expiry, resuming, stop and release, races at dispatch. |

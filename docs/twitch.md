@@ -887,7 +887,31 @@ unchanged code but were not seen in the app.
 Badges download FrankerFaceZ's and Chatterino's public lists of badge holders and match them on the
 device, so no chatter is looked up. Badge images come from the https addresses in those lists:
 FrankerFaceZ's are on cdn.frankerfacez.com; Chatterino's are on fourtf.com today, but the host is
-whatever Chatterino's list names, which the descriptions say. Holder and chatter IDs are 64-bit. The exception is *pronouns* (`badges_pronouns`, off by default):
+whatever Chatterino's list names, which the descriptions say. Holder and chatter IDs are 64-bit.
+
+*7TV badges* (`badges_7tv`, off by default; [issue #48](https://github.com/jordanwoodson/lurk-morphe-patches/issues/48))
+have no list to download: 7TV's REST API only answers per user, and looking every chatter up there would hand
+7TV the chat's roster. Instead `TwitchSevenTvBadges` does what 7TV's own browser extension does: while a
+channel's chat is open it keeps one WebSocket to 7TV's event service (`wss://events.7tv.io/v3`), subscribed to
+`cosmetic.*` and `entitlement.*` for that channel (`{platform: TWITCH, ctx: channel, id: <channel ID>}`). 7TV
+then pushes each badge's definition (`cosmetic.create`, kind `BADGE`: tooltip and `cdn.7tv.app` files) and, as it
+sees chatters of that channel, which badge each has chosen (`entitlement.create`/`delete` with the user's Twitch
+connection ID). So 7TV learns the channel, exactly as it does from the 7TV emotes switch, and nothing about the
+viewer or which chatters are on screen. The channel comes from the third-party emotes' chat-connect hook (the
+badges patch now depends on that patch) and from React Native rows' room; the connection moves with the channel
+(unsubscribe, subscribe) and closes after ten minutes without a chat line, when the switch goes off, or when 7TV
+asks for a reconnect, reopening on the next line (a minute later after a failure). Twitch's OkHttp is renamed by
+R8, so the client is a small RFC 6455 implementation over `SSLSocket` with hostname verification: masked text
+frames out, text, continuation, ping and close in, frames capped at 1 MB. Holders are kept for up to 20,000
+chatters (oldest out) and badge definitions for the session; the largest file up to 3x is used, its still copy for
+an animated badge. Badges appear after Twitch's own on native lines through the same badge model, and in React
+Native rows through the same snapshot, with *Emote and badge info* naming them "7TV badge". Checked on the JVM
+(`tests/twitch/test_seventv_badges.py`: the event shapes above as 7TV sent them on 2026-11-04, and the client
+against a local server) and on the emulator, signed out, in a 10,000-viewer chat: the connection opens for the
+channel's ID and badge definitions and holders arrive within seconds (Debug logging shows the counts). 7TV only
+pushes entitlements for chatters its own users have seen, so a quiet channel shows none.
+
+The exception is *pronouns* (`badges_pronouns`, off by default):
 pronouns.alejo.io has no bulk list, so the username of each chatter whose message you see is looked
 up there.
 - Answers, including "none", are cached for an hour, for up to 2000 users.
