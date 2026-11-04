@@ -228,6 +228,14 @@ Changing the bar's own default tab is not an option: the navigation host require
 destination (`Must use NavGraphFragment resolver for start destination`). Verified on the emulator:
 Browse opens at launch.
 
+Signed in, Home is React Native (the discovery feed, with Following, Live and Clips tabs), and Twitch routes
+the Following destination into that feed on its default tab, Live
+([issue #51](https://github.com/jordanwoodson/lurk-morphe-patches/issues/51)). The feed's tab is one of its
+initial props (`subfeedTab`, set in `DiscoveryFeedRNInitialPropsBuilder.build`, whose class and method names
+Twitch keeps), so the patch also hooks that method's start: for the first feed a plain launch builds, with
+Following chosen, `TwitchInterface.feedTab` turns a missing or `live` tab into `following`; deep links, later
+feeds and any other tab Twitch asked for pass through (`tests/twitch/verify_interface.py`). Verified on a
+phone, signed in: the feed opens on its Following tab.
 
 ### Trackers in Disable analytics
 
