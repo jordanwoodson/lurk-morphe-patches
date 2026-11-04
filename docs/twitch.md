@@ -557,14 +557,23 @@ both cases.
 
 *Playlist proxy* is opt-in and does nothing without its `proxyUrl` option. It sends live usher requests
 to the configured proxy. Its switch starts on once a URL is set, since setting one is the opt-in. The
-proxy sees which channel is watched and when, and receives the signed playback token in the request
-URL: in the query when it takes usher's place, inside the encoded Twitch URL with `{url}`, so its access
-logs can keep it. Whatever it returns is what the player plays, including segments of its own; the
+proxy sees which channel is watched and when. A `{channel}` template such as
+`https://example.org/live/{channel}` substitutes the lowercase channel login from either live usher
+path (`/api/channel/hls/<channel>.m3u8` or `/api/v2/channel/hls/<channel>.m3u8`), without forwarding
+Twitch's signed query or fragment. This supports proxies that obtain their own playback token
+([issue #57](https://github.com/jordanwoodson/lurk-morphe-patches/issues/57)). A template may contain
+its own query, but cannot combine `{channel}` and `{url}`. `{channel}` is allowed only in the proxy
+path or query, keeping the scheme and host fixed. Invalid channel paths pass through unchanged.
+The other modes receive the signed playback token in the request URL: in the query when the proxy
+takes usher's place, inside the encoded Twitch URL with `{url}`, so its access logs can keep it.
+Whatever it returns is what the player plays, including segments of its own; the
 description says so and to use only a proxy you trust. *Avoid stitched ads* reads
 only `usher.ttvnw.net` master playlists, so a stream loaded through the proxy is never tracked: with
 both patches on, the proxy alone decides what the playlists hold, and Mute stitched ads still acts on
 any ad cues they keep. `TwitchAsyncProbe proxy` checks that a proxied master, in place of usher or with
-the usher URL in its query, isn't consumed.
+the usher URL in its query, or using a channel-only path, isn't consumed.
+`tests/twitch/test_playlist_proxy.py` checks both live path forms, lowercase conversion independent
+of locale, token omission, invalid paths, disabled behavior and preservation of the existing modes.
 
 `bin/test-twitch-ads` runs these hooks on ART. Signed out, no display or stitched ads were served,
 so real ad delivery is verified only through the probe and the emitted bytecode. The proxy was checked
