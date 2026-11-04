@@ -1,3 +1,17 @@
+## [1.16.0-dev.2](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.16.0-dev.1...v1.16.0-dev.2) (2026-11-04)
+
+### Rumble
+
+#### 🚀 Updated App Support
+
+* support Rumble 3.22.0 ([6b6b2fa](https://github.com/jordanwoodson/lurk-morphe-patches/commit/6b6b2fad5298d9d2a53f8560f20a70c723c05e07))
+
+### Twitch
+
+#### 🚀 Updated App Support
+
+* support Twitch 31.9.0 ([b50dd0a](https://github.com/jordanwoodson/lurk-morphe-patches/commit/b50dd0a60837b99bf2736049abd9ca5da45a196e))
+
 ## [1.16.0-dev.1](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.15.1...v1.16.0-dev.1) (2026-11-04)
 
 ### Kick
