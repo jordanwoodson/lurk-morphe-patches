@@ -325,7 +325,16 @@ fills in.
 
 *Sleep timer* re-arms on every `play()`. It pauses through the Guest Star pause-all registry (native
 and portal) and through `TwitchMediaSessionModule`/`FeedPlayerRegistry` (React Native), so background
-audio can be resumed from its notification.
+audio can be resumed from its notification. The time can also be changed without leaving the stream
+([issue #52](https://github.com/jordanwoodson/lurk-morphe-patches/issues/52)): the player's settings sheet
+(the gear; `stream_settings_fragment`, whose view holder looks its rows up in its constructor, found by the
+`background_audio_wrapper`, `background_audio_text` and `pip_wrapper` IDs) gets a *Sleep timer* row right
+after Twitch's Background audio row. `TwitchStreamSettings.sleepTimerRow` builds it from the sibling row's
+layout, padding, background and text style, so it looks like Twitch's own, and shows the current choice;
+a tap opens the same chooser as Lurk settings (labels and values from the registry, through
+`Settings.choiceLabels`/`choiceValues`). The pick is written with `Settings.setChoice`, which accepts only a
+registered choice's own values, and `SleepTimer.settingChanged` re-arms from that moment for whatever is
+playing, or cancels the pending pause for Off (`tests/shared/test_sleep_timer.py`, `change`).
 
 *Refresh stream* calls the error screen's Retry, `N1(0, true)`. For live that fetches a new token and
 playlist; a VOD keeps its position. It's triggered by a long press on the settings gear of the live

@@ -254,6 +254,7 @@ TwitchPlayer.lowLatency
 TwitchPlayer.onPlay
 TwitchPlayer.onStop
 TwitchPlayer.pauseRegistry
+TwitchStreamSettings.sleepTimerRow
 
 # if vod_chapters
 TwitchVod.bindChapters
