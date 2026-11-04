@@ -177,8 +177,11 @@ update prompts). Code that runs inside the app is plain Java in `extensions/shar
 from injected smali; `Logger.d(...)` (tag `lurk`) is the quickest way to confirm a hook fires,
 once Lurk settings > Advanced > Debug logging is on. `Logger.i`, `w` and `blocked` always write.
 
-Two things that bite: Morphe silently drops a non-range `invoke-*` whose register is above
-v15 (use `/range` forms and check with `dexdump`), and the extension must not pull the Kotlin
+Three things that bite: Morphe silently drops a non-range `invoke-*` whose register is above
+v15 (use `/range` forms and check with `dexdump`); a snippet that defines a label of its own must go in
+through `addInstructionsWithLabels`, since plain `addInstructions` keeps the label's address relative to
+the snippet, which only works at index 0 (`bin/verify-hooks` runs `tests/verify_branch_targets.py` to
+catch the result, a class ART's verifier rejects); and the extension must not pull the Kotlin
 standard library into the patched app (`extensions/shared/build.gradle.kts` excludes it).
 
 ### Rules that keep patches working across versions

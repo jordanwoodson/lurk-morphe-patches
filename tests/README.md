@@ -71,8 +71,12 @@ they honor `MORPHE_WORK` and `JAVA_HOME`. Decode a patched APK for them with
 `java -jar tools/apktool_*.jar d -f -p "$MORPHE_WORK/apktool-framework" -o <dir> <patched.apk>`.
 
 - `bin/verify-hooks <app> <patched.apk>` checks that app code calls every extension method listed in
-  `tests/<app>/expected-hooks.txt`, through `tests/verify_extension_calls.py`. Run it after adding a
-  hook or patching a new app version: Morphe can drop an injected call without an error.
+  `tests/<app>/expected-hooks.txt`, through `tests/verify_extension_calls.py`, and then, through
+  `tests/verify_branch_targets.py`, that every branch of every hooked method lands on an instruction.
+  Run it after adding a hook or patching a new app version: Morphe can drop an injected call without an
+  error, and a snippet with a label of its own added through plain `addInstructions` at an index other
+  than 0 gets a branch into the middle of an instruction, which only ART's verifier reports, by
+  rejecting the class (issue 49).
 - `bin/bump <app> <version>` patches a new app version with every patch and sorts what fails by cause,
   including class names the probes here use that the new version no longer has.
 

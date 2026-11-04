@@ -228,6 +228,7 @@ Changing the bar's own default tab is not an option: the navigation host require
 destination (`Must use NavGraphFragment resolver for start destination`). Verified on the emulator:
 Browse opens at launch.
 
+
 ### Trackers in Disable analytics
 
 31.8.0, like 31.6.0 and 31.7.0, has no Bugsnag, Facebook SDK, SafetyNet or Amazon APS. Disable analytics now also:
@@ -929,7 +930,12 @@ up there.
 - Pronouns are drawn as a small text badge.
 
 *Chat overlay* (off by default) scrolls live chat right to left across the top of the video, like
-danmaku. It's fed from the native chat list feeder, found through the `LiveChatMessage(messageId=`
+danmaku. Its hook in the vertical theatre's stream observer carries a label of its own and goes in through
+`addInstructionsWithLabels`: the patcher's plain `addInstructions` keeps such a label's address relative to the
+snippet, which is only right at index 0, and ART's verifier then rejected the whole observer class, so every
+dual-format stream crashed the app, Pause Lurk or not
+([issue #49](https://github.com/jordanwoodson/lurk-morphe-patches/issues/49); `tests/verify_branch_targets.py`,
+run by `bin/verify-hooks`, now checks every branch of every hooked method of a patched APK). It's fed from the native chat list feeder, found through the `LiveChatMessage(messageId=`
 toString. The overlay is a plain view on `android.R.id.content` that ignores all touches. It attaches
 only in landscape outside picture-in-picture while a video surface covers at least half the width,
 and detaches in portrait, in picture-in-picture, when the video goes away, or after 15 s without
