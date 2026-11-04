@@ -19,8 +19,10 @@ fi
 hooks=()
 while IFS= read -r line; do
     line="${line%%#*}"
-    line="${line//[[:space:]]/}"
-    [[ -n "$line" ]] && hooks+=("$line")
+    # Rumble's lines start with the setting keys that make a hook expected ("<keys>  Class.method"); the
+    # hook is the last word. A build with every patch is expected to have them all.
+    read -r -a words <<<"$line"
+    (( ${#words[@]} )) && hooks+=("${words[-1]}")
 done <"$list"
 (( ${#hooks[@]} )) || die "tests/$slug/expected-hooks.txt lists no Class.method lines"
 note "checking ${#hooks[@]} hooks from tests/$slug/expected-hooks.txt"

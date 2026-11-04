@@ -71,7 +71,8 @@ they honor `MORPHE_WORK` and `JAVA_HOME`. Decode a patched APK for them with
 `java -jar tools/apktool_*.jar d -f -p "$MORPHE_WORK/apktool-framework" -o <dir> <patched.apk>`.
 
 - `bin/verify-hooks <app> <patched.apk>` checks that app code calls every extension method listed in
-  `tests/<app>/expected-hooks.txt`, through `tests/verify_extension_calls.py`, and then, through
+  `tests/<app>/expected-hooks.txt` (the last word of each line, so Rumble's setting keys before it are
+  skipped), through `tests/verify_extension_calls.py`, and then, through
   `tests/verify_branch_targets.py`, that every branch of every hooked method lands on an instruction.
   Run it after adding a hook or patching a new app version: Morphe can drop an injected call without an
   error, and a snippet with a label of its own added through plain `addInstructions` at an index other
@@ -150,9 +151,9 @@ subset. The probes read the obfuscated names they need from the APK's `assets/lu
   `SearchProbe`, `UpdateProbe`: the chat hooks, keyword filter, exact counts, home sections and bottom bar,
   player settings, Unlock Premium's getter, Default video quality, search history and Block update prompts.
 - `RefreshProbe`: the *Refresh stream* hooks: video-load registration, the error panel's tap handler, the
-  reload bridge and the stock player's reload, with ExoPlayer, Compose and the player state supplied.
-  Reloads keep the source and position without saving a quality; null sources, the switch off, a missing
-  player and stock quality changes are controls, and the callback is restored after exceptions.
+  reload bridge and the stock player's reload, with ExoPlayer, Compose state, the Composer and the player's
+  logger supplied as doubles found by type. Reloads keep the source and position; null sources, the switch
+  off and a missing player are controls, and the stock catch and escaping failures reach the caller as such.
 
 After the probes, `bin/test-rumble` runs `tests/rumble/verify_compose.py` (every Compose trace label the
 patches match must exist in the APK, and App Info must have exactly three rows, which the hidden settings
