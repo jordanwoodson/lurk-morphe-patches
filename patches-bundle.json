@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-05T15:02:24",
-  "description": "## [1.16.1-dev.1](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.16.0...v1.16.1-dev.1) (2026-11-05)\n\n### Rumble\n\n#### 🐛 Bug Fixes\n\n* target Rumble 3.21.0 again, which Morphe Manager can download\n\n### Twitch\n\n#### 🐛 Bug Fixes\n\n* target Twitch 31.8.0 again, which Morphe Manager can download",
-  "download_url": "https://github.com/jordanwoodson/lurk-morphe-patches/releases/download/v1.16.1-dev.1/patches-1.16.1-dev.1.mpp",
+  "created_at": "2026-11-05T15:14:02",
+  "description": "## [1.16.1](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.16.0...v1.16.1) (2026-11-05)\n\n### Rumble\n\n#### 🐛 Bug Fixes\n\n* target Rumble 3.21.0 again, which Morphe Manager can download\n\n### Twitch\n\n#### 🐛 Bug Fixes\n\n* target Twitch 31.8.0 again, which Morphe Manager can download",
+  "download_url": "https://github.com/jordanwoodson/lurk-morphe-patches/releases/download/v1.16.1/patches-1.16.1.mpp",
   "signature_download_url": "",
-  "version": "1.16.1-dev.1"
+  "version": "1.16.1"
 }
