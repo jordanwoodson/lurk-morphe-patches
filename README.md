@@ -56,7 +56,7 @@ project. The name "Morphe" is used only to say what the patches are for (see [NO
    APKMirror or Uptodown for it; on APKMirror, take the variant listed below), choose the patches you
    want and patch. Manager installs the result.
 
-Lurk is tested on these builds. Other variants of the same version may fail to patch or
+Lurk is tested on these APKMirror variants. Other variants of the same version may fail to patch or
 to install, so take these:
 
 - **Twitch 31.9.0**: from [Google Play](https://play.google.com/store/apps/details?id=tv.twitch.android.app) or
@@ -65,8 +65,8 @@ to install, so take these:
 - **Kick 40.34.0**: the arm64-v8a bundle, 480-640dpi, Android 10+, on the
   [40.34.0 release page](https://www.apkmirror.com/apk/kick-live-streaming/kick-live-streaming/kick-live-streaming-40-34-0-release/)
   (not one of the two universal builds).
-- **Rumble 3.22.0**: from Google Play, since APKMirror still lists only 3.21.0 (tested with Google Play's
-  arm64-v8a split APKs).
+- **Rumble 3.21.0**: the universal bundle (all four architectures, 120-640dpi, Android 8.0+) on the
+  [3.21.0 release page](https://www.apkmirror.com/apk/rumble-inc/rumble/rumble-stream-watch-videos-3-21-0-release/).
 
 > [!IMPORTANT]
 > **Keep your signing key.** Manager signs every app it patches with a key it creates on first use,
