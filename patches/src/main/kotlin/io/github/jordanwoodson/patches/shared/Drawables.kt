@@ -16,7 +16,7 @@ internal fun ResourcePatchContext.copyDrawablePaths(
 ) {
     val source = get("res/drawable/$icon.xml")
     if (!source.exists()) throw PatchException("$app: no $icon icon")
-    get("res/drawable/$name.xml").writeBytes(source.readBytes())
+    get("res/drawable/$name.xml").apply { parentFile.mkdirs() }.writeBytes(source.readBytes())
     document("res/drawable/$name.xml").use { doc ->
         val paths = doc.getElementsByTagName("path").let { list -> List(list.length) { list.item(it) as Element } }
         val kept = keep(paths) ?: throw PatchException("$app: the $icon icon changed")

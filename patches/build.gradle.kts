@@ -44,6 +44,11 @@ val compileHermes = tasks.register("compileHermes") {
     outputs.dir(compiledHermes)
     doLast {
         delete(compiledHermes)
+        val pythonExecutable = listOf(
+            "${System.getenv("LOCALAPPDATA")}/Programs/Python/Python312/python.exe",
+            "python3",
+            "python"
+        ).firstOrNull { file(it).exists() } ?: "python3"
         fileTree("src/main/runtime").matching { include("**/*.js") }.files.sorted().forEach { source ->
             val relative = source.relativeTo(file("src/main/runtime"))
             val family = when (relative.invariantSeparatorsPath.substringBefore('/')) {
@@ -53,7 +58,7 @@ val compileHermes = tasks.register("compileHermes") {
             }
             val output = compiledHermes.get().file(relative.invariantSeparatorsPath.removeSuffix(".js") + ".hbc").asFile
             providers.exec {
-                commandLine("python3", rootProject.file("bin/lib/compile-hermes.py"), family, source, output)
+                commandLine(pythonExecutable, rootProject.file("bin/lib/compile-hermes.py"), family, source, output)
             }.result.get().assertNormalExitValue()
         }
     }

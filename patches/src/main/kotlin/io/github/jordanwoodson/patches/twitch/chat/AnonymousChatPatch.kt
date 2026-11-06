@@ -2,7 +2,9 @@ package io.github.jordanwoodson.patches.twitch.chat
 
 import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
+import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
+import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -82,20 +84,18 @@ private fun BytecodePatchContext.anonymousIrcLogin() {
 
     // Only the login reads the credentials outside their own class, so the account's token and name go
     // nowhere else. Fail rather than leave a second reader unhooked.
-    val readers = mutableListOf<String>()
-    classDefForEach { type ->
-        if (type.type == credentials) return@classDefForEach
-        type.methods.forEach { method ->
-            method.implementation?.instructions?.forEach {
-                val field = it.fieldRef
-                if (it.opcode == Opcode.IGET_OBJECT && field != null && (field.matches(nick) || field.matches(token))) {
-                    readers += "${type.type}->${method.name}"
-                }
-            }
-        }
-    }
+    val nickReadFingerprint = Fingerprint(
+        filters = listOf(fieldAccess(definingClass = credentials, name = nick.name, opcode = Opcode.IGET_OBJECT)),
+    )
+    val tokenReadFingerprint = Fingerprint(
+        filters = listOf(fieldAccess(definingClass = credentials, name = token.name, opcode = Opcode.IGET_OBJECT)),
+    )
     val login = IrcLoginFingerprint.twitchMatch("IRC login").method
-    if (readers.size != 2 || readers.any { it != "${login.definingClass}->${login.name}" }) {
+    val loginRef = "${login.definingClass}->${login.name}"
+    val readers = (nickReadFingerprint.matchAll() + tokenReadFingerprint.matchAll())
+        .filter { it.classDef.type != credentials }
+        .map { "${it.classDef.type}->${it.method.name}" }
+    if (readers.size != 2 || readers.any { it != loginRef }) {
         throw PatchException("Twitch: IRC credentials are read outside the login: $readers")
     }
 

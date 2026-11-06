@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import platform
 import re
+import shutil
 import struct
 import subprocess
 import sys
@@ -25,9 +26,16 @@ COMPILER_SHA256 = {
 def main():
     family, source, output = int(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
     version = VERSIONS[family]
-    root = subprocess.check_output(['mise', 'where', 'npm:hermes-compiler@' + version], text=True).strip()
-    package_file = Path(subprocess.check_output(['node', '-e',
-        "process.stdout.write(require.resolve('hermes-compiler/package.json',{paths:[process.argv[1]]}))", root], text=True))
+    package_file = Path.home() / f'AppData/Local/mise/installs/npm-hermes-compiler/{version}/node_modules/hermes-compiler/package.json'
+    if not package_file.exists():
+        mise_bin = shutil.which('mise') or str(Path.home() / 'AppData/Local/Microsoft/WinGet/Packages/jdx.mise_Microsoft.Winget.Source_8wekyb3d8bbwe/mise/bin/mise.exe')
+        root = subprocess.check_output([mise_bin, 'where', 'npm:hermes-compiler@' + version], text=True).strip()
+        candidate = Path(root) / 'node_modules/hermes-compiler/package.json'
+        if candidate.exists():
+            package_file = candidate
+        else:
+            package_file = Path(subprocess.check_output(['node', '-e',
+                "process.stdout.write(require.resolve('hermes-compiler/package.json',{paths:[process.argv[1]]}))", root], text=True))
     package = json.loads(package_file.read_text())
     if package.get('name') != 'hermes-compiler' or package.get('version') != version or package.get('repository', {}).get('url') != 'git+ssh://git@github.com/facebook/hermes.git':
         raise ValueError('unexpected compiler package provenance')

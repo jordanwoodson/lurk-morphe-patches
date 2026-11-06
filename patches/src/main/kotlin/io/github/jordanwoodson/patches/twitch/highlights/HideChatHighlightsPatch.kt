@@ -2,7 +2,9 @@ package io.github.jordanwoodson.patches.twitch.highlights
 
 import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
+import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
+import app.morphe.patcher.newInstance
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -184,15 +186,11 @@ private fun BytecodePatchContext.hidePrivateCallouts() {
     val typeField = instanceFields(model).singleOrNull { field ->
         classDefByOrNull(field.type)?.fields?.any { it.name == "WATCH_STREAK_REACHED" } == true
     } ?: throw PatchException("Twitch: private callout model has no unique type")
-    val sites = mutableListOf<Pair<String, String>>()
-    classDefForEach { type ->
-        type.methods.filter { method ->
-            method.name == "invoke" && method.returnType == "Ljava/lang/Object;" &&
-                method.implementation?.instructions?.any {
-                    it.opcode == Opcode.NEW_INSTANCE && ((it as ReferenceInstruction).reference as TypeReference).type == received
-                } == true
-        }.forEach { sites += type.type to it.name }
-    }
+    val sites = Fingerprint(
+        name = "invoke",
+        returnType = "Ljava/lang/Object;",
+        filters = listOf(newInstance(received)),
+    ).matchAll().map { it.classDef.type to it.method.name }
     val (owner, name) = sites.singleOrNull() ?: throw PatchException("Twitch: expected one private callout dispatch, found ${sites.size}")
     val method = mutableClassDefBy(owner).methods.single { it.name == name && it.returnType == "Ljava/lang/Object;" }
     val instructions = method.implementation!!.instructions.toList()

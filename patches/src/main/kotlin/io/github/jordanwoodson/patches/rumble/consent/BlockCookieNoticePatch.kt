@@ -1,6 +1,8 @@
 package io.github.jordanwoodson.patches.rumble.consent
 
+import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.methodCall
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -128,16 +130,10 @@ private fun BytecodePatchContext.startAirshipOnly() {
 
     // The Airship tracker: the tracker that takes off Airship.
     val tracker = trackerStart.definingClass
-    val airshipTrackers = mutableListOf<String>()
-    classDefForEach { classDef ->
-        if (tracker !in classDef.interfaces) return@classDefForEach
-        val usesAirship = classDef.methods.any { method ->
-            method.implementation?.instructions?.any {
-                ((it as? ReferenceInstruction)?.reference as? MethodReference)?.definingClass == AIRSHIP
-            } == true
-        }
-        if (usesAirship) airshipTrackers += classDef.type
-    }
+    val airshipTrackers = Fingerprint(
+        interfaces = listOf(tracker),
+        filters = listOf(methodCall(definingClass = AIRSHIP)),
+    ).matchAll().map { it.classDef.type }.distinct()
     val airship = airshipTrackers.singleOrNull()
         ?: throw PatchException("Rumble: expected one Airship consent tracker, found ${airshipTrackers.size}")
     val essential = enumWith("essential_services", "analytics", "targeted_advertising").enumConstant("essential_services")

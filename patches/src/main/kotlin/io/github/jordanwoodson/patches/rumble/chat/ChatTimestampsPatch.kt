@@ -1,6 +1,8 @@
 package io.github.jordanwoodson.patches.rumble.chat
 
+import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.methodCall
 import app.morphe.patcher.patch.bytecodePatch
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
@@ -45,13 +47,15 @@ val chatTimestampsPatch = bytecodePatch(
         val contentView = LiveChatContentViewFingerprint.single("live chat message content").method
         val contentCall = "${contentView.definingClass}->${contentView.name}(" +
             contentView.parameterTypes.joinToString("") + ")V"
-        val rows = mutableListOf<Pair<ClassDef, Method>>()
-        classDefForEach { classDef ->
-            if (classDef.fields.none { it.type == entity.type && !AccessFlags.STATIC.isSet(it.accessFlags) }) {
-                return@classDefForEach
+        val rows = Fingerprint(
+            filters = listOf(
+                methodCall(definingClass = contentView.definingClass, name = contentView.name),
+            ),
+        ).matchAll()
+            .filter { match ->
+                match.classDef.fields.any { it.type == entity.type && !AccessFlags.STATIC.isSet(it.accessFlags) }
             }
-            classDef.methods.filter { it.calls(contentCall) }.forEach { rows += classDef to it }
-        }
+            .map { it.classDef to it.method }
         if (rows.size != 2) throw RUMBLE.error("expected two chat rows with a message entity, found ${rows.size}")
 
         rows.forEach { (classDef, row) ->

@@ -1,8 +1,8 @@
 package io.github.jordanwoodson.patches.rumble.player
 
 import app.morphe.patcher.Fingerprint
+import app.morphe.patcher.methodCall
 import com.android.tools.smali.dexlib2.AccessFlags
-import io.github.jordanwoodson.patches.shared.compose.calls
 
 internal const val PLAYER_SERVICE = "Lcom/rumble/videoplayer/player/RumblePlayerService;"
 
@@ -35,7 +35,8 @@ internal object KeepScreenOnFingerprint : Fingerprint(
     accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC, AccessFlags.FINAL),
     returnType = "V",
     parameters = listOf("Landroid/content/Context;", "Z"),
-    custom = { method, _ ->
-        method.calls("Landroid/view/Window;->addFlags(I)V") && method.calls("Landroid/view/Window;->clearFlags(I)V")
-    },
+    filters = listOf(
+        methodCall(definingClass = "Landroid/view/Window;", name = "addFlags"),
+        methodCall(definingClass = "Landroid/view/Window;", name = "clearFlags"),
+    ),
 )

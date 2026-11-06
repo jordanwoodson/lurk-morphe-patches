@@ -1,6 +1,7 @@
 package io.github.jordanwoodson.patches.twitch.chat
 
 import app.morphe.patcher.Fingerprint
+import app.morphe.patcher.instanceOf
 import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
@@ -138,10 +139,7 @@ private fun Instruction.isRowHook() = opcode == Opcode.INVOKE_STATIC && methodRe
 internal fun chatListFeederFingerprint(line: LiveChatLine, parent: String) = Fingerprint(
     returnType = "V",
     parameters = listOf(parent),
-    custom = { method, classDef ->
-        classDef.fields.any { it.type == "Landroid/content/ContextWrapper;" } &&
-            method.implementation?.instructions?.any { it.opcode == Opcode.INSTANCE_OF && it.typeRef == line.type } == true
-    },
+    filters = listOf(instanceOf(line.type)),
 )
 
 /**

@@ -1,6 +1,9 @@
 package io.github.jordanwoodson.patches.twitch.overlay
 
 import app.morphe.patcher.Fingerprint
+import app.morphe.patcher.fieldAccess
+import app.morphe.patcher.instanceOf
+import app.morphe.patcher.methodCall
 import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import io.github.jordanwoodson.patches.twitch.shared.addInstructionsWithLabels
 import app.morphe.patcher.patch.PatchException
@@ -58,12 +61,7 @@ val chatOverlayPatch = bytecodePatch(
         val feeder = Fingerprint(
             returnType = "V",
             parameters = listOf(parent),
-            custom = { method, classDef ->
-                classDef.fields.any { it.type == CONTEXT_WRAPPER } &&
-                    method.implementation?.instructions?.any {
-                        it.opcode == Opcode.INSTANCE_OF && ((it as ReferenceInstruction).reference as TypeReference).type == type
-                    } == true
-            },
+            filters = listOf(instanceOf(type)),
         ).twitchMatch("chat list feeder")
         val context = feeder.classDef.fields.singleOrNull { it.type == CONTEXT_WRAPPER }
             ?: throw PatchException("Twitch: chat list feeder has no single context")
@@ -134,12 +132,13 @@ private fun BytecodePatchContext.overlayLifecycle(feeder: String) {
         }
     val stream = "Ltv/twitch/android/models/streams/StreamModel;"
     val channel = "Ltv/twitch/android/models/channel/ChannelModel;"
-    val observer = Fingerprint(name = "emit", custom = { method, classDef ->
-        classDef.fields.any { it.type == fragment } && method.implementation?.instructions?.any {
-            val ref = (it as? ReferenceInstruction)?.reference as? MethodReference
-            ref?.definingClass == stream && ref.name == "getChannel"
-        } == true
-    }).twitchMatch("viewer stream observer").method
+    val observer = Fingerprint(
+        name = "emit",
+        filters = listOf(
+            fieldAccess(definingClass = "this", type = fragment),
+            methodCall(definingClass = stream, name = "getChannel"),
+        ),
+    ).twitchMatch("viewer stream observer").method
     val instructions = observer.implementation!!.instructions.toList()
     val at = instructions.indices.singleOrNull { i ->
         val ref = (instructions[i] as? ReferenceInstruction)?.reference as? MethodReference

@@ -29,9 +29,9 @@ private fun aboutRows() = listOf(
  * that draws System, Community Guidelines, Help, Terms of Service and Privacy Notice with one row composable.
  */
 internal object SettingsAboutSectionFingerprint : Fingerprint(
+    isStatic = true,
     returnType = "V",
     filters = aboutRows(),
-    custom = { method, _ -> AccessFlags.STATIC.isSet(method.accessFlags) },
 )
 
 /**
@@ -39,8 +39,8 @@ internal object SettingsAboutSectionFingerprint : Fingerprint(
  * builder, which adds a menu row model for each title to the screen's list.
  */
 internal object SettingsMenuListFingerprint : Fingerprint(
+    isStatic = false,
     returnType = "V",
     parameters = emptyList(),
     filters = aboutRows() + methodCall(definingClass = "Ljava/util/ArrayList;", name = "add"),
-    custom = { method, _ -> !AccessFlags.STATIC.isSet(method.accessFlags) },
 )

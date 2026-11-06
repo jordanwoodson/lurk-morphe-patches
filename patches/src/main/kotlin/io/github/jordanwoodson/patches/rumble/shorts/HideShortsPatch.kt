@@ -4,6 +4,7 @@ import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.methodCall
+import app.morphe.patcher.opcode
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -116,16 +117,16 @@ private fun BytecodePatchContext.hideCategoryShortsTab() {
     val contentType = enumWith("SHORTS", "REPOSTS", "CATEGORIES", "LIVE_STREAM")
     val shorts = contentType.enumConstant("SHORTS")
 
-    val builders = mutableListOf<Pair<ClassDef, Method>>()
-    classDefForEach { classDef ->
-        classDef.methods.filter { method ->
-            method.parameterTypes.map { it.toString() } == listOf("Z") && method.returnType == "Ljava/util/List;" &&
-                method.implementation?.instructions?.any {
-                    it.opcode == Opcode.FILLED_NEW_ARRAY &&
-                        ((it as ReferenceInstruction).reference as TypeReference).type == "[${contentType.type}"
-                } == true
-        }.forEach { builders += classDef to it }
-    }
+    val builders = Fingerprint(
+        parameters = listOf("Z"),
+        returnType = "Ljava/util/List;",
+        filters = listOf(opcode(Opcode.FILLED_NEW_ARRAY)),
+    ).matchAll().filter { match ->
+        match.method.implementation?.instructions?.any {
+            it.opcode == Opcode.FILLED_NEW_ARRAY &&
+                ((it as ReferenceInstruction).reference as TypeReference).type == "[${contentType.type}"
+        } == true
+    }.map { it.classDef to it.method }
     val (builderClass, builder) = builders.singleOrNull()
         ?: throw PatchException("Rumble: expected one category tab builder, found ${builders.size}")
 

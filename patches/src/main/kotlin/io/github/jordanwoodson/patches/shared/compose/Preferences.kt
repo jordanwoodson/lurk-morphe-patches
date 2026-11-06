@@ -1,5 +1,7 @@
 package io.github.jordanwoodson.patches.shared.compose
 
+import app.morphe.patcher.Fingerprint
+import app.morphe.patcher.methodCall
 import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.util.proxy.mutableTypes.MutableClass
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
@@ -72,11 +74,13 @@ private fun BytecodePatchContext.preferenceReader(
     } ?: throw app.error("no accessor for the $key preference")
 
     val innerPrefix = preferences.type.removeSuffix(";") + "$"
-    val readers = mutableListOf<Pair<ClassDef, Method>>()
-    classDefForEach { classDef ->
-        if (!classDef.type.startsWith(innerPrefix)) return@classDefForEach
-        classDef.methods.filter { it.calls(accessor.reference()) && it.calls(unbox) }.forEach { readers += classDef to it }
-    }
+    val readers = Fingerprint(
+        filters = listOf(
+            methodCall(definingClass = accessor.definingClass, name = accessor.name),
+        ),
+    ).matchAll()
+        .filter { it.classDef.type.startsWith(innerPrefix) && it.method.calls(unbox) }
+        .map { it.classDef to it.method }
     val (readerClass, readerMethod) = readers.singleOrNull()
         ?: throw app.error("expected one reader for the $key preference, found ${readers.size}")
     return mutableTwin(readerClass, readerMethod)

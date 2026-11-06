@@ -6,8 +6,8 @@ import app.morphe.patcher.Fingerprint
 // screen, or sends a signed-out user to the login screen. A plain launch asks for the Default destination.
 internal object DestinationRouterFingerprint : Fingerprint(
     returnType = "V",
+    parameters = listOf("L", "Landroid/os/Bundle;", "L"),
     strings = listOf("destinationOrdinal", "intent_router"),
-    custom = { method, _ -> method.parameterTypes.size == 3 && method.parameterTypes[1].toString() == "Landroid/os/Bundle;" },
 )
 
 // The React Native Home feed's initial props: DiscoveryFeedRNInitialPropsBuilder.build(isFromDeeplink,

@@ -6,22 +6,19 @@ import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 
+internal object BranchEventFingerprint : Fingerprint(
+    returnType = "V", parameters = listOf("Ljava/lang/String;"), strings = listOf("branch_event_name"),
+)
+
 internal object SpadeEventFingerprint : Fingerprint(
+    classFingerprint = BranchEventFingerprint,
     returnType = "V",
     strings = listOf("branch_campaign", "mweb_device_id", "x_untrusted_minute-watched_spade"),
-    custom = { method, _ -> method.parameterTypes.size == 4 &&
-        method.parameterTypes.take(2).map { it.toString() } ==
-        listOf("Ljava/lang/String;", "Ljava/util/LinkedHashMap;") &&
-        method.parameterTypes.last().toString() == "Z" },
 )
 
 internal object SpadeBatchFingerprint : Fingerprint(
     returnType = "V", parameters = listOf("Ljava/util/ArrayList;"),
     strings = listOf("graphQL", "both", "[", "]"),
-)
-
-internal object BranchEventFingerprint : Fingerprint(
-    returnType = "V", parameters = listOf("Ljava/lang/String;"), strings = listOf("branch_event_name"),
 )
 
 internal object UserDataConsentFingerprint : Fingerprint(
