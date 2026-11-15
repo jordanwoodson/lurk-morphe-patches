@@ -21,6 +21,7 @@ checks=(
     tests/rumble/test_video_stats.py
     tests/kick/verify_player.py
     tests/kick/verify_privacy.py
+    tests/kick/test_touch.py
     tests/kick/test_chat_page.py
     tests/kick/test_compiled_bundle.py
     tests/test_release.py

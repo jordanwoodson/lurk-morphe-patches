@@ -253,6 +253,7 @@ details and validation follow.
 | Normal latency | Yes | Off | Turns off low-latency mode for live streams. |
 | Fill screen | Yes | Off | In landscape, 16:9 streams fill a taller phone's screen, cropped top and bottom, instead of showing side bars. |
 | Show video stats | Yes | Off | A panel over the player with latency, bitrate, buffer, dropped frames, quality and codecs, refreshed every second. |
+| Player gestures | Yes | Off | In landscape, vertical swipes on the left of the video set the brightness, on the right the volume. |
 | Sleep timer | Yes | Off (choice) | Pauses playback a chosen time after it last started. |
 | Default startup tab | Yes | Home (choice) | Opens Kick on Browse or Following instead. |
 | Hide Home sections | Yes | Three switches, all off | Featured, recommended streams and categories rows on Home. |
@@ -599,6 +600,35 @@ gone a second after the switch was turned off. `bin/test-kick` runs Kick's real 
 (`PlayerProbe`) with a stand-in IVS player and Amazon's own `Statistics` and `Quality`: the six expected lines with the
 switch on, drawn in the top left corner only, Kick's own code still running after the hook, nothing read from the
 player while off, a player that throws tolerated, and the panel removed once the switch is off.
+
+### Player gestures
+
+The same gestures as on Rumble, under the same key (`player_gestures`, off by default): in landscape, a vertical
+swipe on the left third of the video sets the window's brightness, on the right third the media volume, with a
+"Brightness 80%" or "Volume 47%" label in the middle of the screen. Kick's player controls are React Native views
+laid over its native player view (`KickIvsPlayerV2View`), and they take the touches, so no view of the player can
+see a swipe first. The touch is taken where it enters the app instead: `MainActivity` has no `dispatchTouchEvent`
+of its own, and the patch adds one that asks `KickTouch.dispatch` first and otherwise calls its superclass's, as
+Rumble's does. The patch hands `KickTouch` the player view's class (found as the class of
+`updateSurfaceViewTransform`, Fill screen's fingerprint), and a touch counts only when it starts on a shown
+instance of it that is at least half the window wide, between its top 15% (the minimize, cast and settings
+buttons) and bottom 20% (the seek bar), outside picture-in-picture and TalkBack. The touch down always reaches
+Kick; it becomes a swipe only once it moves past the touch slop and more than twice as far vertically as
+sideways, and then Kick gets a cancel and Lurk the rest of the touch. Taps, a second finger (pinch to zoom),
+sideways drags and the middle third of the video stay Kick's, which keeps Kick's own vertical swipe there (in
+fullscreen it leaves fullscreen). The brightness is the window's own, so it doesn't change the system setting,
+and it goes back to the system's at the first touch after leaving landscape. The patch fails if `MainActivity`
+ever gets a `dispatchTouchEvent` of its own.
+
+Checked: `tests/kick/test_touch.py` (in `bin/test-host`) runs the production `KickTouch` on the JVM with a window
+double: which touches it takes and which it leaves to Kick (off, unregistered, the middle, the edges, the chat
+column, portrait, picture-in-picture, TalkBack, a small or hidden player, a sideways drag, two fingers), the
+single cancel, the volume and brightness it sets and the brightness handed back in portrait. On the emulator
+(Android 16, 1600x720 in landscape), signed out, on a live channel in fullscreen with the chat beside the player:
+with the switch on, a swipe up on the right of the video raised the media volume from 7 to 14 of 15 and a swipe
+down lowered it to 7, a swipe up on the left set the window's brightness override to 0.82, a swipe in the middle
+left both alone and let Kick leave fullscreen, and the first tap back in portrait cleared the override; with the
+switch off (no restart), the same swipes changed neither and Kick's own swipe left fullscreen.
 
 ### Mute stitched live ads
 
