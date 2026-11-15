@@ -377,10 +377,22 @@ public final class TwitchEmotes {
      * {@code channel} (a Tuid; null outside a channel). While "Emotes in the picker" and a service are on,
      * returns a copy with one set per service appended. Each is owned by a stand-in owner named after the
      * service (a negative ID no account has), so the picker builds a section with that name as its header.
-     * Otherwise {@code sets} itself.
+     * While "Favorite emotes" is on and has favorites, their set goes first. Otherwise {@code sets} itself.
      */
     public static List pickerSets(List sets, Object channel) {
-        if (sets == null || channel == null || !Settings.isEnabled(KEY_PICKER)) return sets;
+        if (sets == null || channel == null) return sets;
+        try {
+            Object favorites = TwitchEmoteFavorites.section(channel);
+            if (favorites != null) {
+                ArrayList withFavorites = new ArrayList(sets.size() + 1);
+                withFavorites.add(favorites);
+                withFavorites.addAll(sets);
+                sets = withFavorites;
+            }
+        } catch (RuntimeException e) {
+            Logger.d("emotes: favorites failed: " + e);
+        }
+        if (!Settings.isEnabled(KEY_PICKER)) return sets;
         try {
             chatChannel = channel;
             Picked picked = picked(channel);
@@ -547,7 +559,7 @@ public final class TwitchEmotes {
     }
 
     /** Replaced at patch time: Twitch's emote class, the one chat's matcher and the picker use. */
-    private static Class emoteClass() {
+    static Class emoteClass() {
         return null;
     }
 
@@ -555,7 +567,7 @@ public final class TwitchEmotes {
      * Replaced at patch time: an emote set Twitch's picker shows as a section headed by its owner's name. The
      * owner is a Tuid of {@code ownerId} with that login, display name and avatar URL.
      */
-    private static Object ownerSet(int ownerId, String login, String displayName, String avatar, String setId,
+    static Object ownerSet(int ownerId, String login, String displayName, String avatar, String setId,
                                    List emotes) {
         return null;
     }
@@ -576,7 +588,7 @@ public final class TwitchEmotes {
     }
 
     /** Replaced at patch time: the code (the text chat inserts) of one of Twitch's emote objects. */
-    private static String emoteCode(Object emote) {
+    static String emoteCode(Object emote) {
         return null;
     }
 

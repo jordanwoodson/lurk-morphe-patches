@@ -364,6 +364,88 @@ public final class EmotePickerArtProbe {
         settings.put("emotes_autocomplete_bare", false);
     }
 
+    private static final String FAVORITES = "io.github.jordanwoodson.extension.shared.twitch.TwitchEmoteFavorites";
+
+    /** A picker item for {@code emote}, made by the presenter's own item builder. */
+    private static Object item(Object emote) throws Exception {
+        for (Method method : presenter.getClass().getDeclaredMethods()) {
+            Class<?>[] p = method.getParameterTypes();
+            if (p.length == 5 && p[0] == emote.getClass() && p[1] == String.class && p[4] == boolean.class) {
+                method.setAccessible(true);
+                return method.invoke(presenter, emote, "set", tuid(CHANNEL), surface, false);
+            }
+        }
+        throw new AssertionError("No item builder");
+    }
+
+    private static Object emote(String id, String code, boolean variants) throws Exception {
+        Class<?> type = Class.forName(ProbeLocators.type("twitch.match.client_emote", "lvf"));
+        for (Constructor<?> constructor : type.getDeclaredConstructors()) {
+            Class<?>[] types = constructor.getParameterTypes();
+            if (types.length != 6) continue;
+            List<Object> modified = new ArrayList<>();
+            if (variants) modified.add(constructor.newInstance(id + "_SG", code + "_SG", tuid(CHANNEL),
+                enumValue(types[3], "STATIC"), Collections.emptyList(), enumValue(types[5], "OTHER")));
+            return constructor.newInstance(id, code, tuid(CHANNEL), enumValue(types[3], "STATIC"), modified,
+                enumValue(types[5], "OTHER"));
+        }
+        throw new AssertionError("No emote constructor");
+    }
+
+    private static boolean press(Object item) throws Exception {
+        return (boolean) method(Class.forName(FAVORITES), "pressed", Context.class, Object.class).invoke(null, null, item);
+    }
+
+    private static void favorites() throws Exception {
+        if (pickerCase < 0) pickerSetup();
+        Map<String, Object> stored = new HashMap<>();
+        SharedPreferences.Editor[] editor = new SharedPreferences.Editor[1];
+        editor[0] = (SharedPreferences.Editor) Proxy.newProxyInstance(SharedPreferences.class.getClassLoader(),
+            new Class<?>[]{SharedPreferences.Editor.class}, (proxy, method, values) -> {
+                if (method.getName().equals("putString")) { stored.put((String) values[0], values[1]); return editor[0]; }
+                if (method.getName().equals("commit")) return true;
+                return null;
+            });
+        SharedPreferences preferences = (SharedPreferences) Proxy.newProxyInstance(SharedPreferences.class.getClassLoader(),
+            new Class<?>[]{SharedPreferences.class}, (proxy, method, values) -> {
+                if (method.getName().equals("getString")) return stored.getOrDefault((String) values[0], values[1]);
+                if (method.getName().equals("edit")) return editor[0];
+                throw new UnsupportedOperationException(method.getName());
+            });
+        Field store = Class.forName(FAVORITES).getDeclaredField("preferences");
+        store.setAccessible(true);
+        store.set(null, preferences);
+        Method forget = method(Class.forName(FAVORITES), "forget");
+        forget.invoke(null);
+        settings.put("emotes_picker", false);
+        settings.put("emotes_favorites", false);
+        Object twitch = item(emote("1001", "peepoTwitch", false));
+        check(!press(twitch) && stored.isEmpty(), "Off: a long press is Twitch's");
+        settings.put("emotes_favorites", true);
+        check(sections().isEmpty(), "No favorites, no section");
+        check(press(twitch), "A long press on a Twitch emote adds it");
+        check(press(item(emote("lurk7a_peepo", "peepoClap", false))), "And on a 7TV one");
+        check(!press(item(emote("1002", "subHype", true))), "An emote with Twitch's variants keeps Twitch's long press");
+        Map<String, List<String>> sections = sections();
+        check(sections.keySet().iterator().next().equals("Favorites|Favorites")
+            && sections.get("Favorites|Favorites").equals(List.of("1001", "lurk7a_peepo")), "The Favorites section: " + sections);
+        settings.put("emotes_picker", true);
+        List<String> order = new ArrayList<>(sections().keySet());
+        check(order.equals(List.of("Favorites|Favorites", "7TV|7TV", "BetterTTV|BetterTTV")), "Favorites go first: " + order);
+        // A new process reads the same list back.
+        String line = String.valueOf(stored.get("favorites"));
+        check(line.equals("1001\tpeepoTwitch\tSTATIC\tOTHER\nlurk7a_peepo\tpeepoClap\tSTATIC\tOTHER"), "Stored: " + line);
+        forget.invoke(null);
+        check(sections().get("Favorites|Favorites").equals(List.of("1001", "lurk7a_peepo")), "Read back after a restart");
+        // A long press on a favorite (in its section or anywhere) removes it.
+        check(press(twitch) && sections().get("Favorites|Favorites").equals(List.of("lurk7a_peepo")), "Removed");
+        settings.put("emotes_favorites", false);
+        check(!sections().containsKey("Favorites|Favorites"), "Off: no section, the list kept");
+        settings.put("emotes_favorites", true);
+        check(press(item(emote("lurk7a_peepo", "peepoClap", false))) && !sections().containsKey("Favorites|Favorites"), "Last one removed");
+        settings.put("emotes_favorites", false);
+    }
+
     private interface Section {
         void run() throws Exception;
     }
@@ -400,6 +482,7 @@ public final class EmotePickerArtProbe {
         section("emote picker: a section per service from Twitch's presenter", EmotePickerArtProbe::picker);
         section("autocomplete: Twitch's emote source lists the services' emotes", EmotePickerArtProbe::autocomplete);
         section("autocomplete without ':': trigger, Twitch's tokenizer, prefix matches", EmotePickerArtProbe::bareAutocomplete);
+        section("favorite emotes: long press, the Favorites section first, stored list", EmotePickerArtProbe::favorites);
         if (failures > 0) {
             System.out.println("FAILED: " + failures + " section(s)");
             System.exit(1);

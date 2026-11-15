@@ -153,6 +153,9 @@ TwitchEmotes.pickerSets
 # Autocomplete without ':' (issue 65): the chat input's ':' check and its tokenizer.
 TwitchEmotes.bareTokenStart
 TwitchEmotes.bareTrigger
+# Favorite emotes (issue 61): the picker item's long press, and the picker's load (to show a change).
+TwitchEmoteFavorites.longClick
+TwitchEmoteFavorites.opened
 
 # if badges_ffz
 TwitchBadges.badges

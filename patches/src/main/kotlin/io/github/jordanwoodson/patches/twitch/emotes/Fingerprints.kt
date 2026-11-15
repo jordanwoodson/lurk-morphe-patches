@@ -141,3 +141,19 @@ internal object ImageFetcherResponseFingerprint : Fingerprint(
     filters = listOf(newInstance("Lcom/bumptech/glide/load/HttpException;")),
     custom = { _, classDef -> classDef.methods.any { it.name == "onFailure" } },
 )
+
+// An emote item of the emote picker (EmoteUiModel): its ID and the clicked-emote model taps hand over.
+internal object EmoteUiModelFingerprint : Fingerprint(
+    name = "toString",
+    returnType = "Ljava/lang/String;",
+    parameters = emptyList(),
+    strings = listOf("EmoteUiModel(id=", ", clickedEmote="),
+)
+
+// An unlocked emote of the picker: the emote, what a tap inserts and its modifier variants (Twitch's long press).
+internal object UnlockedEmoteFingerprint : Fingerprint(
+    name = "toString",
+    returnType = "Ljava/lang/String;",
+    parameters = emptyList(),
+    strings = listOf("Unlocked(emote=", ", modifiedEmotes="),
+)

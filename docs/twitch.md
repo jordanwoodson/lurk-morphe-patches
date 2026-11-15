@@ -991,6 +991,34 @@ tokenizer (plain words, `:`, `@`, commands, two letters, the switch off) and the
 switch on and off. The text watcher itself and the drop-down were not run: the chat input needs a signed-in account,
 which the emulator can't have, so the suggestions appearing while typing are unverified in the app.
 
+*Favorite emotes* (`emotes_favorites`, off by default;
+[issue #61](https://github.com/jordanwoodson/lurk-morphe-patches/issues/61)) adds a Favorites section to the emote
+picker. Twitch's picker has three fixed tabs (Frequently used, Channel, All: the `gwf` enum the presenter's state
+starts from), so a new tab would mean a new enum constant; the favorites are a section of the list instead, like the
+services'. What Twitch does on a long press: the item binder (`EmoteUiModel` items, found by that toString) gives the
+emote's view a long-press listener that sends `LongClick(emoteView=, clickedEmote=)`; the picker's view delegate
+shows a popup of the emote's modifier variants when the clicked emote is `Unlocked(…)` with a non-empty
+`modifiedEmotes`, and does nothing otherwise. The binder's `setOnLongClickListener` call goes through
+`TwitchEmoteFavorites.longClick` with the item model: with the switch on, a long press on an unlocked emote without
+variants adds it to the favorites or, if it is one, removes it (a toast says which), and everything else reaches
+Twitch's listener, so emotes with variants keep Twitch's popup and can't be favorited by long press. The emote's ID,
+code, asset type and type come from the emote's base-class getters (matched at patch time to the fields the
+`WithOwner(…)` constructor stores), through bridges. The list (up to 100) is kept in a preferences file of Lurk's
+own, `lurk_emote_favorites`, not in the settings, so settings export doesn't carry it. In the sets hook the favorites
+are made again as `WithOwner` emote objects owned by the open channel and go in as one owner set with a stand-in
+owner named "Favorites" (ID -4). The presenter (the sets case of its Function3) puts the channel's own set first and
+sorts the other owner sets by set ID with a plain String comparison (Twitch's emote set IDs are numeric, the
+services' start with `lurk`), so the favorites' set ID is `!lurkfav`, which sorts before both. Third-party favorites keep their `lurk…`
+IDs, whose image URLs the URL hook makes from the ID alone, so they show in any channel; inserting one puts its code
+in the message, which shows as an emote where that channel's lists have it. To show a change at once, the presenter's
+load (`(Tuid, surface)`, which Twitch calls each time the picker opens) is noted at its start
+(`TwitchEmoteFavorites.opened`) and called again on the main thread after a change, as reopening the picker would.
+`bin/test-twitch-emotes` builds picker items with the presenter's own item builder and runs the long-press handling and
+the real sets case: switch off (Twitch's), adding a Twitch and a 7TV emote, an emote with variants left to Twitch, the
+section first before the 7TV and BetterTTV ones, the stored lines read back after a restart, removing, and no section
+when off or empty. The listener on a real view, the toast, the picker showing the change right away (the reload) and
+inserting a favorite were not seen in the app: the picker needs a signed-in account.
+
 **Image cache** ([issue #71](https://github.com/jordanwoodson/lurk-morphe-patches/issues/71): 7TV emotes loaded
 slowly in the picker, vanished when scrolled back to and kept reloading in chat). Twitch loads every image with
 Glide (`TwitchGlideModule`, kept by name, gives Glide a 64 MB disk cache in `cache/image_manager_disk_cache` and
