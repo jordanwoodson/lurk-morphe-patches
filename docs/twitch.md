@@ -117,6 +117,7 @@ ReVive, bttv-android, TwitchMod, Xtra, Twire and Frosty.
 | VOD chapters | VOD chapters |
 | VODHunter (sub-only and deleted VODs) | Declined |
 | Default startup tab | Default startup tab |
+| Don't keep search history | Don't save searches |
 | Hide Home sections | Hide Home sections (and Hide Clips now covers the native Home tabs) |
 | Hide mature-content warning | Hide mature content warning |
 | Tablet UI | Tablet layout |
@@ -254,6 +255,21 @@ phone, signed in: the feed opens on its Following tab.
 
 A blanket "disable Google Play services" switch is deliberately not offered. It would break push,
 Google and FIDO sign-in, Cast and billing.
+
+### Don't save searches
+
+Twitch keeps the last ten searches as a JSON array under `recentSearches` in its preferences, read once into
+an in-memory list when search is first used; the list's class puts each new search on top and writes the
+array back. The patch (same name, key and default as Kick's and Rumble's) makes the read return an empty
+list and the put-on-top method return at once while `no_search_history` is on, so nothing shows under the
+search box and nothing new is kept; the saved array itself is left alone and shows again once the switch is
+off and Twitch restarted. The two methods are found by the `recentSearches` string: the reader returns an
+`ArrayList`, the writer builds a `JSONArray` from a collection, and the put-on-top method is the one
+`(String)` method of the writer's class that calls `add(int, Object)`.
+
+Checked on the emulator, signed out: with the switch off a search ("poker") shows under RECENT and is in
+`twitch_user_prefs.xml`; with it on, after a restart, RECENT is gone, a new search ("chess") isn't written,
+and "poker" is still in the file.
 
 ### Background audio and Show video stats
 
