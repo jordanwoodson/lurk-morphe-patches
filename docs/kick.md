@@ -280,7 +280,12 @@ screen), nags (Hide rating prompt), local privacy (Don't save searches), and fea
 what the same patch does by default on Twitch (Show deleted messages, Background audio).
 
 There is no cookie-notice or Premium-unlock patch: no corresponding Kick feature
-was established. The VOD patch does not promise removal of ads already stitched
+was established. Kick 40.34.0 shows no cookie or consent notice: its only consent code,
+`AdsConsentInitializer`, asks OneTrust's mobile API (`mobile-data.onetrust.io/cfw/cmp/v1/banner`) at start
+whether a banner applies and, when OneTrust answers that none does (`showBanner` false with Kick's reason code)
+and nothing is stored, records the default consent there (`/save-log-consent`, `BANNER_CLOSE`) without drawing
+anything. Nothing in the bundle renders a banner, so *Block cookie notice* (Twitch, Rumble) has nothing to hide on
+Kick. The VOD patch does not promise removal of ads already stitched
 into the source stream. Its generator still completes with an object, allowing
 both the VOD and live-rewind consumers to use their existing original-URL fallback.
 Live playback authorization and media URLs remain unchanged.
