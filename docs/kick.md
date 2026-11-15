@@ -264,6 +264,7 @@ details and validation follow.
 | Don't save searches | Yes | On | New searches aren't added to the search history. |
 | AMOLED black | Yes | Off (choice) | Pure black background, optionally near-black cards and sheets. |
 | Third-party emotes | Yes | 7TV emotes, off | The channel's and 7TV's global emotes in live chat. |
+| Third-party badges | Yes | 7TV badges, off | The 7TV badge each chatter chose, next to their name in live chat. |
 | Chat timestamps | Yes | Off; clock 24-hour | The time next to each chat message, signed out too, as 13:05 or 1:05. |
 | Chat text size | Yes | Kick's size; Compact chat, off | Chat text from 12 to 24 px; less space between messages. |
 | Chat keywords | Yes | Off; mentions on, vibration off, lists empty | Tints messages that mention you or contain highlight words, optionally vibrating; hides blocked words and users. |
@@ -1067,7 +1068,7 @@ normal request IP metadata; it receives no Kick credentials or chat draft. Becau
 lookup repeats every five minutes and the socket stays open while a chat is visible, 7TV can
 tell from your IP address which channels you watch and for how long; the patch description and
 the switch say so. Images load from **cdn.7tv.app**. With the patch excluded or the switch off, Lurk makes no provider
-requests. 7TV badges and paints are not included.
+requests. 7TV paints are not included; 7TV badges are their own switch (Third-party badges).
 
 The WebView sends only bounded catalog snapshots for its current native document token
 and channel. Native validation strips unknown fields, rejects foreign origins/stale
@@ -1108,6 +1109,45 @@ host event counter, followed by stock draft/selection setters. Text and caret ch
 atomically, so the later native span replacement preserves the caret's distance from
 the new end. There is no delayed correction to overwrite later user movement. Authenticated
 send correctness requires a separately authorized send test.
+
+### Third-party badges
+
+"7TV badges" (`badges_7tv`, Twitch's key, off by default, applies after a restart) shows the 7TV badge each chatter
+chose after Kick's own badges, before the name. Of the badge sources Twitch has, only 7TV knows Kick accounts:
+FrankerFaceZ and Chatterino list Twitch user IDs and pronouns.alejo.io looks up Twitch logins, so Kick has no
+switches for them. 7TV publishes no list of badge holders. Its event service (`wss://events.7tv.io/v3`) pushes, for
+a channel, the badge each chatter there chose (an `entitlement` whose user lists their linked accounts, the Kick one
+as `platform: "KICK"` with the Kick user ID) and each badge's images (a `cosmetic`), which is how 7TV's browser
+extension learns them; for Kick the channel is named by its owner's Kick user ID. Subscribing to `cosmetic.*` and
+`entitlement.*` with `{platform: "KICK", ctx: "channel", id: <owner>}` for 40 s delivered six badges and their
+holders on a large channel (xQc) and two on a 5,000-viewer one (2026-11-15).
+
+The chat page script does it all (`sevenTvBadges` in `chat-page.js`): one socket, the same heartbeat watchdog and
+capped reconnects as the 7TV emotes socket, closed while the page is hidden and at teardown. A badge's image is
+the largest file up to 3x from its `//cdn.7tv.app/badge/<id>` host, the still copy when it's animated, as on
+Twitch; any other host or file name is refused. Each chat line carries its sender's Kick user ID
+(`data-sender-id`, pinned in the page contract), and its `.user-wrapper` holds the timestamp, Kick's badges and
+the `.username`; the badge goes in as one more `<img class="badge">` before the name, on lines already shown, on
+new ones and when a holder's badge arrives, changes or is removed later. At most 20,000 holders and 2,000 badges
+are kept per page. `KickChat` passes `sevenTvBadges` and the owner (`sevenTvUser`, from `KickHttp` as for 7TV
+emotes; see there for the channel info response) to the script; KickHttp, which learns the owner, is added to
+Kick's HTTP clients while either 7TV switch is on, when they are built at start, hence the restart. Without a
+known owner nothing connects. 7TV learns the channel's owner and the viewer's IP address while the chat is open,
+nothing about the account or the chatters on screen, and no chatter is looked up; images load from
+`cdn.7tv.app` with no referrer.
+
+Checked: `tests/kick/test_chat_page.py` (headless Chrome, in `bin/test-host`) runs the script with a stand-in event
+socket: the two subscriptions, no HTTP lookups, a holder whose badge isn't defined yet, the badge's place and file,
+new lines, a changed and a removed badge, refused hosts and file names, teardown without reconnects and nothing
+without an owner. `bin/test-kick-chat` checks on ART that `KickChat` passes the switch and the owner without turning
+on 7TV emotes. On the emulator, signed out, with only 7TV badges on and Kick restarted, on a live channel with about
+5,000 viewers: the page reported `7tv badges 1820952` (the owner, read from the channel info response), and through
+the WebView debugger its socket had received one badge (a Christmas 2024 gifter badge) and its holder within a
+minute. That holder didn't chat while it was watched (about six minutes), so a copy of one of the page's own chat
+lines with the holder's Kick ID as sender was added to the list: it got the badge between the timestamp and the
+name, at Kick's badge size, with its image loaded from cdn.7tv.app (54 px wide, `3x_static.webp`). With the switch
+off and Kick restarted, the page reported no badges and opened no badge socket. A real chat line from a badge holder
+on the device was not seen.
 
 ## Implementation contracts and verification
 

@@ -279,6 +279,13 @@ public final class ChatBoundaryProbe {
         setting("chat_show_deleted",true);options=emit("moderator-only",page("{}"));
         ProbeSupport.check(options.getBoolean("moderatorView") && options.length()==1,"Show deleted messages alone only asks for its report");
         setting("chat_show_deleted",false);
+        // Third-party badges alone: the owner for the badge socket, no emotes.
+        setting("badges_7tv",true);
+        response("https://kick.com/api/v2/channels/xqc","{\"id\":668,\"slug\":\"xqc\",\"user_id\":676}",200,true);
+        options=quiet(page("{\"channelId\":668}"));
+        ProbeSupport.check(options.getBoolean("sevenTvBadges") && options.getString("sevenTvUser").equals("676") && !options.has("sevenTv")
+            && !options.has("sevenTvChannel"),"7TV badges alone: the owner and no emotes");
+        setting("badges_7tv",false);
         lifecycle();
         keywords();
         look();

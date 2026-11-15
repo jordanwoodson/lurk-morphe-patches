@@ -45,6 +45,8 @@ public final class KickChat {
     private static final String TEXT_SIZE = "chat_text_size";
     private static final String COMPACT = "chat_compact";
     static final String SEVEN_TV = "emotes_7tv";
+    /** Third-party badges: 7TV badges, Twitch's key. */
+    static final String SEVEN_TV_BADGES = "badges_7tv";
     /** A switch, then the page's elements for the chat lines it hides. */
     private static final String[][] HIDE = {
             {"hide_sub_messages", ".subscription-container", ".subgift-container"},
@@ -314,7 +316,8 @@ public final class KickChat {
             for (int i = 1; i < lines.length; i++) hide.put(lines[i]);
         }
         if (hide.length() > 0) options.put("hide", hide);
-        if (on(SEVEN_TV)) {
+        boolean emotes = on(SEVEN_TV), badges = on(SEVEN_TV_BADGES);
+        if (emotes || badges) {
             // The app passes the page a JSON config with the channel ID; 7TV knows channels by their owner.
             String config = uri.getQueryParameter("config");
             String channelId = null;
@@ -326,10 +329,13 @@ public final class KickChat {
             }
             String slug = channelId == null ? null : SLUGS.get(channelId);
             String owner = channelId == null ? null : OWNERS.get(channelId);
-            if (slug == null) Logger.d("7tv: channel " + channelId + " unknown, global emotes only");
-            options.put("sevenTv", true);
-            options.put("channelId", channelId == null ? JSONObject.NULL : channelId);
-            options.put("sevenTvChannel", slug == null ? JSONObject.NULL : slug);
+            if (slug == null) Logger.d("7tv: channel " + channelId + " unknown" + (emotes ? ", global emotes only" : ""));
+            if (emotes) {
+                options.put("sevenTv", true);
+                options.put("channelId", channelId == null ? JSONObject.NULL : channelId);
+                options.put("sevenTvChannel", slug == null ? JSONObject.NULL : slug);
+            }
+            if (badges) options.put("sevenTvBadges", true);
             options.put("sevenTvUser", owner == null ? JSONObject.NULL : owner);
         }
         return options;
