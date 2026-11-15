@@ -49,6 +49,19 @@ public final class TwitchInterface {
         return "following";
     }
 
+    private static java.text.NumberFormat countFormat;
+    private static java.util.Locale countLocale;
+
+    /** Injection point (Show exact counts): a count in full, grouped the device locale's way (12,345). */
+    public static synchronized String exactCount(long count) {
+        java.util.Locale locale = java.util.Locale.getDefault();
+        if (countFormat == null || !locale.equals(countLocale)) {
+            countFormat = java.text.NumberFormat.getIntegerInstance(locale);
+            countLocale = locale;
+        }
+        return countFormat.format(count);
+    }
+
     public static boolean bitsVisible(boolean stock) {
         return stock && !Settings.isEnabled("hide_tipping");
     }

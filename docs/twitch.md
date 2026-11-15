@@ -285,6 +285,17 @@ switch matters for mount installs and for whenever Twitch wires the forced scree
 Not seen working: there is no way to make Play offer an update on the emulator. Checked only that the patch
 applies and the app starts.
 
+### Show exact counts
+
+Native screens shorten every count through `NumberFormatUtil`'s `(long, boolean)` method (a
+`CompactDecimalFormat`; the class keeps its name, and the method is found by its hand-written German format
+`%.1f Tsd.`). With `exact_counts` on (same name, key and default as Kick's and Rumble's) the method returns
+`TwitchInterface.exactCount`, the count grouped the device locale's way. The signed-in Home feed is React
+Native and formats its own counts, so it keeps the short form.
+
+Checked on the emulator, signed out: the Home feed's viewer count reads "29,281" with the switch on and
+"24.2K" with it off.
+
 ### Background audio and Show video stats
 
 Twitch already has "Continue Playing Audio in the Background" (Always, Headphones/Speaker, Never),
