@@ -10,10 +10,12 @@ import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import io.github.jordanwoodson.patches.shared.Locators
 import io.github.jordanwoodson.patches.shared.bridge
 import io.github.jordanwoodson.patches.shared.invokeStatic
+import io.github.jordanwoodson.patches.shared.parameterRegister
 import io.github.jordanwoodson.patches.twitch.shared.addInstructions
 import io.github.jordanwoodson.patches.twitch.shared.replaceInstruction
 import io.github.jordanwoodson.patches.twitch.shared.requireKept
@@ -24,6 +26,7 @@ private const val EMOTES = "Lio/github/jordanwoodson/extension/shared/twitch/Twi
 private const val OPTIONAL = "Ltv/twitch/android/util/Optional;"
 private const val OBJECT = "Ljava/lang/Object;"
 private const val STRING = "Ljava/lang/String;"
+private const val CHAR_SEQUENCE = "Ljava/lang/CharSequence;"
 
 /**
  * The emote picker and autocomplete (switch `emotes_picker`). Twitch builds the picker's sections itself:
@@ -123,6 +126,7 @@ internal fun BytecodePatchContext.hookEmotePicker(emoteType: String) {
     bridge(EMOTES, "sourceHas",
         "check-cast p0, ${matches.definingClass}\ninvoke-interface { p0, p1 }, $has\nmove-result p0\nreturn p0")
     bridge(EMOTES, "isEmoteSource", "instance-of p0, p0, ${source.type}\nreturn p0")
+    hookBareAutocomplete(source.type)
 
     // An emote's code: the base class getter the emote class implements by returning the field its
     // constructor stores its second argument in (id, code, owner, asset type, modifications, type).
@@ -149,4 +153,77 @@ internal fun BytecodePatchContext.hookEmotePicker(emoteType: String) {
         move-result-object p0
         return-object p0
     """)
+}
+
+/**
+ * Autocomplete without ':' (switch `emotes_autocomplete_bare`). The chat input's text watcher picks the
+ * autocomplete source from the word before the cursor: '@' chatters, ':' emotes, a command's argument chatters,
+ * and otherwise hides the drop-down. Its ':' check (a detector object's boolean method, right before the branch
+ * that hands the adapter the emote source) gets a hook that also says yes for a plain word of a few characters;
+ * the input's tokenizer (`findTokenStart`, which only ever starts a token at '@', ':' or a command's argument)
+ * gets one that starts the token at that word. Twitch's own filter, drop-down and insertion do the rest.
+ */
+private fun BytecodePatchContext.hookBareAutocomplete(sourceType: String) {
+    val watcher = Fingerprint(
+        name = "onTextChanged", returnType = "V", parameters = listOf(CHAR_SEQUENCE, "I", "I", "I"),
+        custom = { _, classDef -> classDef.fields.any { it.type == sourceType } },
+    ).twitchMatch("chat input text watcher")
+    val detector: String
+    watcher.method.apply {
+        val instructions = implementation!!.instructions.toList()
+        val emoteRead = instructions.indices.singleOrNull { i ->
+            instructions[i].opcode == Opcode.IGET_OBJECT &&
+                ((instructions[i] as ReferenceInstruction).reference as FieldReference).type == sourceType
+        } ?: throw PatchException("Twitch: the chat input doesn't hand over the emote source once")
+        val check = (emoteRead downTo 0).firstOrNull { i ->
+            val ref = (instructions[i] as? ReferenceInstruction)?.reference as? MethodReference
+            instructions[i].opcode == Opcode.INVOKE_VIRTUAL && ref?.returnType == "Z" &&
+                ref.parameterTypes.map(CharSequence::toString) == listOf(CHAR_SEQUENCE)
+        } ?: throw PatchException("Twitch: the chat input's ':' check moved")
+        detector = ((instructions[check] as ReferenceInstruction).reference as MethodReference).definingClass
+        val result = instructions[check + 1]
+        if (result.opcode != Opcode.MOVE_RESULT) throw PatchException("Twitch: the chat input's ':' check isn't kept")
+        val flag = (result as OneRegisterInstruction).registerA
+        val text = (instructions[check] as FiveRegisterInstruction).registerD
+        val branch = instructions[check + 2]
+        if (branch.opcode != Opcode.IF_EQZ || (branch as OneRegisterInstruction).registerA != flag) {
+            throw PatchException("Twitch: the chat input doesn't branch on its ':' check")
+        }
+        requireNotBranchTarget(check + 2, "chat input ':' check")
+        addInstructions(check + 2, """
+            ${invokeStatic("$EMOTES->bareTrigger(Z$CHAR_SEQUENCE)Z", flag, text)}
+            move-result v$flag
+        """)
+    }
+    Locators.record("twitch.emote_picker.text_watcher", watcher.method)
+
+    val tokenizer = Fingerprint(
+        name = "findTokenStart", returnType = "I", parameters = listOf(CHAR_SEQUENCE, "I"),
+        custom = { _, classDef -> classDef.fields.any { it.type == detector } },
+    ).twitchMatch("chat input tokenizer")
+    tokenizer.method.apply {
+        val instructions = implementation!!.instructions.toList()
+        val text = parameterRegister(1)
+        // Its text argument is replaced, once, by the part before the cursor; that is what the hook reads.
+        val cut = instructions.indexOfFirst { instruction ->
+            val ref = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+            ref?.name == "subSequence" && ref.definingClass == CHAR_SEQUENCE
+        }
+        val writes = instructions.indices.filter { i ->
+            instructions[i].opcode.setsRegister() && (instructions[i] as? OneRegisterInstruction)?.registerA == text
+        }
+        if (cut < 0 || writes != listOf(cut + 1) || instructions[cut + 1].opcode != Opcode.MOVE_RESULT_OBJECT) {
+            throw PatchException("Twitch: the chat input tokenizer no longer cuts its text at the cursor")
+        }
+        val returns = instructions.indices.filter { instructions[it].opcode == Opcode.RETURN }
+        if (returns.size != 1) throw PatchException("Twitch: the chat input tokenizer has ${returns.size} returns")
+        val at = returns.single()
+        val value = (instructions[at] as OneRegisterInstruction).registerA
+        requireNotBranchTarget(at, "chat input tokenizer return")
+        addInstructions(at, """
+            ${invokeStatic("$EMOTES->bareTokenStart(I$CHAR_SEQUENCE)I", value, text)}
+            move-result v$value
+        """)
+    }
+    Locators.record("twitch.emote_picker.tokenizer", tokenizer.method)
 }

@@ -150,6 +150,9 @@ TwitchImageCache.store
 # if emotes_picker
 TwitchEmotes.autocomplete
 TwitchEmotes.pickerSets
+# Autocomplete without ':' (issue 65): the chat input's ':' check and its tokenizer.
+TwitchEmotes.bareTokenStart
+TwitchEmotes.bareTrigger
 
 # if badges_ffz
 TwitchBadges.badges

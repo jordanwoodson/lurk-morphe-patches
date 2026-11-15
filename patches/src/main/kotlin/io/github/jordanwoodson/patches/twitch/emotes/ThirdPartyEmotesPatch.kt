@@ -43,7 +43,8 @@ val thirdPartyEmotesPatch = bytecodePatch(
         "\"Emotes in the picker\" also lists them in the emote picker, one section per service, and in " +
         "autocomplete after ':', from the same lists; that part was checked with Twitch's own picker and " +
         "autocomplete code on Android's runtime, not in the app, which needs an account to open the picker. " +
-        "Starts off. Turn it on in Lurk settings > Chat.",
+        "\"Autocomplete without ':'\" suggests emotes (Twitch's and these) for a plain word of three letters or " +
+        "more, checked the same way. Starts off. Turn it on in Lurk settings > Chat.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
     dependsOn(twitchRNChatPatch, twitchSettingsPatch, chatImageSizePatch, thirdPartyImageCachePatch)
@@ -71,6 +72,11 @@ val thirdPartyEmotesPatch = bytecodePatch(
             SwitchSetting("emotes_picker", "Emotes in the picker",
                 "Lists the emotes of the services turned on above in the emote picker, one section each, and in " +
                     "autocomplete after ':'. Uses the lists chat already loads and sends nothing else.",
+                Section.CHAT, default = false),
+            SwitchSetting("emotes_autocomplete_bare", "Autocomplete without ':'",
+                "Suggests emotes whose name starts with the word you are typing once it has three characters, " +
+                    "without typing ':' first. Twitch's emotes, plus the services' above while Emotes in the picker is on. " +
+                    "Not after a command (/...).",
                 Section.CHAT, default = false),
         )
     }

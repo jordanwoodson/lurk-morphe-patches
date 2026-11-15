@@ -309,6 +309,61 @@ public final class EmotePickerArtProbe {
         check(complete(users, "pe").equals(List.of("pepega_viewer")), "Other sources must keep their answer");
     }
 
+    /** The real chat input tokenizer: where the token to complete starts in {@code text}, cursor at its end. */
+    private static int tokenStart(String text) throws Exception {
+        Class<?> type = Class.forName(ProbeLocators.type("twitch.emote_picker.tokenizer", "awp"));
+        Constructor<?> make = type.getDeclaredConstructors()[0];
+        Class<?>[] parameters = make.getParameterTypes();
+        check(parameters.length == 3 && parameters[0] == parameters[2], "Unexpected tokenizer constructor");
+        // The two detectors ('@' and ':'); the tokenizer takes the larger of their answers, so their order is moot.
+        Constructor<?> detector = parameters[0].getDeclaredConstructor(int.class);
+        detector.setAccessible(true);
+        // The input view: only its commands helper is read, which with nothing set knows no commands.
+        Object view = allocate(parameters[1]);
+        for (Field field : parameters[1].getDeclaredFields()) {
+            if (Modifier.isStatic(field.getModifiers()) || field.getType().isPrimitive() || field.getType().isInterface()) continue;
+            for (Method method : field.getType().getDeclaredMethods()) {
+                if (method.getReturnType() == boolean.class && method.getParameterTypes().length == 1
+                        && method.getParameterTypes()[0] == List.class) {
+                    field.setAccessible(true);
+                    field.set(view, allocate(field.getType()));
+                }
+            }
+        }
+        make.setAccessible(true);
+        Object tokenizer = make.newInstance(detector.newInstance(1), view, detector.newInstance(0));
+        Method start = type.getMethod("findTokenStart", CharSequence.class, int.class);
+        return (int) start.invoke(tokenizer, text, text.length());
+    }
+
+    private static void bareAutocomplete() throws Exception {
+        autocompleteSetup();
+        settings.put("emotes_picker", true);
+        settings.put("emotes_autocomplete_bare", false);
+        check(complete(twitchSource, "pee").equals(List.of("peepoTwitch", "peepoClap", "WidepeepoHappy")),
+            "Off: Twitch's matching, contains included: " + complete(twitchSource, "pee"));
+        check(tokenStart("say pepe") == 0 && tokenStart("hi :pe") == 3 && tokenStart("@vie") == 1, "Off: Twitch's tokens");
+        Method trigger = Class.forName(EMOTES).getMethod("bareTrigger", boolean.class, CharSequence.class);
+        check(!(boolean) trigger.invoke(null, false, "say pepe") && (boolean) trigger.invoke(null, true, "hi :pe"), "Off: Twitch's ':' check");
+
+        settings.put("emotes_autocomplete_bare", true);
+        check(complete(twitchSource, "pee").equals(List.of("peepoTwitch", "peepoClap")),
+            "On: a plain word gets prefix matches only: " + complete(twitchSource, "pee"));
+        check(complete(twitchSource, ":pee").equals(List.of("peepoTwitch", "peepoClap", "WidepeepoHappy")), "':' unchanged");
+        check(complete(twitchSource, "PEPEL").equals(List.of("pepeLaugh")), "Any case");
+        settings.put("emotes_picker", false);
+        check(complete(twitchSource, "pee").equals(List.of("peepoTwitch")), "Without the picker switch: Twitch's emotes only");
+        settings.put("emotes_picker", true);
+        check(tokenStart("say pepe") == 4 && tokenStart("pepe") == 0, "On: the plain word is the token");
+        check(tokenStart("say pe") == 0, "Two characters aren't enough");
+        check(tokenStart("hi :pe") == 3 && tokenStart("@vie") == 1 && tokenStart("hi @vie") == 4, "':' and '@' unchanged");
+        check(tokenStart("/ban pepe") == 0 && tokenStart("say !cmd") == 0, "Commands and symbols aren't emotes");
+        check((boolean) trigger.invoke(null, false, "say Kappa") && !(boolean) trigger.invoke(null, false, "say Ka")
+            && !(boolean) trigger.invoke(null, false, "say Kappa ") && !(boolean) trigger.invoke(null, false, "/me Kappa"),
+            "On: the trigger follows the same rule");
+        settings.put("emotes_autocomplete_bare", false);
+    }
+
     private interface Section {
         void run() throws Exception;
     }
@@ -344,6 +399,7 @@ public final class EmotePickerArtProbe {
         Class.forName(EMOTES).getMethod("onChatChannel", Object.class).invoke(null, tuid(CHANNEL));
         section("emote picker: a section per service from Twitch's presenter", EmotePickerArtProbe::picker);
         section("autocomplete: Twitch's emote source lists the services' emotes", EmotePickerArtProbe::autocomplete);
+        section("autocomplete without ':': trigger, Twitch's tokenizer, prefix matches", EmotePickerArtProbe::bareAutocomplete);
         if (failures > 0) {
             System.out.println("FAILED: " + failures + " section(s)");
             System.exit(1);

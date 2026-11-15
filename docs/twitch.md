@@ -972,6 +972,25 @@ real autocomplete filter over Twitch's emote source for `:pe` and checks the ord
 that a chatter source keeps its own answer. Drawing the sections and inserting a tapped emote are Twitch's
 unchanged code but were not seen in the app.
 
+*Autocomplete without ':'* (`emotes_autocomplete_bare`, off by default;
+[issue #65](https://github.com/jordanwoodson/lurk-morphe-patches/issues/65)) suggests emotes for a plain word.
+Twitch's chat input (a `MultiAutoCompleteTextView`) decides in its text watcher's `onTextChanged` which source the
+drop-down gets from the word before the cursor (split on spaces): `@` the chatters, `:` the emote source, a
+command's argument the chatters again, anything else no drop-down (height 0). Its tokenizer's `findTokenStart` starts
+a token only at those markers and answers 0 otherwise. Two hooks: right after the watcher's `:` check (the boolean
+call on a detector object just before the branch that reads the emote-source field, which is how the patch finds
+it), `TwitchEmotes.bareTrigger` also says yes for a plain word; at the tokenizer's single return,
+`TwitchEmotes.bareTokenStart` starts the token at that word when Twitch's answer is 0. A plain word is the last
+word before the cursor, at least three characters, starting with a letter or digit, in a message that isn't a
+command (`/...`, so `/me` lines get none). The emote source's answer for it is cut to codes that start with the
+word (Twitch's own matcher also lists codes that merely contain it, which for ordinary words would be noise), with
+the services' emotes merged in while *Emotes in the picker* is on. A word nothing starts with gives no results, and
+Twitch's filter then shows no drop-down; picking a suggestion is Twitch's replace of the token with the code and a
+space. Off, both hooks return Twitch's answer. `bin/test-twitch-emotes` checks the trigger rule, the real patched
+tokenizer (plain words, `:`, `@`, commands, two letters, the switch off) and the filter's prefix-only answer with the
+switch on and off. The text watcher itself and the drop-down were not run: the chat input needs a signed-in account,
+which the emulator can't have, so the suggestions appearing while typing are unverified in the app.
+
 **Image cache** ([issue #71](https://github.com/jordanwoodson/lurk-morphe-patches/issues/71): 7TV emotes loaded
 slowly in the picker, vanished when scrolled back to and kept reloading in chat). Twitch loads every image with
 Glide (`TwitchGlideModule`, kept by name, gives Glide a 64 MB disk cache in `cache/image_manager_disk_cache` and

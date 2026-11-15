@@ -42,6 +42,9 @@ public final class TwitchEmotes {
     static final String KEY_BTTV = "emotes_bttv";
     static final String KEY_FFZ = "emotes_ffz";
     static final String KEY_PICKER = "emotes_picker";
+    /** Autocomplete without ':': emote suggestions for a plain word of {@link #BARE_MIN} characters or more. */
+    static final String KEY_BARE = "emotes_autocomplete_bare";
+    static final int BARE_MIN = 3;
 
     private static final int SEVENTV = 0;
     private static final int BTTV = 1;
@@ -408,22 +411,29 @@ public final class TwitchEmotes {
      */
     public static ArrayList autocomplete(Object source, CharSequence typed) {
         ArrayList found = sourceMatches(source, typed);
-        if (found == null || typed == null || !Settings.isEnabled(KEY_PICKER)) return found;
+        if (found == null || typed == null) return found;
+        // A word typed without ':' (see bareTrigger) only gets emotes that start with it: "the" shouldn't
+        // suggest every emote with "the" inside.
+        boolean bare = typed.length() > 0 && typed.charAt(0) != ':' && Settings.isEnabled(KEY_BARE);
+        boolean picker = Settings.isEnabled(KEY_PICKER);
+        if (!bare && !picker) return found;
         try {
-            Object channel = chatChannel;
-            if (channel == null || !isEmoteSource(source)) return found;
+            if (!isEmoteSource(source)) return found;
             String text = typed.toString();
             if (text.startsWith(":")) text = text.substring(1);
             if (text.isEmpty()) return found;
+            String lower = text.toLowerCase(Locale.ROOT);
+            if (bare) found = startingWith(found, lower);
+            Object channel = chatChannel;
+            if (!picker || channel == null) return found;
             Picked picked = picked(channel);
             if (picked == null) return found;
-            String lower = text.toLowerCase(Locale.ROOT);
             ArrayList<Object> ownStart = new ArrayList<>();
             ArrayList<Object> ownRest = new ArrayList<>();
             for (int i = 0; i < picked.codes.length; i++) {
                 String code = picked.codes[i].toLowerCase(Locale.ROOT);
                 boolean start = code.startsWith(lower);
-                if (!start && !code.contains(lower)) continue;
+                if (!start && (bare || !code.contains(lower))) continue;
                 if (sourceHas(source, picked.codes[i])) continue;
                 (start ? ownStart : ownRest).add(picked.emotes[i]);
             }
@@ -444,6 +454,64 @@ public final class TwitchEmotes {
             Logger.d("emotes: autocomplete failed: " + e);
             return found;
         }
+    }
+
+    /** The emotes of {@code found} whose code starts with {@code lower} (lowercase), in their order. */
+    private static ArrayList startingWith(ArrayList found, String lower) {
+        ArrayList out = new ArrayList(found.size());
+        for (Object emote : found) {
+            String code = emoteCode(emote);
+            if (code != null && code.toLowerCase(Locale.ROOT).startsWith(lower)) out.add(emote);
+        }
+        return out;
+    }
+
+    /**
+     * Injection point (chat input text watcher): Twitch's check whether the word before the cursor starts with
+     * ':', which hands the drop-down Twitch's emote source. While "Autocomplete without ':'" is on, a plain word
+     * counts as well (see {@link #bareStart}); otherwise {@code colon} itself.
+     */
+    public static boolean bareTrigger(boolean colon, CharSequence before) {
+        if (colon) return true;
+        try {
+            return bareStart(before) >= 0;
+        } catch (RuntimeException e) {
+            Logger.d("emotes: autocomplete trigger failed: " + e);
+            return false;
+        }
+    }
+
+    /**
+     * Injection point (chat input tokenizer): where the token to complete starts in {@code before}, the text up
+     * to the cursor. Twitch starts one only at '@', ':' or a command's argument and answers 0 otherwise; while
+     * "Autocomplete without ':'" is on, a plain word starts its own.
+     */
+    public static int bareTokenStart(int start, CharSequence before) {
+        if (start != 0) return start;
+        try {
+            int bare = bareStart(before);
+            return bare >= 0 ? bare : start;
+        } catch (RuntimeException e) {
+            return start;
+        }
+    }
+
+    /**
+     * The start of the word right before the cursor when it can be an emote typed without ':': the switch is on,
+     * the message isn't a command ("/..."), and the word (after the last space, as Twitch splits it) has at
+     * least {@link #BARE_MIN} characters and starts with a letter or digit. -1 otherwise.
+     */
+    static int bareStart(CharSequence before) {
+        if (before == null || before.length() < BARE_MIN || before.charAt(0) == '/') return -1;
+        if (!Settings.isEnabled(KEY_BARE)) return -1;
+        int end = before.length();
+        int start = end;
+        while (start > 0 && before.charAt(start - 1) != ' ') start--;
+        if (end - start < BARE_MIN || !Character.isLetterOrDigit(before.charAt(start))) return -1;
+        for (int i = start; i < end; i++) {
+            if (Character.isWhitespace(before.charAt(i))) return -1;
+        }
+        return start;
     }
 
     /** The channel's third-party emotes as Twitch emote objects, with their codes, or null when there are none. */
