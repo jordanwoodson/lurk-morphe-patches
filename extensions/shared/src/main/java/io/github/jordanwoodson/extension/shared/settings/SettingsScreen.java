@@ -1101,8 +1101,11 @@ final class SettingsScreen {
 
     private void reportProblem() {
         String appVersion = Settings.appVersion(context);
+        // A report from the dialog says so: that install's manifest isn't the patched one (a mount install),
+        // which explains manifest patches that seem to do nothing.
         String device = "Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + "), "
-                + Build.MANUFACTURER + " " + Build.MODEL;
+                + Build.MANUFACTURER + " " + Build.MODEL
+                + (host instanceof SettingsDialog ? ", mount install (the app's manifest isn't the patched one)" : "");
         String url = Report.url(registry, Settings.values(), Settings.pauseRequested(), appVersion, device);
         show(dialog()
                 .setTitle("Report a problem")
