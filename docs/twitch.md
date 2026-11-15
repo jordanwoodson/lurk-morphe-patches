@@ -338,7 +338,11 @@ The player patches hook IVS `CorePlayerImpl` (the SDK's names are kept) and Twit
 paths. Calls into obfuscated Twitch methods go through empty extension stubs whose bodies the patch
 fills in.
 
-*Sleep timer* re-arms on every `play()`. It pauses through the Guest Star pause-all registry (native
+*Sleep timer* re-arms on every `play()`, and on `start()` of Twitch's ExoPlayer 2 player
+(`tv.twitch.android.shared.player.core.b`, found by its "Error unregistering stream volume receiver" log
+string), which *Force ExoPlayer* plays through without ever reaching IVS
+([issue #70](https://github.com/jordanwoodson/lurk-morphe-patches/issues/70); checked on the emulator with
+Force ExoPlayer on: the debug log shows `sleep timer: play on …core.b`, and the stream pauses when the time is up). It pauses through the Guest Star pause-all registry (native
 and portal) and through `TwitchMediaSessionModule`/`FeedPlayerRegistry` (React Native), so background
 audio can be resumed from its notification. The time can also be changed without leaving the stream
 ([issue #52](https://github.com/jordanwoodson/lurk-morphe-patches/issues/52)): the player's settings sheet
