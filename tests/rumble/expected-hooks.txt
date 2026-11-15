@@ -28,6 +28,8 @@ chat_keywords  RumbleChat.currentUserId
 chat_keywords  RumbleChat.highlight
 show_deleted_messages  RumbleChat.deletedLabel
 chat_timestamps  RumbleChat.nameWithTime
+chat_anonymous  RumbleChat.streamCookie
+chat_anonymous  RumbleChat.sendBlocked
 
 video_quality  RumblePlayback.startHeight
 video_quality  RumblePlayback.capActive

@@ -41,7 +41,7 @@ need it rather than skipping them.
 | `tests/twitch/test_rn_chat.py` | The compiled React Native chat helpers, the chat overlay's context and the landscape chat column's opacity. |
 | `tests/shared/test_settings.py` | The real `Settings`, `Registry` and settings screen helpers against each app's registered settings (`tests/shared/registry/`): JSON round trip, parent ordering, defaults, restart flags, stored and wrongly typed values, the unreadable-registry fallback. |
 | `tests/shared/test_sleep_timer.py` | *Sleep timer* in Kick and Twitch on a virtual clock: expiry, resuming, stop and release, races at dispatch. |
-| `tests/rumble/test_state_transitions.py` | Rumble's chat keywords across sign-in changes, and *Remember playback speed* switched on, off and on. |
+| `tests/rumble/test_state_transitions.py` | Rumble's chat keywords across sign-in changes, *Anonymous chat*'s cookie and send decisions, and *Remember playback speed* switched on, off and on. |
 | `tests/rumble/test_video_stats.py` | Rumble's *Show video stats* text from Media3-shaped format logs and decoder counters: live and VOD renditions, missing values, and keys the panel skips not running into the ones it shows. |
 | `tests/kick/verify_player.py` | Kick's player decisions: mobile-data quality ceiling, normal latency, background audio. |
 | `tests/kick/verify_privacy.py` | Kick's privacy helper. |

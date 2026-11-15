@@ -1077,6 +1077,51 @@ word highlights and the real Compose background modifier with each setting.
 `ChatProbe` runs the real DTO getters (live messages, history, badges, `liveChatDisabled`) and the bridged
 entity getters with each switch on and off, including the hook with the keys unregistered.
 
+### Anonymous chat
+
+The chat is one long-lived GET of `<chat endpoint>/chat/<video ID>/stream` (server-sent events) through
+`HttpURLConnection`, opened by the chat data source's coroutine, which sets `Accept: text/event-stream` and then
+`Cookie` to the session's cookies (the DataStore's `cookiesKey`); the only other header is Basic auth for Rumble's
+`dev-rbx` hosts. The coroutine is found by its three whole strings (`Accept`, `text/event-stream`, `Cookie`) and
+its `(Object)Object` signature. The patch replaces the `setRequestProperty` call right after the `Cookie` constant
+(it checks the call and its registers) with `RumbleChat.streamCookie(connection, name, value)`, which sets the
+header unless `chat_anonymous` is on. The value is read when a chat is opened, so the switch applies to the next
+chat without a restart.
+
+What the server does without the cookie was checked against `web7.rumble.com` with the test account's session on
+two live streams: the `init` event has the same keys, the same 50 history messages and the same config, but the
+`users` list no longer contains the account and `subscribers_only_chat.can_write` is false (true with the cookie).
+So the chat reads as a guest's.
+
+Sending goes through another request (`LiveChatApi`, with the session), made by the data source's
+`(String, LiveChatMessageBody, provider, continuation)` method; a Rant is the same message with a `rant` body, whose
+answer carries the pending message ID the Google Play purchase then uses, so a blocked Rant fails before any
+purchase (read from the code; no Rant was tried). While the switch is on, `RumbleChat.sendBlocked` makes that method return null, which is what
+it returns without a chat API: the repository turns it into a failed send, and the extension shows a toast. Deleting
+messages, muting and pinning (moderator actions) aren't blocked; the guest connection reports `can_moderate` false,
+so the chat doesn't offer them. The account's name for Chat keywords mentions is learned from the init `users`,
+so mentions by name aren't highlighted while the switch is on. Everything else on the video page (the video's
+details, the emote list from `EmoteApi`) goes through Rumble's OkHttp client, whose interceptor adds the session
+cookie to every request, so Rumble still knows the account is watching.
+
+Not traced: the chat init can carry a `liveGate` (the countdown of a stream whose full length is for Premium
+members), and Rumble may send a guest's gate on a Premium member's anonymous connection. Not tried with a Premium
+account.
+
+`tests/rumble/test_state_transitions.py` (host) runs `streamCookie` on a real `URLConnection` and `sendBlocked`
+with the key unregistered, off and on. Checked on 2026-11-15 on the emulator, signed in as the test account: with
+the switch on, a busy live stream's chat (2.7K watching) loaded its messages, the log showed `anonymous chat: chat
+stream opened without the session cookie`, and sending "hi" logged `send refused` and nothing appeared in the chat
+(the toast wasn't caught on the screenshot). With it off, the same chat loaded without that line. The missing
+header on the device's own request was not captured with a proxy; it follows from the replaced call, and the
+server side from the comparison above.
+
+### Third-party emotes
+
+Not added. 7TV, BetterTTV and FrankerFaceZ key their emote sets to Twitch, Kick or YouTube accounts and have no
+Rumble channels, and Rumble's app has no third-party emote code; Rumble has its own channel emotes instead. Without
+a source that Rumble chatters actually use, there is nothing honest to map.
+
 ## Validation on 2026-10-16
 
 Built with the local fallback (Gradle still gets 401 from GitHub Packages) against Morphe Desktop 1.18.1,

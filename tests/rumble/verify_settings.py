@@ -74,6 +74,7 @@ DEFAULTS = {
     "amoled_black": "false",
     "amoled_near_black": "false",
     "video_stats": "false",
+    "chat_anonymous": "false",
 }
 
 
