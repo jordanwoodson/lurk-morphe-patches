@@ -11,7 +11,14 @@ volume and on the left the window's brightness, the app gets one cancel, and the
 system's at the next touch in portrait; the middle of the video, its top and bottom edges, portrait,
 picture-in-picture, TalkBack, a sideways drag, a small player, a hidden player and a touch beside the player are
 left to Kick; a second finger ends a swipe.
+
+Refresh stream: KickTouch's four patch-time bridges (reload, duration, position, seek) are swapped for recorders,
+as the patch swaps them for calls into Kick's player view. A touch held still on the video for the long-press
+timeout reloads once, in either orientation, and the app gets one cancel; moving past the touch slop, lifting
+early, a second finger, the switch off or no stream to reload leave the touch to Kick; a video seeks back to where
+it was, a live stream doesn't; swipes still work with both switches on.
 """
+import re
 import sys
 from pathlib import Path
 
@@ -19,7 +26,38 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'shared'))
 from host_java import run  # noqa: E402
 
+KICK_TOUCH = (Path(__file__).resolve().parents[2] /
+              'extensions/shared/src/main/java/io/github/jordanwoodson/extension/shared/kick/KickTouch.java').read_text()
+BRIDGES = {
+    'reload': 'return bridge.Bridge.reload(view);',
+    'duration': 'return bridge.Bridge.duration;',
+    'position': 'return bridge.Bridge.position;',
+    'seek': 'bridge.Bridge.seek(view, seconds);',
+}
+
+
+def bridged():
+    """KickTouch with each empty bridge stub's body replaced, as the patch replaces them."""
+    source = KICK_TOUCH
+    for name, body in BRIDGES.items():
+        pattern = re.compile(r'(private static [\w.]+ ' + name + r'\([^)]*\) \{)[^}]*(\})')
+        source, count = pattern.subn(lambda m: m.group(1) + ' ' + body + ' ' + m.group(2), source)
+        assert count == 1, f'expected one {name} stub in KickTouch'
+    return source
+
+
 DOUBLES = {
+    'bridge/Bridge.java': '''package bridge; public class Bridge {
+        public static boolean stream=true; public static int reloads; public static Object duration; public static int position;
+        public static double seeked=-1;
+        public static boolean reload(Object view){if(stream)reloads++;return stream;}
+        public static void seek(Object view,double s){seeked=s;}
+        public static void reset(){stream=true;reloads=0;duration=null;position=0;seeked=-1;} }''',
+    'android/view/ViewConfiguration.java': '''package android.view; public class ViewConfiguration {
+        public static ViewConfiguration get(android.content.Context c){return new ViewConfiguration();}
+        public static int getLongPressTimeout(){return 400;}
+        public int getScaledTouchSlop(){return 8;} }''',
+
     'android/content/res/Configuration.java': '''package android.content.res; public class Configuration {
         public static final int ORIENTATION_PORTRAIT=1,ORIENTATION_LANDSCAPE=2; public int orientation=ORIENTATION_PORTRAIT; }''',
     'android/content/res/Resources.java': '''package android.content.res; public class Resources {
@@ -117,6 +155,7 @@ public class KickTouchProbe {
 
   public static void main(String[] a){
     gestures();
+    refresh();
     if(failures>0){System.out.println("FAIL: "+failures+" check(s)");System.exit(1);}
     System.out.println("PASS: Kick player touch");
   }
@@ -179,12 +218,74 @@ public class KickTouchProbe {
     check(!KickTouch.dispatch(null,new MotionEvent(0,0,0),PlayerView.class)&&!KickTouch.dispatch(activity,null,PlayerView.class)
         &&!KickTouch.dispatch(activity,new MotionEvent(0,900,400),null),"missing arguments take nothing");
   }
+  static String indicator(){
+    for(View v:activity.window.decor.children)if(v instanceof android.widget.TextView)return ((android.widget.TextView)v).text;
+    return null;
+  }
+
+  static void refresh(){
+    Settings.values.clear(); Settings.values.put("refresh_stream","true"); bridge.Bridge.reset();
+    window(); activity.resources.configuration.orientation=Configuration.ORIENTATION_PORTRAIT;
+    check(!send(MotionEvent.ACTION_DOWN,500,400),"the touch down still reaches Kick");
+    android.os.Handler.advance(399);
+    check(bridge.Bridge.reloads==0&&activity.window.cancels==0,"nothing before the long-press timeout");
+    android.os.Handler.advance(2);
+    check(bridge.Bridge.reloads==1&&activity.window.cancels==1&&player.haptics==1,"held still past it: one reload, one cancel for Kick, a haptic tick");
+    check("Refreshing stream".equals(indicator()),"and a label says so: "+indicator());
+    check(send(MotionEvent.ACTION_MOVE,520,420)&&send(MotionEvent.ACTION_UP,520,420),"the rest of that touch is Lurk's");
+    check(bridge.Bridge.seeked<0,"a stream without a duration (live) isn't seeked");
+    android.os.Handler.advance(1300);
+    check(indicator()==null,"the label goes");
+    check(!send(MotionEvent.ACTION_DOWN,500,400)&&!send(MotionEvent.ACTION_UP,500,400)&&bridge.Bridge.reloads==1,"a tap is Kick's");
+    android.os.Handler.advance(1000);
+    check(bridge.Bridge.reloads==1,"and nothing fires after it");
+
+    send(MotionEvent.ACTION_DOWN,500,400); send(MotionEvent.ACTION_MOVE,540,400); android.os.Handler.advance(1000);
+    check(bridge.Bridge.reloads==1&&!send(MotionEvent.ACTION_UP,540,400),"moving past the touch slop is no long press");
+    send(MotionEvent.ACTION_DOWN,500,400); send(MotionEvent.ACTION_MOVE,504,403); android.os.Handler.advance(500);
+    check(bridge.Bridge.reloads==2,"moving within the touch slop still is"); send(MotionEvent.ACTION_UP,504,403);
+    MotionEvent second=new MotionEvent(MotionEvent.ACTION_POINTER_DOWN,500,400);
+    send(MotionEvent.ACTION_DOWN,500,400); KickTouch.dispatch(activity,second,PlayerView.class); android.os.Handler.advance(1000);
+    check(bridge.Bridge.reloads==2,"a second finger is no long press"); send(MotionEvent.ACTION_UP,500,400);
+    window(); bridge.Bridge.reset();
+    send(MotionEvent.ACTION_DOWN,500,400); send(MotionEvent.ACTION_UP,500,400); android.os.Handler.advance(1000);
+    check(bridge.Bridge.reloads==0,"lifting before the timeout is no long press");
+    send(MotionEvent.ACTION_DOWN,1300,400); android.os.Handler.advance(1000); send(MotionEvent.ACTION_UP,1300,400);
+    send(MotionEvent.ACTION_DOWN,500,40); android.os.Handler.advance(1000); send(MotionEvent.ACTION_UP,500,40);
+    check(bridge.Bridge.reloads==0&&activity.window.cancels==0,"beside the player and on its top edge: Kick's");
+
+    bridge.Bridge.duration=Long.valueOf(3_600_000); bridge.Bridge.position=95;
+    send(MotionEvent.ACTION_DOWN,500,400); android.os.Handler.advance(500); send(MotionEvent.ACTION_UP,500,400);
+    check(bridge.Bridge.reloads==1&&bridge.Bridge.seeked==95,"a video reloads at the same point: "+bridge.Bridge.seeked);
+    bridge.Bridge.reset(); bridge.Bridge.duration=Long.valueOf(-1); bridge.Bridge.position=95;
+    send(MotionEvent.ACTION_DOWN,500,400); android.os.Handler.advance(500); send(MotionEvent.ACTION_UP,500,400);
+    check(bridge.Bridge.reloads==1&&bridge.Bridge.seeked<0,"a live stream (duration -1) reloads at the live edge");
+    bridge.Bridge.reset(); bridge.Bridge.duration=Long.valueOf(Long.MAX_VALUE); bridge.Bridge.position=95;
+    send(MotionEvent.ACTION_DOWN,500,400); android.os.Handler.advance(500); send(MotionEvent.ACTION_UP,500,400);
+    check(bridge.Bridge.reloads==1&&bridge.Bridge.seeked<0,"an endless duration counts as live");
+
+    window(); bridge.Bridge.reset(); bridge.Bridge.stream=false;
+    send(MotionEvent.ACTION_DOWN,500,400); android.os.Handler.advance(500);
+    check(activity.window.cancels==0&&!send(MotionEvent.ACTION_UP,500,400),"no stream to reload: the touch stays Kick's");
+    bridge.Bridge.reset(); Settings.values.put("refresh_stream","false");
+    send(MotionEvent.ACTION_DOWN,500,400); android.os.Handler.advance(500); send(MotionEvent.ACTION_UP,500,400);
+    check(bridge.Bridge.reloads==0&&activity.window.cancels==0,"off: nothing");
+    Settings.values.put("refresh_stream","true"); activity.pip=true;
+    send(MotionEvent.ACTION_DOWN,500,400); android.os.Handler.advance(500); send(MotionEvent.ACTION_UP,500,400);
+    check(bridge.Bridge.reloads==0,"picture-in-picture: nothing");
+
+    Settings.values.put("player_gestures","true"); window(); bridge.Bridge.reset();
+    check(drag(900,400,0,-240)==5&&activity.audio.volume>5&&bridge.Bridge.reloads==0,"with both on, a swipe is still a swipe");
+    send(MotionEvent.ACTION_DOWN,900,400); android.os.Handler.advance(500); send(MotionEvent.ACTION_UP,900,400);
+    check(bridge.Bridge.reloads==1,"and a long press on the swipe side still refreshes");
+  }
 }
 '''
 
 
 def main():
-    run('KickTouchProbe', ['kick/KickTouch.java'], PROBE, extra=DOUBLES)
+    run('KickTouchProbe', [], PROBE, extra=DOUBLES | {
+        'io/github/jordanwoodson/extension/shared/kick/KickTouch.java': bridged()})
 
 
 if __name__ == '__main__':

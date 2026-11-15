@@ -254,6 +254,7 @@ details and validation follow.
 | Fill screen | Yes | Off | In landscape, 16:9 streams fill a taller phone's screen, cropped top and bottom, instead of showing side bars. |
 | Show video stats | Yes | Off | A panel over the player with latency, bitrate, buffer, dropped frames, quality and codecs, refreshed every second. |
 | Player gestures | Yes | Off | In landscape, vertical swipes on the left of the video set the brightness, on the right the volume. |
+| Refresh stream | Yes | On | Long-press the video to load its stream again; a video picks up where it was. |
 | Sleep timer | Yes | Off (choice) | Pauses playback a chosen time after it last started. |
 | Default startup tab | Yes | Home (choice) | Opens Kick on Browse or Following instead. |
 | Hide Home sections | Yes | Three switches, all off | Featured, recommended streams and categories rows on Home. |
@@ -629,6 +630,36 @@ with the switch on, a swipe up on the right of the video raised the media volume
 down lowered it to 7, a swipe up on the left set the window's brightness override to 0.82, a swipe in the middle
 left both alone and let Kick leave fullscreen, and the first tap back in portrait cleared the override; with the
 switch off (no restart), the same swipes changed neither and Kick's own swipe left fullscreen.
+
+### Refresh stream
+
+The same switch as on Twitch and Rumble (`refresh_stream`, on by default). Kick's player view keeps the address
+React Native last gave it (`streamUri`) and loads one through `setStreamUrl(String)`, which also resets the
+view's per-stream state and sends React Native `onLoadStart`, as for any new stream. A long press on the video
+(the area Player gestures uses, in either orientation, outside picture-in-picture and TalkBack: the touch held
+within the touch slop for Android's long-press timeout) calls that method again with the same address. Kick's
+IVS addresses carry a playback token that expires after about ten minutes, but its channels don't require it: on
+2026-11-15 a live channel's playlist loaded with a token past its expiry and with no token at all (a malformed
+token is refused), so the reload works however long the stream has been open. A stream with a finite duration
+(a video; the view's `lastDuration`, from the IVS player) then seeks back to the second it was at
+(`lastPositionInSeconds`, through the view's `seekTo`); a live stream loads at the live edge. Kick's own touch
+gets a cancel, so the press doesn't end as a tap on its controls; a haptic tick and a "Refreshing stream" label
+say it happened. The touch comes in through the same `MainActivity.dispatchTouchEvent` as Player gestures; the
+patch bridges `KickTouch`'s `reload`, `duration`, `position` and `seek` stubs to the view's fields and methods and
+fails if any of them is gone. Kick has no long press of its own on the player (checked on the emulator: nothing
+happened). Kick's player error screens are React Native and replace the player, so unlike Rumble's, they aren't a
+place to tap; Kick retries once by itself when a load fails on its playback token.
+
+Checked: `tests/kick/test_touch.py` runs `KickTouch` with the four bridges swapped for recorders (as the patch swaps
+them for the view's code): a press held past the timeout reloads once with one cancel and the label, in portrait
+and with Player gestures on; moving past the slop, lifting early, a second finger, beside the player, its top edge,
+the switch off, picture-in-picture or no stream address leave the touch to Kick; a video seeks back, a live stream
+(duration -1 or endless) doesn't.
+On the emulator (Android 16), signed out, with Show video stats on, on a live channel in portrait: a long press on
+the video logged `refresh stream: reloaded (duration -1)`, showed the label, and the stats panel's dropped frames went
+from 200 to 0 and its bitrate restarted at 731 kbps while the stream kept playing; with the switch off the same press
+logged nothing and the counters kept counting. Not seen on the device: a video seeking back (both VOD pages tried
+stayed black on the signed-out emulator before any long press) and a stream that was really stuck.
 
 ### Mute stitched live ads
 
