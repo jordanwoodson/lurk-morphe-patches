@@ -703,7 +703,13 @@ its three users, keeping Clips when Home opens on a clip.
 
 *Hide player buttons* filters the clip button state and live overlay options, every AndroidX
 `MediaRouteButton` (Cast), and the VOD and vertical-theatre share buttons. *Hide Home sections*
-clears the `ShowStoriesShelf` argument and filters the Following page's section list. *Hide mature
+clears the `ShowStoriesShelf` argument and filters the Following page's section list. On the React Native Home
+(phones, signed in) it returns null from three components: `FollowingContinueWatching`,
+`FollowingOfflineChannels` ("Your Offline Channels" in Following,
+[issue #73](https://github.com/jordanwoodson/lurk-morphe-patches/issues/73)) and `RecapsShelf` (the "From
+channels you follow" shelf of past streams on the Live tab, switch *Hide recent streams*). The last two were
+checked on a phone only as far as Home still rendering with the switches on: the test account can't follow
+channels (Twitch asks for a phone number first), so neither section was there to hide. *Hide mature
 content warning* makes the label-acknowledgement check return true without saving anything; age,
 region, guardian and account gates still apply.
 
