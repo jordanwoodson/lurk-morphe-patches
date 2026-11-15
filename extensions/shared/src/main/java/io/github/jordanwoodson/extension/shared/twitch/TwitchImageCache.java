@@ -163,7 +163,7 @@ public final class TwitchImageCache {
             }
             touch(entry, now);
             if (hot != null) {
-                HITS.incrementAndGet();
+                served();
                 return hot.data;
             }
         }
@@ -178,7 +178,7 @@ public final class TwitchImageCache {
                 return null;
             }
             remember(url, name, data);
-            HITS.incrementAndGet();
+            served();
             return data;
         }
     }
@@ -237,6 +237,12 @@ public final class TwitchImageCache {
             trim(entries, clock.getAsLong(), true);
             if (!entries.isEmpty()) Logger.d("image cache: " + stats());
         }
+    }
+
+    /** Counts an image served from the cache; Debug logging gets the first and every 50th. Call with the lock held. */
+    private static void served() {
+        long hits = HITS.incrementAndGet();
+        if (hits == 1 || hits % 50 == 0) Logger.d("image cache: " + stats());
     }
 
     /** "N images, M kB on disk, K kB in memory, H served, S stored", for Debug logging. */
