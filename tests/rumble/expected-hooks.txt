@@ -48,3 +48,8 @@ refresh_stream  RumblePlayer.noQualityCallback
 seek_seconds  RumblePlayer.seekMillis
 seek_seconds  RumblePlayer.seekBackIcon
 seek_seconds  RumblePlayer.seekForwardIcon
+video_stats  RumbleStats.onVideoFormat
+video_stats  RumbleStats.onAudioFormat
+video_stats  RumbleStats.onVideoEnabled
+video_stats  RumbleStats.onBandwidth
+video_stats  RumbleStats.onFrame
