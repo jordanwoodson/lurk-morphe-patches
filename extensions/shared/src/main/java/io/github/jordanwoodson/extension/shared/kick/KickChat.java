@@ -273,11 +273,26 @@ public final class KickChat {
             String slug = channel.optString("slug");
             if (channelId == null || slug.isEmpty()) return;
             String owner = id(channel.opt("user_id"));
+            if (owner == null) owner = pictureOwner(channel.optJSONObject("user"));
             if (owner != null) OWNERS.put(channelId, owner);
             if (!slug.equals(SLUGS.put(channelId, slug))) Logger.d("7tv: channel " + channelId + " is " + slug);
         } catch (JSONException e) {
             Logger.d("7tv: unreadable channel response");
         }
+    }
+
+    /** Kick's profile pictures live under the owner's user ID: files.kick.com/images/user/{id}/profile_image/... */
+    private static final java.util.regex.Pattern PICTURE =
+            java.util.regex.Pattern.compile("https://files\\.kick\\.com/images/user/([0-9]{1,20})/profile_image/[^?#]*");
+
+    /**
+     * The owner's Kick user ID from the channel info response, which the stream screen asks for and which, unlike
+     * the full channel response, has no user_id: only the owner's profile picture, whose address holds it.
+     */
+    private static String pictureOwner(JSONObject user) {
+        String picture = user == null ? "" : user.optString("profile_pic");
+        java.util.regex.Matcher matcher = PICTURE.matcher(picture);
+        return matcher.matches() ? matcher.group(1) : null;
     }
 
     private static JSONObject options(Uri uri) throws JSONException {

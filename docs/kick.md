@@ -1012,7 +1012,12 @@ transient attempts; 429 honors a capped Retry-After. Successful globals render w
 owner lookup stalls. Failed or malformed refreshes retain the last valid catalog. Authoritative no-set responses
 and omitted empty emote vectors clear the removed entries and reconcile set subscriptions. The owner's Kick
 user ID comes from the same Kick response the app already received for the channel (`KickHttp`), so the page
-never asks Kick itself; a channel whose owner the app hasn't seen gets globals only. Native channel lookup maps
+never asks Kick itself; a channel whose owner the app hasn't seen gets globals only. Kick 40.34.0's stream screen
+asks only for the channel info (`/api/v2/channels/{slug}/info`), which has no `user_id`; its owner's
+`profile_pic` lives at `https://files.kick.com/images/user/{user ID}/profile_image/...`, so `KickChat` reads the
+ID from that address when the response has no `user_id` (four channels checked against their full responses).
+Before, a chat opened from the stream screen got globals only; on the emulator, a live channel opened from its
+channel page now loads its 270 channel emotes next to the 45 globals (the page's `sevenTvCount`). Native channel lookup maps
 hold at most 256 entries.
 
 Active-set and emote-data zero-width flags layer over the adjacent emote, including a
