@@ -796,6 +796,25 @@ case. Blocked live messages are dropped at the chat list feeder, before the Chat
 History and VOD replay lines are marked by the shared line builder (`ChatMessageSpanGroup`) and
 collapsed by the row binders.
 
+*Highlight users* (`chat_highlight_users`, a text setting under Chat keywords, empty by default;
+[discussion #67](https://github.com/jordanwoodson/lurk-morphe-patches/discussions/67)) tints every message of the
+listed users, whatever they write: `name`, or `name=#RRGGBB` for a color of the user's own (drawn at the default
+highlight's 30% opacity so text stays readable; `#AARRGGBB` is used as written; anything else falls back to the
+default tint). An entry with `@` is also a role, matched against the sender's badges: Twitch's badge set IDs, with
+`mod` for `moderator`, `sub` for `subscriber` and `founder`, `streamer` for `broadcaster` and `verified` for
+`partner` (so `@vip`, `@staff`, `@broadcaster` and any other set ID work as written). A user's own color wins over a
+role's; among roles, the first in the list with a color. Blocked users and words still hide first, and *Vibrate on
+highlights* applies to these lines too. The parsing is in the shared `ChatFilter` (Kick and Rumble don't register
+the key, so it reads empty there). The line builder's badge list (its parameter 2, Twitch's
+`MessageBadgeViewModel(name=, badgeUrl=)`, the same list for live chat, history and VOD replay) now goes to
+`TwitchChatKeywords.beginLine` with the sender and click configuration; the colour rides on the line's mark and the
+row binders paint it. Live messages pass `LiveChatMessage`'s `senderBadges` (found through its toString) to
+`onLiveMessage` for the vibration. React Native chat asks the native side for a verdict by sender and text only, so
+there names match in the default tint, and roles and colors don't. `bin/test-twitch-chat-style`
+(`ChatStyleArtProbe`, "highlighted users and roles") runs the real line builder with real badge view models: names
+in any case, VOD replay, own colors, roles with and without colors, precedence, whispers, blocked words and the
+switch off.
+
 *Compact chat* adds two switches, both off by default. *Hide badges* (`chat_hide_badges`) empties the badge
 span right before the line builder puts a line's spans together (`ChatMessageSpanGroup`), after Twitch's and
 the third-party badges went into it. *Emotes as text* (`chat_text_emotes`) makes the emote span builder (the
