@@ -170,7 +170,12 @@ same section (under a switch, it applies only while the switch is on). The setti
 settings activity (`extensions/shared/.../settings/`) builds its screen from that: only the
 included patches' settings, grouped by section, with search, Pause Lurk, export and import, a bug
 report link and a restart bar for `restart = true` settings. It is plain framework Java: views and
-drawables made in code, no resources, AppCompat or Kotlin. Injected code reads a value with
+drawables made in code, no resources, AppCompat or Kotlin. The screen itself is `SettingsScreen`; `SettingsActivity`
+hosts it, and where the installed app's manifest doesn't have that activity (a root mount install keeps the
+original app's manifest, so nothing a patch adds to it exists) `Settings.open` shows it as `SettingsDialog`, a
+full-screen dialog over the app's own activity, with export and import through the clipboard since a dialog gets
+no file picker result. To see that path on the emulator: `adb shell su 0 pm disable <package>/<SettingsActivity>`
+and open Lurk from the app's own menu. Injected code reads a value with
 `Settings.isEnabled(key)` or `getInt(key)`. Lurk fails closed: a key that isn't registered reads
 as off (a choice as 0), and so does every key if the registry can't be read; Pause Lurk turns
 every switch off except those registered with `keepWhenPaused` (lockout protection such as Block
