@@ -294,6 +294,11 @@ with the same number (Twitch 31.9.0 led to 31.9.0_BETA, a different build) or a 
 that exact version (or an Uptodown build page); `bin/bump` runs it at the end. Until it passes, keep the
 bump on a branch.
 
+`bin/manager-link --newer [app]` looks the other way: it tries the likely version numbers after each target
+and prints those Manager can already download. The API has no list of versions, so it is a guess at the
+numbering (next patch, minor and major releases), not a complete answer. `version-watch.yml` runs it every
+Monday and opens an issue for each version found.
+
 ```sh
 bin/bump twitch 31.8.0 ~/Downloads/<file>.apkm   # store it (bin/apk-add), patch, sort the failures
 bin/bump twitch 31.8.0 --pin                     # React Native apps: point the SHA gate at the new bundle
