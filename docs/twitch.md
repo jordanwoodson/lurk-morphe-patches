@@ -271,6 +271,20 @@ Checked on the emulator, signed out: with the switch off a search ("poker") show
 `twitch_user_prefs.xml`; with it on, after a restart, RECENT is gone, a new search ("chess") isn't written,
 and "poker" is still in the file.
 
+### Block update prompts
+
+Twitch reads a remote `forced_updates_setting` JSON into `ForcedUpdateResponseModel` (`min_app_ver`,
+`specific_app_ver_to_update_arr`, `disallowed_ver_arr`; the class and its methods keep their names). In
+31.8.0 the only live use is Google Play's in-app update prompt ("New Update Ready to Install"), which asks
+`isVersionCodeAllowed` about the version Play offers before it starts; `shouldPromptForUpgrade` has no
+caller, and the "App Update Required" dialog is only reachable from Twitch's debug menu. With
+`block_update_prompts` on (same name, key and default as Kick's and Rumble's, and kept while Lurk is
+paused) both return false. A re-signed install isn't Play's, so Play has no update to offer it and the
+switch matters for mount installs and for whenever Twitch wires the forced screen back in.
+
+Not seen working: there is no way to make Play offer an update on the emulator. Checked only that the patch
+applies and the app starts.
+
 ### Background audio and Show video stats
 
 Twitch already has "Continue Playing Audio in the Background" (Always, Headphones/Speaker, Never),
