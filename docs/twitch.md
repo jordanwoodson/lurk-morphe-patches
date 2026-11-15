@@ -953,6 +953,40 @@ real autocomplete filter over Twitch's emote source for `:pe` and checks the ord
 that a chatter source keeps its own answer. Drawing the sections and inserting a tapped emote are Twitch's
 unchanged code but were not seen in the app.
 
+**Image cache** ([issue #71](https://github.com/jordanwoodson/lurk-morphe-patches/issues/71): 7TV emotes loaded
+slowly in the picker, vanished when scrolled back to and kept reloading in chat). Twitch loads every image with
+Glide (`TwitchGlideModule`, kept by name, gives Glide a 64 MB disk cache in `cache/image_manager_disk_cache` and
+the default memory cache), so third-party images share 64 MB with every avatar, thumbnail and Twitch emote. That
+was fine for Twitch's own emotes (a few kB each) but not for 7TV's: xQc's set on 2026-11-15 had 970 emotes, 667
+animated, whose 2x GIFs alone are 175 MB (268 kB on average; the 3x files chat uses for static emotes above 100%
+size add more). Scrolling the picker through one such set pushes the start of it, and chat's earlier emotes, out
+of the cache, so each comes back from the network; memory holds only a screen or two. Glide's cache journal on the
+emulator showed it working as designed (each key written once and read back), which left the size as the cause.
+
+The fix is a cache of Lurk's own under Glide, in `TwitchImageCache` (a dependency of *Third-party emotes*, so it
+also serves the badges). Glide's OkHttp fetcher (`OkHttpStreamFetcher`, found by its `onResponse` that makes
+Glide's `HttpException`, a class kept by name) gets two hooks: at the start of its load method,
+`TwitchImageCache.cached(url)` returns a stored image, which is handed to Glide's data callback and the request is
+never made; in `onResponse`, the body stream goes through `TwitchImageCache.store(url, stream)`, which copies what
+Glide reads and stores it once the body has reached its end. Only https URLs on `cdn.7tv.app`, `cdn.betterttv.net`
+and `cdn.frankerfacez.com`, and the exact image URLs the badge lists name, are kept; every other image takes
+Twitch's unchanged path after a string comparison. A body that fails, is cancelled, skips bytes, is over 6 MB or
+doesn't start like a GIF, PNG, JPEG, WebP or AVIF file is not stored. Files are in `cache/lurk-images/`, named by
+the SHA-256 of the URL (nothing readable about the emote or channel on disk), at most 256 MB, least recently used
+out first, deleted when unused for 14 days or older than 30; images up to 192 kB are also kept in 8 MB of memory.
+Expired files are swept once per start, when the first chat connects, even with the switches off. Android may
+clear the directory itself when storage runs low, like any cache. *Emote and badge info*'s larger images use the
+same cache. Glide still copies a served image into its own disk cache (it treats it as a network load), which is
+what it did with the downloaded one before. React Native chat loads images through its own image pipeline, which
+the cache doesn't cover.
+
+`tests/twitch/test_image_cache.py` (in `bin/test-host`) runs the real class over a temporary directory and a test
+clock: pass-through of other hosts, store and serve (also after a restart), partial and non-image bodies, the disk
+and memory bounds and expiry. On the emulator (signed out, xQc's VOD chat replay with 7TV, BetterTTV and
+FrankerFaceZ on): 26 images were stored in the first minute; after a force stop with Glide's disk cache deleted (as
+an overflow would), the same replay was served 5 images from `lurk-images` within seconds and drew them. The
+picker scroll from the report was not reproduced: the picker needs a signed-in account.
+
 Badges download FrankerFaceZ's and Chatterino's public lists of badge holders and match them on the
 device, so no chatter is looked up. Badge images come from the https addresses in those lists:
 FrankerFaceZ's are on cdn.frankerfacez.com; Chatterino's are on fourtf.com today, but the host is

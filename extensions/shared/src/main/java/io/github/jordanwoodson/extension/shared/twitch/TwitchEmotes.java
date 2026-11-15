@@ -83,6 +83,7 @@ public final class TwitchEmotes {
     private static volatile TokenTypes tokenTypes;
     /** The channel (a Tuid) whose chat connected last: the one the chat input and its autocomplete belong to. */
     private static volatile Object chatChannel;
+    private static final java.util.concurrent.atomic.AtomicBoolean IMAGES_CHECKED = new java.util.concurrent.atomic.AtomicBoolean();
 
     private TwitchEmotes() {
     }
@@ -94,6 +95,8 @@ public final class TwitchEmotes {
     public static void onChatChannel(Object channel) {
         try {
             if (channel != null) chatChannel = channel;
+            // Once per start, whether or not a service is on: expired images go even after the switches went off.
+            if (IMAGES_CHECKED.compareAndSet(false, true)) TwitchThirdParty.run("image cache", TwitchImageCache::maintain);
             int mask = enabledMask();
             if (mask != 0 && channel != null) ensure(String.valueOf(channel), mask);
             if (channel != null) TwitchSevenTvBadges.onChannel(String.valueOf(channel));

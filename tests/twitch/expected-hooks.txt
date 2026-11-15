@@ -143,6 +143,9 @@ TwitchEmotes.messageTokens
 TwitchEmotes.onChatChannel
 TwitchEmotes.rnFrame
 TwitchEmotes.url
+# Lurk's image cache under Glide's network fetcher (issue 71): a stored image instead of a request, and the copy of a response.
+TwitchImageCache.cached
+TwitchImageCache.store
 
 # if emotes_picker
 TwitchEmotes.autocomplete

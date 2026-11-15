@@ -46,7 +46,7 @@ val thirdPartyEmotesPatch = bytecodePatch(
         "Starts off. Turn it on in Lurk settings > Chat.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
-    dependsOn(twitchRNChatPatch, twitchSettingsPatch, chatImageSizePatch)
+    dependsOn(twitchRNChatPatch, twitchSettingsPatch, chatImageSizePatch, thirdPartyImageCachePatch)
     execute {
         hookLiveMatcher()
         hookReplayTokens()
