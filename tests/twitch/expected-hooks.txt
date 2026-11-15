@@ -203,6 +203,7 @@ TwitchInterface.homeTabs
 # if default_tab
 TwitchInterface.startDestination
 TwitchInterface.feedTab
+TwitchInterface.homePage
 
 # if amoled_black
 TwitchTheme.init

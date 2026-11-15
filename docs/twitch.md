@@ -244,6 +244,15 @@ Following chosen, `TwitchInterface.feedTab` turns a missing or `live` tab into `
 feeds and any other tab Twitch asked for pass through (`tests/twitch/verify_interface.py`). Verified on a
 phone, signed in: the feed opens on its Following tab.
 
+Tablets, and phones with Tablet layout on, get the native Home feed instead (`DiscoveryFeedHomeFragment`), so
+that hook never runs there and Home opened on Live
+([issue #66](https://github.com/jordanwoodson/lurk-morphe-patches/issues/66)). The native feed's navigation
+destination (the class whose `toString` starts `DiscoveryFeedHome(location=`) is created with the page to open
+on, always the Live page for a plain launch. The patch hooks its constructor: for the first one created, not
+from a deep link or a notification, with Following chosen, `TwitchInterface.homePage` swaps the Live page for
+`DiscoveryFeedPage.FollowingPage`. Verified on a phone, signed in, with Tablet layout on: Home opens on
+Following.
+
 ### Trackers in Disable analytics
 
 31.8.0, like 31.6.0 and 31.7.0, has no Bugsnag, Facebook SDK, SafetyNet or Amazon APS. Disable analytics now also:
