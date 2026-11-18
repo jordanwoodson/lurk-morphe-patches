@@ -145,7 +145,7 @@ subset. The probes read the obfuscated names they need from the APK's `assets/lu
 - `PrivacyProbe`: Disable analytics with and without Keep watch progress (only watch-progress events
   pass), Block cookie notice (the start loop starts only Airship, with essential services) and Don't save
   searches.
-- `HideProbe`: Hide Shorts, Hide Premium upsells, Hide tipping and Rants, Hide comments and related videos
+- `HideProbe`: Hide Shorts (My Feed's pills too), Hide Premium upsells, Hide tipping and Rants, Hide comments and related videos
   and Hide premium-only videos: the DTO getters, parsers and emptied composables, with the switches off as
   controls.
 - `PlaybackProbe`: Fill screen on Media3's real `AspectRatioFrameLayout`, Seek interval, Sleep timer's direct
@@ -154,9 +154,9 @@ subset. The probes read the obfuscated names they need from the APK's `assets/lu
   `SearchProbe`, `UpdateProbe`: the chat hooks, keyword filter, exact counts, home sections and bottom bar,
   player settings, Unlock Premium's getter, Default video quality, search history and Block update prompts.
 - `RefreshProbe`: the *Refresh stream* hooks: video-load registration, the error panel's tap handler, the
-  reload bridge and the stock player's reload, with ExoPlayer, Compose and the player state supplied.
-  Reloads keep the source and position without saving a quality; null sources, the switch off, a missing
-  player and stock quality changes are controls, and the callback is restored after exceptions.
+  reload bridge and the stock player's reload, with ExoPlayer, Compose state, the Composer and the player's
+  logger supplied as doubles found by type. Reloads keep the source and position; null sources, the switch
+  off and a missing player are controls, and the stock catch and escaping failures reach the caller as such.
 
 After the probes, `bin/test-rumble` runs `tests/rumble/verify_compose.py` (every Compose trace label the
 patches match must exist in the APK, and App Info must have exactly three rows, which the hidden settings
