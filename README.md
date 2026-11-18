@@ -61,9 +61,8 @@ to install, so take these:
 
 - **Twitch 32.1.0**: the universal bundle (arm64-v8a, armeabi-v7a, x86 and x86_64), Android 12L+, on the
   [32.1.0 release page](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-32-1-0-release/).
-- **Kick 40.34.0**: the arm64-v8a bundle, 480-640dpi, Android 10+, on the
-  [40.34.0 release page](https://www.apkmirror.com/apk/kick-live-streaming/kick-live-streaming/kick-live-streaming-40-34-0-release/)
-  (not one of the two universal builds).
+- **Kick 40.35.4**: the bundle with all four architectures (arm64-v8a, armeabi-v7a, x86_64, x86), Android 12+, on the
+  [40.35.4 release page](https://www.apkmirror.com/apk/kick-live-streaming/kick-live-streaming/kick-live-streaming-40-35-4-release/).
 - **Rumble 3.22.0**: the universal bundle (all four architectures, 120-640dpi, Android 8.0+) on the
   [3.22.0 release page](https://www.apkmirror.com/apk/rumble-inc/rumble/rumble-stream-watch-videos-3-22-0-release/).
 

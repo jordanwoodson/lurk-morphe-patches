@@ -3,7 +3,7 @@
 | Page | What it is |
 |---|---|
 | [twitch.md](twitch.md) | Twitch 32.1.0: coverage, what each patch hooks and sends, declined features, how it was verified and what wasn't. |
-| [kick.md](kick.md) | Kick 40.34.0: the React Native/Hermes analysis, the implemented patch set, the Expo updates handling and the verification contracts. |
+| [kick.md](kick.md) | Kick 40.35.4: the React Native/Hermes analysis, the new player (40.35), the implemented patch set, the Expo updates handling and the verification contracts. |
 | [rumble.md](rumble.md) | Rumble 3.22.0: each patch's hooks, how code is found in the obfuscated app, build and test steps, validation notes. |
 | [development.md](development.md) | The workspace: setup, layout, commands, writing and testing a patch, moving to a new app version, releases, dependencies. |
 
