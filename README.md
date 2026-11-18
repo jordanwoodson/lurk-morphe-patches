@@ -59,7 +59,8 @@ project. The name "Morphe" is used only to say what the patches are for (see [NO
 Lurk is tested on these APKMirror variants. Other variants of the same version may fail to patch or
 to install, so take these:
 
-- **Twitch 31.8.0**: the [arm64-v8a bundle, 480-640dpi, Android 10+](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-31-8-0-release/twitch-live-streaming-31-8-0-android-apk-download/).
+- **Twitch 32.1.0**: the universal bundle (arm64-v8a, armeabi-v7a, x86 and x86_64), Android 12L+, on the
+  [32.1.0 release page](https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/twitch-live-streaming-32-1-0-release/).
 - **Kick 40.34.0**: the arm64-v8a bundle, 480-640dpi, Android 10+, on the
   [40.34.0 release page](https://www.apkmirror.com/apk/kick-live-streaming/kick-live-streaming/kick-live-streaming-40-34-0-release/)
   (not one of the two universal builds).
