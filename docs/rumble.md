@@ -988,14 +988,21 @@ The panel is on every Media3 player view, so it also shows on Shorts. A progress
 format, so its line shows only the network estimate (`Bitrate  -, network 1.09 Mbps`). Latency needs a live stream
 whose playlist carries program date-times; the one checked did.
 
+The panel starts at the top left corner of the part of the frame its player view shows (`RumbleStats.shownCorner`).
+With Fill screen in landscape the frame is zoomed past the player view, which centers it and crops its edges (a 16:9
+video on the 20:9 emulator is 1600x900 in a 1600x720 view), and a panel at the frame's own corner lost its first
+three lines above the screen. Checked on 2026-11-18 on the emulator with Fill screen in landscape: the whole panel
+shows.
+
 `tests/rumble/test_video_stats.py` (host) runs the panel's text on log strings shaped like 3.21.0's Media3 output,
-including keys it doesn't show (`decRes`, `rotation`, `channel_mask`), which must not run into the values it does.
+including keys it doesn't show (`decRes`, `rotation`, `channel_mask`), which must not run into the values it does,
+and the panel's corner on view doubles (inside the player view, zoomed, letterboxed).
 
 Checked on 2026-11-15 on the emulator (signed in): on a live stream the panel showed `Latency 3.2 s`, `Bitrate 1.46
 Mbps, network 21.72 Mbps`, `Dropped 0 of 300 frames`, `Video 640x360`, `Codecs avc1.4D401F, mp4a.40.2`, `Audio 48
 kHz, 2 ch`, and a few seconds later 14.3 s latency, a 16.8 s buffer and 542 frames; on a VOD `Video 854x480`,
 `Buffer 15.2 s`, `Bitrate -, network 1.09 Mbps`; on a Short `720x1280, 30 fps` with 4 of 377 frames dropped. With
-the switch off the same live stream shows no panel. Picture-in-picture and landscape weren't looked at.
+the switch off the same live stream shows no panel. Picture-in-picture wasn't looked at.
 
 ## Live chat
 
