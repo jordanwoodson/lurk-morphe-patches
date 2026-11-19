@@ -814,6 +814,15 @@ fails on a version where any implementation dereferences the chat mode before ov
 (`neverDereferenced`, every path). Without an account, the claim was exercised on ART only with a
 stand-in for the action, so the request itself is unverified.
 
+Twitch offers points and the chest only for watch time it is told about: the player's `minute-watched`
+Spade event, which *Disable analytics* (on by default) blocks with every other event. Signed in on a phone
+with Twitch 32.1.0, 18 minutes with Disable analytics on brought neither the +10 watch points nor a chest;
+with it off, +10 came after about 5 minutes and the chest was claimed by itself (`chat: claiming a channel
+points bonus`, 320 to 380 points). So while this switch is on, Disable analytics lets `minute-watched`
+through (issue 69): `TwitchPrivacy.keepSpadeEvent` lets the dispatcher continue for that one event name,
+and `keepSpadeBatch` strips every other event out of the batch upload that `minute-watched` flushes at once
+(`clips_minute_watched` and everything else stay blocked).
+
 `bin/test-twitch-chat <apk>` runs the real classes with each switch on and off. Signed-in IRC login
 and bonus claims are verified only through bytecode and the probe.
 
@@ -1287,7 +1296,10 @@ These features appear in other Twitch bundles and mods but are deliberately not 
 ### Privacy and client ads
 
 Native Spade dispatch completes the nullable success callback exactly once rather
-than leaving callers waiting. The native batch transport is also guarded. RN's
+than leaving callers waiting. The native batch transport is also guarded. The one exception is
+`minute-watched` while *Auto-claim channel points* is on (see that patch): it passes the dispatcher, and
+the batch transport sends only `minute-watched` events. `tests/twitch/test_privacy_consent.py` checks both
+decisions. RN's
 `createSpadeReporter` retains its object/API while enqueue and flush return their
 normal synchronous `undefined`. Local SDK consent lookup returns the actual Denied
 enum without writing the account's consent model. ComScore's local permission is false.
