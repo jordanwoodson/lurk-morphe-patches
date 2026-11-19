@@ -1173,6 +1173,19 @@ against a local server) and on the emulator, signed out, in a 10,000-viewer chat
 channel's ID and badge definitions and holders arrive within seconds (Debug logging shows the counts). 7TV only
 pushes entitlements for chatters its own users have seen, so a quiet channel shows none.
 
+That is also why your own badge never showed
+([issue #60](https://github.com/jordanwoodson/lurk-morphe-patches/issues/60)): 7TV reports a chatter once their own
+7TV client announces them in a channel, which Lurk never does. *My 7TV badge* (`badges_7tv_self`, under 7TV badges,
+off by default) looks it up instead, once per account and app start, on the first chat line drawn: the signed-in
+account's Twitch user ID from Twitch's own store (`userIdString` in `twitch_user_prefs`, or the older `user` file),
+then `GET https://7tv.io/v3/users/twitch/<id>` for `user.style.badge_id`, then 7TV's GraphQL `cosmetics(list: [id])`
+for that badge's tooltip and files (the same shape as `cosmetic.create`). Your lines then get it like anyone else's.
+It sends 7TV your Twitch user ID, and nothing announces you, so other viewers still need 7TV to learn your badge
+another way. A failed lookup is retried after a minute. `tests/twitch/test_seventv_badges.py` (`self`) checks the
+two requests, the badge on native and React Native lines, one lookup per account, an account without a badge and
+signed out. On a phone, signed in, the lookup found the account in Twitch's store on the first chat line and 7TV
+answered that it has no badge (the test account has no 7TV profile), so a badge itself was only shown on the JVM.
+
 The exception is *pronouns* (`badges_pronouns`, off by default):
 pronouns.alejo.io has no bulk list, so the username of each chatter whose message you see is looked
 up there.
