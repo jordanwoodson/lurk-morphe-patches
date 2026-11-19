@@ -744,10 +744,20 @@ checks no edit jumps into replaced bytes).
 - the chat-notice mapper, by event and subscription kind;
 - the private-callout dispatch (watch streaks);
 - the leaderboard, pinned-cheer and celebration state constructors;
-- in RN, early returns from the matching services, components and `LibraryTmiClient` handlers.
+- in RN, early returns from the matching services, components and `LibraryTmiClient` handlers;
+- with *Hide extensions* (off by default, issue 81), the extension icons above native chat and in its header: the
+  icon row's view delegate (the method that inflates `extension_entry_point_single_icon` per extension) hands its
+  `BaseViewDelegate` view and extension list to `TwitchHighlights.extensionIcons`, which hides the view and
+  returns no extensions, so neither the icons nor the extensions button show. React Native chat opens extensions
+  from its own sheet and keeps it.
 
 *Hide player buttons* filters the clip button state and live overlay options, every AndroidX
-`MediaRouteButton` (Cast), and the VOD and vertical-theatre share buttons. *Hide Home sections*
+`MediaRouteButton` (Cast), and the VOD and vertical-theatre share buttons. Its *Hide chat mode pop-up* switch
+(issue 85) skips the "Changed to Column Chat" snackbar with Next Mode after a landscape chat mode change: natively
+the snackbar is still built and kept, but its show call, the method's last, is skipped (the `one_chat_next_mode`
+string finds the method); in RN, `useChatModeCycle`'s callback ends `ref.current = addSnackbar(...)`, whose call
+becomes undefined. Checked on the emulator, signed out, in the native theatre: with the switch off a mode change
+showed "Changed to No Chat / Next Mode", with it on the mode changed with no pop-up. *Hide Home sections*
 clears the `ShowStoriesShelf` argument and filters the Following page's section list. On the React Native Home
 (phones, signed in) it returns null from three components: `FollowingContinueWatching`,
 `FollowingOfflineChannels` ("Your Offline Channels" in Following,

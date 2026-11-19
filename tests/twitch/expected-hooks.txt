@@ -166,6 +166,7 @@ TwitchBadges.badges
 # if hide_hype_train
 TwitchHighlights.celebrationsEnabled
 TwitchHighlights.celebrationsUpdate
+TwitchHighlights.extensionIcons
 TwitchHighlights.hideCallout
 TwitchHighlights.hideGiftNotice
 TwitchHighlights.hideHighlight
@@ -178,6 +179,7 @@ TwitchHighlights.pinnedCheersVisible
 TwitchHighlights.castVisibility
 TwitchHighlights.clipButtonVisible
 TwitchHighlights.hideCastButton
+TwitchHighlights.hideChatModePopup
 TwitchHighlights.hideShareButton
 TwitchHighlights.shareButtonVisible
 
