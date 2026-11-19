@@ -91,7 +91,7 @@ based on this APK; the Rumble and Kick fingerprints do not apply directly.
 | Rumble patch area | Twitch equivalent and boundary |
 | --- | --- |
 | Change app name | Opt-in launcher label, default `Twitch Lurk`. |
-| Lurk icon | Purple Lurk artwork, adaptive/round/monochrome launcher resources. |
+| Lurk icon | Purple Lurk artwork, adaptive/round/monochrome launcher resources. Twitch's own icon stays, and Lurk settings › Interface › App icon (`app_icon`) switches the launcher to it: the launcher entry (`LandingActivity`'s MAIN/LAUNCHER filter) moves to two aliases, one per icon, and the choice enables one ([how it works](rumble.md#app-icon)). Verified with a Clone app build too, which switches on its own. |
 | Remove tracking permissions | Removes the two present advertising-ID and Play install-referrer permissions. This alone does not stop other identifiers or telemetry. |
 | Clone app | Opt-in package `tv.twitch.android.app.lurk`; renames all provider authorities (ten in 31.8.0), including Amazon's suffix, and the app's signature permission. Amazon sign-in and verified app links are unverified after re-signing. |
 | Disable analytics | Native/RN Spade, local vendor consent decisions, ComScore permission, Branch events/tracking mode, Sentry and Crashlytics collection controls. Details below. |

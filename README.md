@@ -385,14 +385,20 @@ while their own switches are off. *Block update prompts* also stops Kick asking 
 get Kick's fixes, patch the newer Kick version once a Lurk release supports it.
 
 **Can I keep the app's original icon?**
-Yes. *Lurk icon* is a patch of its own: deselect it in Manager before patching and the app keeps its
-own launcher icon. *Change app name* is separate too, and isn't selected by default.
+Yes. In Lurk settings › Interface › **App icon**, pick **Original** and the launcher shows the app's own
+icon, without patching again; pick **Lurk** to go back. The launcher can take a moment to update, and some
+launchers remove the app's shortcut from the home screen when the icon changes: add it again from the app
+drawer. Android's App info page keeps Lurk's icon. Updating to the first Lurk release with this choice
+moves the app's launcher entry too, so on those launchers the home-screen shortcut needs adding again
+once. Or deselect *Lurk icon* in Manager before patching. *Change app name* is separate too, and isn't
+selected by default.
 
 **Does Lurk work with a root (mount) install?**
 Partly, and it isn't tested on a rooted phone. A mount install keeps the original app's manifest, so
 patches that change the manifest (*Clone app*, *Change app name*, *Remove tracking permissions*) do
-nothing there, and the long-press and App info ways into Lurk settings are missing. The Lurk row
-inside the app still opens the settings screen, with export and import through the clipboard.
+nothing there, nor does the App icon choice, and the long-press and App info ways into Lurk settings are
+missing. The Lurk row inside the app still opens the settings screen, with export and import through the
+clipboard.
 
 **How do updates work?**
 A patched app can't be updated from Google Play. When Twitch, Kick or Rumble releases a new version,
