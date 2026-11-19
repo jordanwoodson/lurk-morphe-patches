@@ -744,7 +744,8 @@ the same check and also returns null when the shelf's first item is a `FeedClip`
 early: the feed list recycles cells, and a shelf that skipped hooks once would throw when it later renders another
 shelf. The stub fills the shelf title code, which only built the "Clips for you" fallback title for all-clip
 shelves; with the switch on, a shelf's title is its own. Patched statically for 32.1.0 (`InterfaceHermesProbe`
-checks no edit jumps into replaced bytes).
+checks no edit jumps into replaced bytes). Signed in on a phone, the test account wasn't offered a clip shelf in
+either feed even with the switch off; with it on, both feeds loaded and scrolled with no React errors.
 
 *Hide chat highlights* covers:
 - the native highlight dispatch, by type ID (Hype Train, gift banners);
@@ -756,7 +757,8 @@ checks no edit jumps into replaced bytes).
   icon row's view delegate (the method that inflates `extension_entry_point_single_icon` per extension) hands its
   `BaseViewDelegate` view and extension list to `TwitchHighlights.extensionIcons`, which hides the view and
   returns no extensions, so neither the icons nor the extensions button show. React Native chat opens extensions
-  from its own sheet and keeps it.
+  from its own sheet and keeps it. None of eight large live channels showed the test account extension icons, even
+  with the switch off, so the hide is checked only through its hook.
 
 *Hide player buttons* filters the clip button state and live overlay options, every AndroidX
 `MediaRouteButton` (Cast), and the VOD and vertical-theatre share buttons. Its *Hide chat mode pop-up* switch
@@ -847,7 +849,9 @@ with it off, +10 came after about 5 minutes and the chest was claimed by itself 
 points bonus`, 320 to 380 points). So while this switch is on, Disable analytics lets `minute-watched`
 through (issue 69): `TwitchPrivacy.keepSpadeEvent` lets the dispatcher continue for that one event name,
 and `keepSpadeBatch` strips every other event out of the batch upload that `minute-watched` flushes at once
-(`clips_minute_watched` and everything else stay blocked).
+(`clips_minute_watched` and everything else stay blocked). With that build, signed in on the phone with Disable
+analytics on, one `minute-watched` went out each minute, the balance went from 0 to 10 after about 9 minutes, and
+the chest was claimed by itself about 15 minutes in.
 
 `bin/test-twitch-chat <apk>` runs the real classes with each switch on and off. Signed-in IRC login
 and bonus claims are verified only through bytecode and the probe.
