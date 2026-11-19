@@ -141,6 +141,10 @@ public final class InterfaceArtProbe {
                     try { tabs.clear(); throw new AssertionError("Filtered entries are mutable"); }
                     catch (UnsupportedOperationException expected) { }
                 }
+                // Issue 93: Keep Clips on channel pages leaves the tab list as it is.
+                switches.put("hide_clips_keep_channel", true);
+                check(filter.invoke(null, entries) == entries, "Keep Clips on channel pages must keep the Clips tab");
+                switches.remove("hide_clips_keep_channel");
                 for (String key : new String[]{"clipId", "contentType", "profileScope", "profileScopeLower"}) {
                     Bundle explicit = new Bundle();
                     explicit.putString(key.equals("profileScopeLower") ? "profileScope" : key, key.equals("clipId") ? "shared-clip" : key.equals("contentType") ? "clips_content" : key.equals("profileScopeLower") ? "clips" : "CLIPS");
@@ -161,6 +165,6 @@ public final class InterfaceArtProbe {
                 check(flag(oneChat, "a") == initial && flag(oneChat, "b") == initial, "Ordinary chat visibility changed");
             }
         }
-        System.out.println(stock ? "PASS: original ART enum, chat flag and chat header negative controls" : "PASS: real ART EnumEntries ABI/order/immutability/off identity, native Bits constructors on/off without chat changes, and chat header buttons through Twitch's mapper");
+        System.out.println(stock ? "PASS: original ART enum, chat flag and chat header negative controls" : "PASS: real ART EnumEntries ABI/order/immutability/off identity, Keep Clips on channel pages, native Bits constructors on/off without chat changes, and chat header buttons through Twitch's mapper");
     }
 }

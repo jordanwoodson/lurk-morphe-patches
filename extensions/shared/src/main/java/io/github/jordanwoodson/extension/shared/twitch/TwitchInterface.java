@@ -166,7 +166,8 @@ public final class TwitchInterface {
     }
 
     public static Object clipTabs(Object stock, Bundle arguments) {
-        if (!Settings.isEnabled("hide_clips") || !(stock instanceof List)) return stock;
+        if (!Settings.isEnabled("hide_clips") || Settings.isEnabled("hide_clips_keep_channel") ||
+                !(stock instanceof List)) return stock;
         // The profile pager also hosts explicitly opened clips. Its caller selects CLIPS for
         // these argument values, so retain the full tab list in that context.
         if (arguments != null && (arguments.getString("clipId") != null ||

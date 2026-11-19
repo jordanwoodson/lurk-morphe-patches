@@ -98,7 +98,7 @@ based on this APK; the Rumble and Kick fingerprints do not apply directly.
 | Clean share links | Native/RN share intents and clipboard paths; removes known tracking parameters only on Twitch-owned hosts. Keeps timestamps, unknown parameters, fragments and unrelated URLs. |
 | Disable autoplay | Separate switches for fresh feed-preview defaults and automatic next-video/clip advancement. Manual playback stays available. |
 | Default video quality | Opt-in default rendition, Source initially. Saved choices including Auto win; unavailable renditions use Twitch's fallback. |
-| Hide Shorts | `Hide Clips`: Home discovery and native channel-profile Clips tabs. Clip routes remain present. |
+| Hide Shorts | `Hide Clips`: Home discovery and native channel-profile Clips tabs (*Keep Clips on channel pages* leaves the latter). Clip routes remain present. |
 | Hide tipping and Rants | `Hide Bits tipping`: purchase/cheering controls, including native and RN chat buttons and the chat header's Get Bits. Received chat messages stay untouched. |
 | Hide Premium upsells | `Hide subscription upsells`: Subscribe/Gift prompts (the chat header's too) and Turbo promotions. Existing subscriber status and native member-management rows remain. |
 | Block cookie notice | Hides the automatic notice only. Does not accept consent, change saved consent or disable manual privacy settings. |
@@ -740,6 +740,11 @@ and two clips downloaded as MP4s of 21.7 MB and 37.6 MB (`ftyp` header) into Dow
 Native Home is not React Native: RN Home and the Ultralight theatre run only with `android-ultralight`.
 That includes the signed-out Home. *Hide Clips* therefore also filters the native Home tab provider at
 its three users, keeping Clips when Home opens on a clip.
+
+*Hide Clips*' child switch *Keep Clips on channel pages* (off by default, issue 93) leaves the channel page's Clips
+tab: `TwitchInterface.clipTabs`, which filters the profile pager's tab list, hands back Twitch's list unchanged
+while it is on. Home's clip tab and shelves stay hidden. Checked on a phone, signed in: with it on, a channel page
+showed Home, About, Clips, Videos, Schedule, Chat while Home kept only Following and Live.
 
 In RN Home's feeds, *Hide Clips* also hides clip shelves such as "Clips for you" on the Live tab (issue 89).
 Every feed shelf is one `FeedShelfContainer`, which already renders nothing for a shelf without items, after all
