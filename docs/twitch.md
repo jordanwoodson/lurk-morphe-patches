@@ -100,7 +100,7 @@ based on this APK; the Rumble and Kick fingerprints do not apply directly.
 | Default video quality | Opt-in default rendition, Source initially. Saved choices including Auto win; unavailable renditions use Twitch's fallback. |
 | Hide Shorts | `Hide Clips`: Home discovery and native channel-profile Clips tabs (*Keep Clips on channel pages* leaves the latter). Clip routes remain present. |
 | Hide tipping and Rants | `Hide Bits tipping`: purchase/cheering controls, including native and RN chat buttons and the chat header's Get Bits. Received chat messages stay untouched. |
-| Hide Premium upsells | `Hide subscription upsells`: Subscribe/Gift prompts (the chat header's too) and Turbo promotions. Existing subscriber status and native member-management rows remain. |
+| Hide Premium upsells | `Hide subscription upsells`: Subscribe/Gift prompts (the chat header's, the stream title row's and channel pages' too) and Turbo promotions, including Try Ad-Free. Existing subscriber status and native member-management rows remain. |
 | Block cookie notice | Hides the automatic notice only. Does not accept consent, change saved consent or disable manual privacy settings. |
 | Block ads | `Block client ads`: takes the existing native client ad-decline path and completes its result. Does not remove ads stitched into streams or cover every RN ad path. |
 | Unlock Premium | No patch. Local Turbo state exists, but no useful equivalent entitlement change was established. Signed playback/account benefits are server controlled. |
@@ -824,6 +824,31 @@ APK gives Twitch's buttons for all of them. On the emulator, signed out, a throw
 bundle) forced the state to a following subscriber with Bits for sale: with both switches off the row showed
 "Get Bits" and "Gift A Sub" as in the issue, with *Hide Bits tipping* only "Gift A Sub", and with both
 switches on the row was gone. Not verified: a real signed-in account.
+
+The row under the stream title in the native theatre (Follow or Unfollow, the notifications bell, Gift a Sub and
+Subscribe, issue 92) is a Compose row whose buttons one builder picks (the method that constructs
+`Visible(buttons=, onNotificationSettingSelected=)`). It offers Subscribe from the subscription state's
+`isSubscriptionEnabled()`, Gift a Sub from `isGiftingEnabled()` and Upgrade from a flag (the move-result before the
+`UpgradeSubButton` read); *Hide subscription upsells* routes all three through `subscriptionUpsellVisible`.
+`isSubscribed()` is kept, so a subscriber gets Twitch's subscription details button, which Twitch shows only when there
+is no Upgrade button. The test account had the switch on and still saw the issue's row (heart, bell, gift, Subscribe)
+before this; afterwards the row was the heart and the bell, and with the switch off all four came back.
+`bin/test-twitch-interface` runs the real builder on ART for a follower, a new viewer and a subscriber who can
+upgrade, with the switch on and off (and `--stock`). The patch records
+`twitch.hide_subscription_upsells.stream_info_buttons`.
+
+Another channel's page has the same kind of button beside Follow and notifications: Subscribe, Gift a Sub for a
+subscriber, or Upgrade. The page shows it only while its state's `canSubscribe` is true
+(`UserProfile(model=, canSubscribe=, ...)`), which *Hide subscription upsells* filters through
+`subscriptionUpsellVisible` in the state's constructor (`twitch.ui_flag.channel_page_state.can_subscribe`); Follow then
+takes the row. Checked on the phone: Follow alone with the switch on, where Subscribe had shown before.
+
+"Try Ad-Free" (or "Go Ad-Free") on your own channel page comes from Twitch's Turbo offer state, `Visible(ingressType=)`,
+which one method makes (`twitch.hide_subscription_upsells.turbo_offer`). With *Hide subscription upsells* on,
+`TwitchInterface.turboIngress` swaps it, right after its constructor, for the hidden state the same method hands out
+when there's no offer (the one static instance of that state family it reads, read through the
+`turboIngressHidden` bridge); the other states join after the swap and skip it. The probe checks the swap on ART with
+the switch on and off. The test account isn't offered Turbo, so the button itself wasn't seen on the phone.
 
 `bin/test-twitch-highlights` runs the real classes on ART with each switch on and off. Following
 sections, Hype Train and the RN paths are verified only statically.

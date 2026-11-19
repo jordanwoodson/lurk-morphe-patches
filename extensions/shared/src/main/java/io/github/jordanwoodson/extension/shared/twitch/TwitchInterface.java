@@ -2,6 +2,7 @@ package io.github.jordanwoodson.extension.shared.twitch;
 
 import android.os.Bundle;
 import android.view.View;
+import io.github.jordanwoodson.extension.shared.Logger;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -92,9 +93,30 @@ public final class TwitchInterface {
         return stock && !Settings.isEnabled("hide_tipping");
     }
 
-    /** A subscription upsell flag (the chat header's Upgrade button), off while Hide subscription upsells is on. */
+    /**
+     * A subscription upsell flag, off while Hide subscription upsells is on: the chat header's Upgrade button, and
+     * the Subscribe, Gift a Sub and Upgrade buttons under the stream title (issue 92).
+     */
     public static boolean subscriptionUpsellVisible(boolean stock) {
         return stock && !Settings.isEnabled("hide_subscription_upsells");
+    }
+
+    /**
+     * Injection point: Twitch's Turbo offer as it becomes Visible, the state "Try Ad-Free" and "Go Ad-Free" (your own
+     * channel page) are shown from (issue 92). While Hide subscription upsells is on it becomes the state Twitch
+     * uses when there is no offer.
+     */
+    public static Object turboIngress(Object visible) {
+        if (!Settings.isEnabled("hide_subscription_upsells")) return visible;
+        Object hidden = turboIngressHidden();
+        if (hidden == null) return visible;
+        Logger.d("upsells: hid Twitch's Turbo offer (Try Ad-Free)");
+        return hidden;
+    }
+
+    /** Twitch's hidden Turbo offer state (a patch-time bridge). */
+    private static Object turboIngressHidden() {
+        return null;
     }
 
     /**

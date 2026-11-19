@@ -198,9 +198,11 @@ TwitchInterface.bitsVisible
 TwitchInterface.exactCount
 
 # if hide_subscription_upsells
-# The chat header's Subscribe, Gift A Sub and Upgrade buttons.
+# The chat header's Subscribe, Gift A Sub and Upgrade buttons, and the same buttons under the stream title.
 TwitchInterface.subscriptionButtons
 TwitchInterface.subscriptionUpsellVisible
+# Twitch's Turbo offer (Try Ad-Free on your own channel page).
+TwitchInterface.turboIngress
 
 # if hide_content_label
 TwitchInterface.hideContentLabel

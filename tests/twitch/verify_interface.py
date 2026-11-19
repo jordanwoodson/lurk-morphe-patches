@@ -31,6 +31,10 @@ def main():
                     public void setVisibility(int visibility) { }
                 }
             """,
+            "io/github/jordanwoodson/extension/shared/Logger.java": """
+                package io.github.jordanwoodson.extension.shared;
+                public final class Logger { public static void d(String message) { } }
+            """,
             "kotlin/enums/EnumEntries.java": "package kotlin.enums; public interface EnumEntries<E extends Enum<E>> extends java.util.List<E> {}",
             "io/github/jordanwoodson/extension/shared/settings/Settings.java": """
                 package io.github.jordanwoodson.extension.shared.settings;
