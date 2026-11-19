@@ -1,6 +1,7 @@
 package io.github.jordanwoodson.extension.shared.twitch;
 
 import android.os.Bundle;
+import android.view.View;
 import io.github.jordanwoodson.extension.shared.settings.Settings;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -94,6 +95,16 @@ public final class TwitchInterface {
     /** A subscription upsell flag (the chat header's Upgrade button), off while Hide subscription upsells is on. */
     public static boolean subscriptionUpsellVisible(boolean stock) {
         return stock && !Settings.isEnabled("hide_subscription_upsells");
+    }
+
+    /**
+     * Injection point: the player's "Intended for certain audiences" label is about to show (issue 92). While Hide
+     * content label is on, the label's view is hidden and true is returned, so Twitch doesn't show it.
+     */
+    public static boolean hideContentLabel(View label) {
+        if (!Settings.isEnabled("hide_content_label")) return false;
+        if (label != null) label.setVisibility(View.GONE);
+        return true;
     }
 
     /**

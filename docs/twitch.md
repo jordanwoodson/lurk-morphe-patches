@@ -787,6 +787,15 @@ removes the Live tab itself ([Hide Live tab](#hide-live-tab)). *Hide mature
 content warning* makes the label-acknowledgement check return true without saving anything; age,
 region, guardian and account gates still apply.
 
+*Hide content label* (its own patch, switch off by default, issue 92) hides the "Intended for certain audiences"
+label at the top of the native player on streams with content labels. The label is a view delegate whose render
+(found by the `ccl_disclosure_label` and `ccl_disclosure_label_error` strings) draws the label's state:
+`MatureContent(...)` shows it, `NotShowing` fades it out. Before the render, a `MatureContent` state goes to
+`TwitchInterface.hideContentLabel`, which with the switch on hides the delegate's `BaseViewDelegate` view and skips
+the render. The delegate class also draws unrelated views for other states, which pass through. It doesn't touch the
+content warning (that's *Hide mature content warning*) or the labels in the vertical feeds. Checked on a phone,
+signed in, on a GTA VI stream: the label shows with the switch off and doesn't with it on.
+
 *Hide Bits tipping* now also filters `ConfigureMessageInput(isBitsPickerVisible=)`. The classic chat
 input reads its Bits button and tray from that state, not from the toolbar states.
 

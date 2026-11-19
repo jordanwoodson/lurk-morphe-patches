@@ -24,6 +24,13 @@ def main():
                     public String getString(String key) { return (String) values.get(key); }
                 }
             """,
+            "android/view/View.java": """
+                package android.view;
+                public class View {
+                    public static final int GONE = 8;
+                    public void setVisibility(int visibility) { }
+                }
+            """,
             "kotlin/enums/EnumEntries.java": "package kotlin.enums; public interface EnumEntries<E extends Enum<E>> extends java.util.List<E> {}",
             "io/github/jordanwoodson/extension/shared/settings/Settings.java": """
                 package io.github.jordanwoodson.extension.shared.settings;
