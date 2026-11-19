@@ -777,7 +777,8 @@ clears the `ShowStoriesShelf` argument and filters the Following page's section 
 [issue #73](https://github.com/jordanwoodson/lurk-morphe-patches/issues/73)) and `RecapsShelf` (the "From
 channels you follow" shelf of past streams on the Live tab, switch *Hide recent streams*). The last two were
 checked on a phone only as far as Home still rendering with the switches on: the test account can't follow
-channels (Twitch asks for a phone number first), so neither section was there to hide. *Hide mature
+channels (Twitch asks for a phone number first), so neither section was there to hide. Its *Hide Live tab* switch
+removes the Live tab itself ([Hide Live tab](#hide-live-tab)). *Hide mature
 content warning* makes the label-acknowledgement check return true without saving anything; age,
 region, guardian and account gates still apply.
 
@@ -812,6 +813,81 @@ switches on the row was gone. Not verified: a real signed-in account.
 
 `bin/test-twitch-highlights` runs the real classes on ART with each switch on and off. Following
 sections, Hype Train and the RN paths are verified only statically.
+
+### Hide Live tab
+
+*Hide Home sections*' *Hide Live tab* switch (off by default, restart; the rest of
+[issue #73](https://github.com/jordanwoodson/lurk-morphe-patches/issues/73)) removes the Live tab from the signed-in
+phone Home, which is React Native, so Home is Following and Clips, or Following only with *Hide Clips* on, and opens
+on Following. Native Home (tablets, Tablet layout, signed out) keeps its tabs.
+
+RN Home's tabs are positions, Following 0, Live 1 and Clips 2, and everything about them is index-based: the tab row
+(`useFeedTabs`), the pager's pages (`DiscoveryFeedContent`'s children array, given to `HomeTabsPager`),
+`FEED_TAB_INDEX = {following: 0, live: 1, clips: 2}` and `TABS`, and the feed's comparisons with a tab's index.
+*Hide Clips* drops the last position; dropping the middle one moves Clips to 1. Two ways were weighed:
+
+- Edits that apply only for a combination of switches (`hide_clips` and not `hide_home_live`, and so on), which may
+  overlap when they exclude each other. That needs a new manifest condition, overlap rules in `HermesBundle`, a
+  combination-aware `TwitchBundle` and every verifier that reads edit keys to change, and the Hide Clips edits
+  rewritten per combination.
+- Edits that compose: each of Hide Live tab's structural edits removes entry 1 from whatever Hide Clips left, on bytes
+  Hide Clips doesn't touch. This is what ships. Each edit still has one key, the manifest, the runtime loader and the
+  verifiers are unchanged, and `requireSafeEdit`'s pairwise checks cover the two switches like any others.
+
+Hiding Live without renumbering (keeping three pages and only hiding the label) was not possible: the pager is
+index-based and swipeable, so a swipe or a programmatic jump would land on the unlabeled Live page.
+
+What changes with the switch on (`patches/.../twitch/home/HermesHomeTabs.kt`):
+
+- `FEED_TAB_INDEX`: the object literal's shape operand becomes the bundle's existing `{following, clips}` shape,
+  which reads the first two values: `{following: 0, clips: 1}`, and `TABS` (its keys) `[following, clips]`. Hide Clips'
+  edit after it then deletes `clips`. `HermesBundle` reads the object shape table and literal buffers to find and check
+  the shapes and values.
+- The tab row: the Live tab's block (its label and memo entries) becomes a jump past it, and the array's first two
+  definitions jump to a stub in its bytes: following at 0, clips at 1, then `length -= 1` (3 to 2, or Hide Clips' 2 to
+  1), and on past the third definition, which Hide Clips owns. Hide Clips' 16-byte edit of that array is now two (the
+  length and the third definition), with the same bytes.
+- The pager: the Live page's code becomes a stub that sets the two values the Clips page reads from it (`r103`, `r105`),
+  shortens the children array by one and jumps to the Clips page, whose first instruction is Hide Clips' jump to the
+  pager's props (that edit is now those 5 bytes instead of 9, with the same effect). The Clips page is defined at 1.
+- Index comparisons: Clips' index 2 becomes 1 in the page's active and mounted flags, the pager's mount callback, the
+  feed list's scroll, snap and scroll-end handlers, `useStoriesShelf` and `useFeedData` (which picks the Clips feed);
+  Live's comparisons (its active flag and free scroll) become false.
+- Initial tab: `TABS.findIndex(initialTab ?? "live")` finds no Live, and `Math.max(0, -1)` opens Following. A plain
+  launch passes `initialTab: "live"`; the loading placeholder (`FeedCoverPlaceholder`) marks Following. A requested
+  `live` tab (`TABS.indexOf`) is ignored.
+- Following's empty states lose their buttons to the Live tab ("Explore Live", and "Let's Go!" for an account that
+  follows no one), and the callback behind them (`onNavigateToLive`, `setActiveIndex(1)`) selects Following.
+
+The added code reads and writes `length` by value (`GetByVal`, `PutByValLoose`). A first build used `GetByIdShort` and
+`PutByIdLoose` with cache index 255, taken to mean "no caching", and crashed the JS thread (SIGSEGV in
+`libhermesvm.so`) on the phone with Live hidden and Clips shown. In Hermes' `CodeBlock.cpp`, 255 is the shared overflow
+entry of functions whose cache has 256 entries, and the interpreter reads the entry at any index before checking for a
+hit, so in a small function it reads past the cache. Hide Clips' native clip callback (`openClip`, a function with two
+read cache entries) still reads with index 255.
+
+`bin/test-twitch-interface-hermes` runs `tests/twitch/HomeLiveTabProbe.kt`, which interprets the edited code of the
+stock bundle for all four combinations of Hide Clips and Hide Live tab: `FEED_TAB_INDEX` and `TABS`, the tab row (twice,
+the second from its memo cache), the pager's children, the initial tab for `following`, `live`, `clips` and none, the
+active, free-scroll and mount comparisons, `useFeedData`'s feed and the placeholder's tab, and checks that tab row,
+pages and indexes name the same tabs. Registers the Live page's code used to set start unset, so a value the stub
+doesn't provide fails the run, and the replacements may not use a property cache. `verify_interface_hermes_structure.py`
+decodes the edited functions with the switch alone and with all on.
+
+Checked on 2026-11-19 on the development phone, signed in with the test account (which follows no one), in a build
+with every Twitch patch, for each combination:
+
+- Both off: Following, Live and Clips; Home opens on Live; "Let's Go!" in Following opens Live.
+- Hide Clips only (the defaults): Following and Live, as before.
+- Hide Live tab only: Following and Clips; Home opens on Following, without "Let's Go!". Tapping and swiping move
+  between the two (a swipe past Clips stays there), the Clips feed loads, plays a clip and scrolls to the next, pull
+  to refresh reloads it, and a stream opened from it returns to Clips.
+- Both on: Home is Following only and opens on it; swipes stay on Following, pull to refresh works, and a stream
+  opened by link returns to it. Twitch has no audio player running there, so the Live feed doesn't play hidden.
+
+In each, Back from a stream returned to the same Home tab, and the log had no React errors or crashes (with Live
+and Clips both shown, Twitch logged its own `Failed to report feed interactions` warnings). Not checked: the "Explore
+Live" button, which only an account whose followed channels are all offline sees.
 
 ### Chat
 
@@ -1634,7 +1710,8 @@ for the target methods:
   `--stock <base.apk>` runs the original control path.
 - `bin/test-twitch-interface-hermes <stock.bundle> [patched.bundle]`: production transforms and
   actual caller instructions for the two-tab model/pager, initial selection, swipe
-  bounds, explicit native clip callbacks and empty-feed initial-effect deduplication.
+  bounds, explicit native clip callbacks and empty-feed initial-effect deduplication, and Hide Live tab with
+  Hide Clips in all four combinations (`HomeLiveTabProbe.kt`, see [Hide Live tab](#hide-live-tab)).
 - `bash bin/test-twitch-emotes <patched.apk>`: the emote picker presenter's section building and the
   autocomplete filter with *Emotes in the picker* on and off (`EmotePickerArtProbe`).
 - `bash bin/test-twitch-drops <patched.apk>`: *Auto-claim Drops* through the drops notification's own Claim
