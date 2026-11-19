@@ -51,7 +51,8 @@ internal fun HermesBundle.hideClipDiscoveryTabs() {
     val empty = stringId("")
     val native = hex("34 02 01 3b 02 02 04") + // Discovery module's React Native namespace.
         get(2, 2, 0, "NativeModules") + get(2, 2, 1, "TwitchRNHostNavigation") +
-        get(3, 2, 255, "openClip") + hex("89 04 01") +
+        // A read cache index must be below the function's cache size (2 here): 255 would read past it.
+        get(3, 2, 1, "openClip") + hex("89 04 01") +
         byteArrayOf(0x90.toByte(), 5, empty.toByte(), (empty ushr 8).toByte()) +
         hex("6f 03 03 02 04 05 93 00 76 00")
     replace(entry, "hide_clips", entry.body, native.copyOf(entry.body.size))
