@@ -669,8 +669,13 @@ sequence. A break in progress therefore returns to the stream the usual way when
 never changed pass unchanged from the moment the switch is off. `TwitchAsyncProbe disabled` checks
 both cases.
 
-*Playlist proxy* is opt-in and does nothing without its `proxyUrl` option. It sends live usher requests
-to the configured proxy. Its switch starts on once a URL is set, since setting one is the opt-in. The
+*Playlist proxy* is opt-in and does nothing until a proxy URL is set. It sends live usher requests
+to the configured proxy. The URL comes from the `proxyUrl` option or, since
+[issue #87](https://github.com/jordanwoodson/lurk-morphe-patches/issues/87), from its *Proxy URL* text setting
+in Lurk settings, which starts as the option's and wins when it can be used: the same placeholder rules, and
+`https://`, or `http://` only to the option's host, the one host the patch opens Twitch's HTTPS-only network
+config for. An unusable typed URL is ignored (and logged), never half-applied. The hooks are always installed;
+the switch starts on when the option has a URL, since setting one is the opt-in, and off otherwise. The
 proxy sees which channel is watched and when. A `{channel}` template such as
 `https://example.org/live/{channel}` substitutes the lowercase channel login from either live usher
 path (`/api/channel/hls/<channel>.m3u8` or `/api/v2/channel/hls/<channel>.m3u8`), without forwarding
@@ -687,7 +692,9 @@ both patches on, the proxy alone decides what the playlists hold, and Mute stitc
 any ad cues they keep. `TwitchAsyncProbe proxy` checks that a proxied master, in place of usher or with
 the usher URL in its query, or using a channel-only path, isn't consumed.
 `tests/twitch/test_playlist_proxy.py` checks both live path forms, lowercase conversion independent
-of locale, token omission, invalid paths, disabled behavior and preservation of the existing modes.
+of locale, token omission, invalid paths, disabled behavior, preservation of the existing modes and the typed
+URL (without and over the option, `http://` hosts, and the URLs it refuses). A system-wide HTTP proxy like other
+clients offer isn't possible here: the IVS player fetches playlists itself.
 
 `bin/test-twitch-ads` runs these hooks on ART. Signed out, no display or stitched ads were served,
 so real ad delivery is verified only through the probe and the emitted bytecode. The proxy was checked
