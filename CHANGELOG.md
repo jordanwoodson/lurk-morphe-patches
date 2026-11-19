@@ -1,3 +1,25 @@
+## [1.18.0-dev.1](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.17.2...v1.18.0-dev.1) (2026-11-19)
+
+### Kick
+
+#### ✨ New Features
+
+* **Chat search** ([8ef4eb1](https://github.com/jordanwoodson/lurk-morphe-patches/commit/8ef4eb1d6c49c578c3a8d1d926003bcf694e9f36))
+
+### Twitch
+
+#### ✨ New Features
+
+* Autocomplete without ':' can match anywhere and start after 2 or 4 characters ([026ef49](https://github.com/jordanwoodson/lurk-morphe-patches/commit/026ef49e59bc56be1360399534d29f98cda4e610))
+* **Navigation bar position** can hide the Create, Browse and Activity buttons ([b84ccc7](https://github.com/jordanwoodson/lurk-morphe-patches/commit/b84ccc79910377f15d401b4ab303eb9b36b5d4ce))
+* **Playlist proxy** URL can be set in Lurk settings ([aa6abd8](https://github.com/jordanwoodson/lurk-morphe-patches/commit/aa6abd823e8ed300b0b75e72aeab2a1475659016))
+* switches to hide the chat mode pop-up and the extension icons ([8b8d7d0](https://github.com/jordanwoodson/lurk-morphe-patches/commit/8b8d7d0a25499c80cac4c785614e43bfc8070f16))
+
+#### 🐛 Bug Fixes
+
+* **Auto-claim channel points** earns points with Disable analytics on ([5db4175](https://github.com/jordanwoodson/lurk-morphe-patches/commit/5db4175f52f85b1524bab2777b04274f94967a77))
+* **Hide Clips** also hides clip shelves on Home ([dfc589f](https://github.com/jordanwoodson/lurk-morphe-patches/commit/dfc589fad2e605631795de11cb38d4e6d211156f))
+
 ## [1.17.2](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.17.1...v1.17.2) (2026-11-19)
 
 ### Twitch

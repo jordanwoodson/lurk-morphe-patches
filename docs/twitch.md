@@ -669,8 +669,13 @@ sequence. A break in progress therefore returns to the stream the usual way when
 never changed pass unchanged from the moment the switch is off. `TwitchAsyncProbe disabled` checks
 both cases.
 
-*Playlist proxy* is opt-in and does nothing without its `proxyUrl` option. It sends live usher requests
-to the configured proxy. Its switch starts on once a URL is set, since setting one is the opt-in. The
+*Playlist proxy* is opt-in and does nothing until a proxy URL is set. It sends live usher requests
+to the configured proxy. The URL comes from the `proxyUrl` option or, since
+[issue #87](https://github.com/jordanwoodson/lurk-morphe-patches/issues/87), from its *Proxy URL* text setting
+in Lurk settings, which starts as the option's and wins when it can be used: the same placeholder rules, and
+`https://`, or `http://` only to the option's host, the one host the patch opens Twitch's HTTPS-only network
+config for. An unusable typed URL is ignored (and logged), never half-applied. The hooks are always installed;
+the switch starts on when the option has a URL, since setting one is the opt-in, and off otherwise. The
 proxy sees which channel is watched and when. A `{channel}` template such as
 `https://example.org/live/{channel}` substitutes the lowercase channel login from either live usher
 path (`/api/channel/hls/<channel>.m3u8` or `/api/v2/channel/hls/<channel>.m3u8`), without forwarding
@@ -687,7 +692,9 @@ both patches on, the proxy alone decides what the playlists hold, and Mute stitc
 any ad cues they keep. `TwitchAsyncProbe proxy` checks that a proxied master, in place of usher or with
 the usher URL in its query, or using a channel-only path, isn't consumed.
 `tests/twitch/test_playlist_proxy.py` checks both live path forms, lowercase conversion independent
-of locale, token omission, invalid paths, disabled behavior and preservation of the existing modes.
+of locale, token omission, invalid paths, disabled behavior, preservation of the existing modes and the typed
+URL (without and over the option, `http://` hosts, and the URLs it refuses). A system-wide HTTP proxy like other
+clients offer isn't possible here: the IVS player fetches playlists itself.
 
 `bin/test-twitch-ads` runs these hooks on ART. Signed out, no display or stitched ads were served,
 so real ad delivery is verified only through the probe and the emitted bytecode. The proxy was checked
@@ -730,15 +737,36 @@ Native Home is not React Native: RN Home and the Ultralight theatre run only wit
 That includes the signed-out Home. *Hide Clips* therefore also filters the native Home tab provider at
 its three users, keeping Clips when Home opens on a clip.
 
+In RN Home's feeds, *Hide Clips* also hides clip shelves such as "Clips for you" on the Live tab (issue 89).
+Every feed shelf is one `FeedShelfContainer`, which already renders nothing for a shelf without items, after all
+of its hooks (`items.length === 0`, then `x == null`). The second check becomes a long jump to a stub that makes
+the same check and also returns null when the shelf's first item is a `FeedClip`. A shelf can't simply return
+early: the feed list recycles cells, and a shelf that skipped hooks once would throw when it later renders another
+shelf. The stub fills the shelf title code, which only built the "Clips for you" fallback title for all-clip
+shelves; with the switch on, a shelf's title is its own. Patched statically for 32.1.0 (`InterfaceHermesProbe`
+checks no edit jumps into replaced bytes). Signed in on a phone, the test account wasn't offered a clip shelf in
+either feed even with the switch off; with it on, both feeds loaded and scrolled with no React errors.
+
 *Hide chat highlights* covers:
 - the native highlight dispatch, by type ID (Hype Train, gift banners);
 - the chat-notice mapper, by event and subscription kind;
 - the private-callout dispatch (watch streaks);
 - the leaderboard, pinned-cheer and celebration state constructors;
-- in RN, early returns from the matching services, components and `LibraryTmiClient` handlers.
+- in RN, early returns from the matching services, components and `LibraryTmiClient` handlers;
+- with *Hide extensions* (off by default, issue 81), the extension icons above native chat and in its header: the
+  icon row's view delegate (the method that inflates `extension_entry_point_single_icon` per extension) hands its
+  `BaseViewDelegate` view and extension list to `TwitchHighlights.extensionIcons`, which hides the view and
+  returns no extensions, so neither the icons nor the extensions button show. React Native chat opens extensions
+  from its own sheet and keeps it. None of eight large live channels showed the test account extension icons, even
+  with the switch off, so the hide is checked only through its hook.
 
 *Hide player buttons* filters the clip button state and live overlay options, every AndroidX
-`MediaRouteButton` (Cast), and the VOD and vertical-theatre share buttons. *Hide Home sections*
+`MediaRouteButton` (Cast), and the VOD and vertical-theatre share buttons. Its *Hide chat mode pop-up* switch
+(issue 85) skips the "Changed to Column Chat" snackbar with Next Mode after a landscape chat mode change: natively
+the snackbar is still built and kept, but its show call, the method's last, is skipped (the `one_chat_next_mode`
+string finds the method); in RN, `useChatModeCycle`'s callback ends `ref.current = addSnackbar(...)`, whose call
+becomes undefined. Checked on the emulator, signed out, in the native theatre: with the switch off a mode change
+showed "Changed to No Chat / Next Mode", with it on the mode changed with no pop-up. *Hide Home sections*
 clears the `ShowStoriesShelf` argument and filters the Following page's section list. On the React Native Home
 (phones, signed in) it returns null from three components: `FollowingContinueWatching`,
 `FollowingOfflineChannels` ("Your Offline Channels" in Following,
@@ -813,6 +841,17 @@ behind `chatModeMetadata != null` for the `chatroom_type` field of the
 fails on a version where any implementation dereferences the chat mode before overwriting its register
 (`neverDereferenced`, every path). Without an account, the claim was exercised on ART only with a
 stand-in for the action, so the request itself is unverified.
+
+Twitch offers points and the chest only for watch time it is told about: the player's `minute-watched`
+Spade event, which *Disable analytics* (on by default) blocks with every other event. Signed in on a phone
+with Twitch 32.1.0, 18 minutes with Disable analytics on brought neither the +10 watch points nor a chest;
+with it off, +10 came after about 5 minutes and the chest was claimed by itself (`chat: claiming a channel
+points bonus`, 320 to 380 points). So while this switch is on, Disable analytics lets `minute-watched`
+through (issue 69): `TwitchPrivacy.keepSpadeEvent` lets the dispatcher continue for that one event name,
+and `keepSpadeBatch` strips every other event out of the batch upload that `minute-watched` flushes at once
+(`clips_minute_watched` and everything else stay blocked). With that build, signed in on the phone with Disable
+analytics on, one `minute-watched` went out each minute, the balance went from 0 to 10 after about 9 minutes, and
+the chest was claimed by itself about 15 minutes in.
 
 `bin/test-twitch-chat <apk>` runs the real classes with each switch on and off. Signed-in IRC login
 and bonus claims are verified only through bytecode and the probe.
@@ -1033,14 +1072,16 @@ a token only at those markers and answers 0 otherwise. Two hooks: right after th
 call on a detector object just before the branch that reads the emote-source field, which is how the patch finds
 it), `TwitchEmotes.bareTrigger` also says yes for a plain word; at the tokenizer's single return,
 `TwitchEmotes.bareTokenStart` starts the token at that word when Twitch's answer is 0. A plain word is the last
-word before the cursor, at least three characters, starting with a letter or digit, in a message that isn't a
-command (`/...`, so `/me` lines get none). The emote source's answer for it is cut to codes that start with the
-word (Twitch's own matcher also lists codes that merely contain it, which for ordinary words would be noise), with
-the services' emotes merged in while *Emotes in the picker* is on. A word nothing starts with gives no results, and
+word before the cursor, at least three characters (the *Autocomplete after* choice makes it two or four),
+starting with a letter or digit, in a message that isn't a command (`/...`, so `/me` lines get none). The emote
+source's answer for it is cut to codes that start with the word (Twitch's own matcher also lists codes that merely
+contain it, which for ordinary words would be noise) unless *Autocomplete matches* is *Anywhere in the name*: then
+the word matches as after `:`, codes that start with it first. The services' emotes are merged in while *Emotes in
+the picker* is on. A word nothing starts with gives no results, and
 Twitch's filter then shows no drop-down; picking a suggestion is Twitch's replace of the token with the code and a
 space. Off, both hooks return Twitch's answer. `bin/test-twitch-emotes` checks the trigger rule, the real patched
-tokenizer (plain words, `:`, `@`, commands, two letters, the switch off) and the filter's prefix-only answer with the
-switch on and off. The text watcher itself and the drop-down were not run: the chat input needs a signed-in account,
+tokenizer (plain words, `:`, `@`, commands, two letters, the switch off), the filter's prefix-only answer with the
+switch on and off, and both choices (anywhere matches, two and four characters). The text watcher itself and the drop-down were not run: the chat input needs a signed-in account,
 which the emulator can't have, so the suggestions appearing while typing are unverified in the app.
 
 *Favorite emotes* (`emotes_favorites`, off by default;
@@ -1251,7 +1292,13 @@ in landscape only unless "Navigation rail in portrait" is on: signed in, Twitch 
 Following sidebar next to the rail, which would leave almost no room in portrait.
 
 *Navigation bar position* inflates a copy of the main layout with the bar anchored at the top and
-hands the gesture-bar inset to the screen, or hides the bar's labels.
+hands the gesture-bar inset to the screen, or hides the bar's labels. Its *Hide Create button*, *Hide Browse
+button* and *Hide Activity button* switches (off by default, issue 78) hide those menu items in every bar of the
+group and the rail beside it, the way Twitch itself hides the Create slot (`findItem(...).setVisible(false)`), and
+the round `custom_create_bottom_nav_button` over that slot. Twitch shows the button and slot again when its own
+state changes, so the same pass runs after every layout of the group. Home and Profile can't be hidden: Profile
+leads to Lurk settings. Verified on the emulator, signed out: with all three on, the bar showed Home and Log In
+only, also after opening a channel and coming back.
 
 *Force ExoPlayer* sets `PlayerConfiguration.forceExoPlayer` for HLS content. Live channels and
 videos then play on Twitch's dormant ExoPlayer 2 backend, which still sends `player_backend=Exo2` to
@@ -1287,7 +1334,10 @@ These features appear in other Twitch bundles and mods but are deliberately not 
 ### Privacy and client ads
 
 Native Spade dispatch completes the nullable success callback exactly once rather
-than leaving callers waiting. The native batch transport is also guarded. RN's
+than leaving callers waiting. The native batch transport is also guarded. The one exception is
+`minute-watched` while *Auto-claim channel points* is on (see that patch): it passes the dispatcher, and
+the batch transport sends only `minute-watched` events. `tests/twitch/test_privacy_consent.py` checks both
+decisions. RN's
 `createSpadeReporter` retains its object/API while enqueue and flush return their
 normal synchronous `undefined`. Local SDK consent lookup returns the actual Denied
 enum without writing the account's consent model. ComScore's local permission is false.
