@@ -31,10 +31,12 @@ def main():
                     public static int initializations;
                     public static Context context;
                     public static boolean autoClaim;
+                    public static boolean dropsClaim;
                     public static boolean isEnabled(String key) {
                         if (key.equals("block_cookie_notice")) return enabled;
                         if (key.equals("disable_analytics")) return analyticsEnabled;
                         if (key.equals("chat_auto_claim")) return autoClaim;
+                        if (key.equals("drops_auto_claim")) return dropsClaim;
                         throw new AssertionError(key);
                     }
                     public static void init(Context value) { context = value; initializations++; }
@@ -99,6 +101,10 @@ def main():
                         if (TwitchPrivacy.keepSpadeBatch(batch) || !batch.isEmpty() || TwitchPrivacy.keepSpadeBatch(null))
                             throw new AssertionError("auto-claim on: a batch without minute-watched must be dropped");
                         Settings.autoClaim = false;
+                        Settings.dropsClaim = true;
+                        if (!TwitchPrivacy.keepSpadeEvent("minute-watched") || TwitchPrivacy.keepSpadeEvent("video-play"))
+                            throw new AssertionError("Auto-claim Drops on: only minute-watched may pass");
+                        Settings.dropsClaim = false;
                         TwitchPrivacy.initSettingsOnce(null);
                         if (Settings.initializations != 0) throw new AssertionError("null context");
                         Context provider = new Context();
@@ -109,7 +115,7 @@ def main():
                         TwitchPrivacy.initSettingsOnce(new Context());
                         if (Settings.initializations != 1 || Settings.context != application)
                             throw new AssertionError("providers and app must share one Application init");
-                        System.out.println("PASS: consent and nullable/primitive collection decisions; minute-watched kept only for Auto-claim; null/provider/application startup contexts");
+                        System.out.println("PASS: consent and nullable/primitive collection decisions; minute-watched kept only for Auto-claim (points or Drops); null/provider/application startup contexts");
                     }
                 }
             """,

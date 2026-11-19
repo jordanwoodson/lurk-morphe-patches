@@ -873,7 +873,9 @@ Claim button's event, `Claim(claimingState=<the drop>, secondsPassedUntilClaim=0
 is the handler a tap reaches: it marks the drop as claiming, sends Twitch's `ClaimDropRewardsMutation` with the
 drop instance ID through the account's GraphQL client, and reports its "claim" analytics event (blocked by
 Disable analytics). Drops earned while no notification is up (another channel, another device) stay in the
-inventory; a failed claim isn't retried until the next start.
+inventory; a failed claim isn't retried until the next start. Time-based Drops progress from the same
+`minute-watched` event as channel points, which *Disable analytics* blocks, so while this switch is on that one
+event goes out too (see *Auto-claim channel points*).
 
 `bin/test-twitch-drops <apk>` (`DropsArtProbe`) runs the injection point with real `Claimable` and
 `DropPresentation` objects and the real presenter, repository and claim service, with the GraphQL client left
@@ -1385,7 +1387,7 @@ These features appear in other Twitch bundles and mods but are deliberately not 
 
 Native Spade dispatch completes the nullable success callback exactly once rather
 than leaving callers waiting. The native batch transport is also guarded. The one exception is
-`minute-watched` while *Auto-claim channel points* is on (see that patch): it passes the dispatcher, and
+`minute-watched` while *Auto-claim channel points* or *Auto-claim Drops* is on (see those patches): it passes the dispatcher, and
 the batch transport sends only `minute-watched` events. `tests/twitch/test_privacy_consent.py` checks both
 decisions. RN's
 `createSpadeReporter` retains its object/API while enqueue and flush return their
