@@ -730,6 +730,15 @@ Native Home is not React Native: RN Home and the Ultralight theatre run only wit
 That includes the signed-out Home. *Hide Clips* therefore also filters the native Home tab provider at
 its three users, keeping Clips when Home opens on a clip.
 
+In RN Home's feeds, *Hide Clips* also hides clip shelves such as "Clips for you" on the Live tab (issue 89).
+Every feed shelf is one `FeedShelfContainer`, which already renders nothing for a shelf without items, after all
+of its hooks (`items.length === 0`, then `x == null`). The second check becomes a long jump to a stub that makes
+the same check and also returns null when the shelf's first item is a `FeedClip`. A shelf can't simply return
+early: the feed list recycles cells, and a shelf that skipped hooks once would throw when it later renders another
+shelf. The stub fills the shelf title code, which only built the "Clips for you" fallback title for all-clip
+shelves; with the switch on, a shelf's title is its own. Patched statically for 32.1.0 (`InterfaceHermesProbe`
+checks no edit jumps into replaced bytes).
+
 *Hide chat highlights* covers:
 - the native highlight dispatch, by type ID (Hype Train, gift banners);
 - the chat-notice mapper, by event and subscription kind;
