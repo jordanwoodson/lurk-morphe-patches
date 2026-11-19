@@ -382,6 +382,10 @@ Signed out, Ultralight can be switched on for a test with Twitch's staff overrid
 but its feed asks you to log in; channels still open in the native theatre while the switch is on, though
 Twitch's Ultralight splash can stay drawn over it.
 
+The two theatres show a channel's Drops differently. React Native keeps a standing Drops card at the top of chat
+and has "Drops & More" in its chat settings; the native theatre shows its "Twitch Drops" banner for one minute.
+*Keep Drops banner* keeps that banner up (issue 68, see [Chat](#chat)).
+
 ### Fix stuck start screen
 
 On the emulator, stock Twitch stalled on its blank `LandingActivity` in about 1 of 4 cold starts: 2 of
@@ -878,6 +882,39 @@ out: off claims nothing; on, Twitch's handler runs and stops at the client's req
 presentation without a claimable drop isn't. The request, its account and integrity headers and the server's
 answer were not exercised: Twitch's Apollo client can't be pointed at a loopback server on ART without
 rebuilding the app's dependency graph, and no account exists to run it for real.
+
+*Keep Drops banner* (`drops_banner_keep`, on by default since it restores what the React Native player shows, issue
+68) keeps Twitch's Drops banner above native chat for the whole visit. In the native theatre a channel's Drops are a
+community highlight: when chat connects, the drops banner presenter asks `ViewerDropsCampaignsQuery` (the channel's
+`viewerDropCampaigns`, viewer-specific: signed out it is empty) for the campaigns there, picks the first active one
+with time-based drops and shows it as a "Twitch Drops" card above chat ("Earn rewards by purchasing or gifting subs
+to …", Twitch's text from the campaign's first drop) with a one-minute countdown bar. When the countdown runs out the
+presenter dismisses the banner, and nothing in the native player shows the channel's Drops again until the channel
+is reopened. Anyone who looks at chat a minute late, or sees a pinned message or poll first, sees no Drops at all,
+which is what the issue reported. React Native's theatre asks its own `ChannelDropsCampaigns` query instead and
+pushes a *standing* "Drops are on!" event (`DropsEventService`, `pushEvent(…, {standing: true})`), so its card stays,
+and its chat settings have "Drops & More". ("Drops are on!" in the native strings belongs to the vertical theatre's
+events bar, which has its own two-minute highlight that this patch doesn't change.)
+
+The banner's state lambda (the `invoke` that reads the campaign's image URL and makes a `BannerCountdown`) makes one
+countdown per layout, Compact and Visible. Right after each is constructed, `TwitchDrops.bannerCountdown` replaces it
+with null while the switch is on; the highlight view takes null as "no countdown" (as for highlights that have none),
+so no bar runs and nothing dismisses the banner. The viewer can still expand it for Twitch's campaign text, end
+date, View Details (Twitch's native campaign page, `DropCampaign(campaignId=…)`: each reward and how to earn it) and
+Dismiss This Message; "Don't show again" sends Twitch's own `SetDropsCommunityHighlightToHidden`. Other highlights
+still arrive: Twitch's highlight pager holds them as pages beside the banner, with page dots, as it does whenever
+two highlights are up. The patch fails if the lambda doesn't make exactly two countdowns.
+
+Checked on the phone on 2026-11-19, signed in, on stableronaldo (live in GTA VI, campaign "GTAVI Launch
+Celebration"): without the patch, and with the switch off, the banner showed with its bar and was dismissed exactly
+60 s later, and the channel's pinned message took its place; with the switch on it was still there after 80 s with
+no bar, the pinned message was the pager's other page, and View Details opened the campaign page (GTA DVD Chest, the
+sub chests and Golden Iguana, with "Watch for 1 hour" or "Purchase N subscriptions" for each). A channel without
+campaigns (leekbeats) showed only its pinned message. In one of six runs with the switch on, the first after another
+session had used the phone, the banner was gone (and the pager had one page) 70 s in; no log was kept from that run,
+and it didn't happen again, also not on a first start after reinstalling. With Debug logging on, each banner kept
+logs `drops: keeping the Drops banner up`. Not checked: the Compact layout (landscape) and a campaign whose drops
+are event-based only. `DropsArtProbe` checks the hook with the real countdown class, switch on and off.
 
 *Chat keywords* highlights native and React Native chat lines that mention you (your signed-in login) or contain one
 of your highlight words, with a tinted row and an optional vibration. It hides lines with blocked
@@ -1599,7 +1636,8 @@ for the target methods:
 - `bash bin/test-twitch-emotes <patched.apk>`: the emote picker presenter's section building and the
   autocomplete filter with *Emotes in the picker* on and off (`EmotePickerArtProbe`).
 - `bash bin/test-twitch-drops <patched.apk>`: *Auto-claim Drops* through the drops notification's own Claim
-  handler, once per drop, only for claimable drops (`DropsArtProbe`).
+  handler, once per drop, only for claimable drops, and *Keep Drops banner*'s countdown hook with the real
+  countdown class (`DropsArtProbe`).
 
 The Python verifiers under `tests/twitch/` inspect emitted DEX and use the original
 JavaScript/Hermes as behavioral inputs. They check callback completion, untouched
