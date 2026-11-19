@@ -1279,7 +1279,13 @@ in landscape only unless "Navigation rail in portrait" is on: signed in, Twitch 
 Following sidebar next to the rail, which would leave almost no room in portrait.
 
 *Navigation bar position* inflates a copy of the main layout with the bar anchored at the top and
-hands the gesture-bar inset to the screen, or hides the bar's labels.
+hands the gesture-bar inset to the screen, or hides the bar's labels. Its *Hide Create button*, *Hide Browse
+button* and *Hide Activity button* switches (off by default, issue 78) hide those menu items in every bar of the
+group and the rail beside it, the way Twitch itself hides the Create slot (`findItem(...).setVisible(false)`), and
+the round `custom_create_bottom_nav_button` over that slot. Twitch shows the button and slot again when its own
+state changes, so the same pass runs after every layout of the group. Home and Profile can't be hidden: Profile
+leads to Lurk settings. Verified on the emulator, signed out: with all three on, the bar showed Home and Log In
+only, also after opening a channel and coming back.
 
 *Force ExoPlayer* sets `PlayerConfiguration.forceExoPlayer` for HLS content. Live channels and
 videos then play on Twitch's dormant ExoPlayer 2 backend, which still sends `player_backend=Exo2` to
