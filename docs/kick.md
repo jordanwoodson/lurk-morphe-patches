@@ -235,7 +235,7 @@ details and validation follow.
 | Patch | Selected by default | Lurk settings | Behavior |
 | --- | --- | --- | --- |
 | Change app name | No | None (patch time) | Configurable launcher label; default `Kick Lurk`. |
-| Lurk icon | Yes | None (patch time) | Adaptive Lurk icon in Kick green, including themed icon. |
+| Lurk icon | Yes | App icon, Lurk | Adaptive Lurk icon in Kick green, including themed icon. Kick's own icon stays, and the App icon choice switches the launcher to it through two aliases of `MainActivity` ([how it works](rumble.md#app-icon)). |
 | Remove tracking permissions | Yes | None (patch time) | Removes the four verified advertising/referrer permissions. |
 | Clone app | No | None (patch time) | Separate package, permissions and 13 provider authorities; defaults to `com.kick.mobile.lurk`. |
 | Disable analytics | Yes | On; Block device fingerprinting, off | Firebase collection/event bridge, Insider initialization/events/queued jobs, Datadog initialization, Mux/Datazoom and PAL nonce suppression; optionally FingerprintJS Pro. Promise completion is preserved. |

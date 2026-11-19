@@ -103,6 +103,10 @@ TwitchChat.autoClaim
 # if drops_auto_claim
 TwitchDrops.presented
 
+# if drops_banner_keep
+# Keep Drops banner: each countdown the drops banner's state lambda makes (both layouts).
+TwitchDrops.bannerCountdown
+
 # if chat_hide_badges
 TwitchChatCompact.badges
 

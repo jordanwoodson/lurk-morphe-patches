@@ -91,7 +91,7 @@ based on this APK; the Rumble and Kick fingerprints do not apply directly.
 | Rumble patch area | Twitch equivalent and boundary |
 | --- | --- |
 | Change app name | Opt-in launcher label, default `Twitch Lurk`. |
-| Lurk icon | Purple Lurk artwork, adaptive/round/monochrome launcher resources. |
+| Lurk icon | Purple Lurk artwork, adaptive/round/monochrome launcher resources. Twitch's own icon stays, and Lurk settings › Interface › App icon (`app_icon`) switches the launcher to it: the launcher entry (`LandingActivity`'s MAIN/LAUNCHER filter) moves to two aliases, one per icon, and the choice enables one ([how it works](rumble.md#app-icon)). Verified with a Clone app build too, which switches on its own. |
 | Remove tracking permissions | Removes the two present advertising-ID and Play install-referrer permissions. This alone does not stop other identifiers or telemetry. |
 | Clone app | Opt-in package `tv.twitch.android.app.lurk`; renames all provider authorities (ten in 31.8.0), including Amazon's suffix, and the app's signature permission. Amazon sign-in and verified app links are unverified after re-signing. |
 | Disable analytics | Native/RN Spade, local vendor consent decisions, ComScore permission, Branch events/tracking mode, Sentry and Crashlytics collection controls. Details below. |
@@ -381,6 +381,10 @@ Signed out, Ultralight can be switched on for a test with Twitch's staff overrid
 `staff` and `ultralight_enabled_override` to true in `twitch_user_prefs.xml`. Home is then React Native
 but its feed asks you to log in; channels still open in the native theatre while the switch is on, though
 Twitch's Ultralight splash can stay drawn over it.
+
+The two theatres show a channel's Drops differently. React Native keeps a standing Drops card at the top of chat
+and has "Drops & More" in its chat settings; the native theatre shows its "Twitch Drops" banner for one minute.
+*Keep Drops banner* keeps that banner up (issue 68, see [Chat](#chat)).
 
 ### Fix stuck start screen
 
@@ -773,7 +777,8 @@ clears the `ShowStoriesShelf` argument and filters the Following page's section 
 [issue #73](https://github.com/jordanwoodson/lurk-morphe-patches/issues/73)) and `RecapsShelf` (the "From
 channels you follow" shelf of past streams on the Live tab, switch *Hide recent streams*). The last two were
 checked on a phone only as far as Home still rendering with the switches on: the test account can't follow
-channels (Twitch asks for a phone number first), so neither section was there to hide. *Hide mature
+channels (Twitch asks for a phone number first), so neither section was there to hide. Its *Hide Live tab* switch
+removes the Live tab itself ([Hide Live tab](#hide-live-tab)). *Hide mature
 content warning* makes the label-acknowledgement check return true without saving anything; age,
 region, guardian and account gates still apply.
 
@@ -808,6 +813,81 @@ switches on the row was gone. Not verified: a real signed-in account.
 
 `bin/test-twitch-highlights` runs the real classes on ART with each switch on and off. Following
 sections, Hype Train and the RN paths are verified only statically.
+
+### Hide Live tab
+
+*Hide Home sections*' *Hide Live tab* switch (off by default, restart; the rest of
+[issue #73](https://github.com/jordanwoodson/lurk-morphe-patches/issues/73)) removes the Live tab from the signed-in
+phone Home, which is React Native, so Home is Following and Clips, or Following only with *Hide Clips* on, and opens
+on Following. Native Home (tablets, Tablet layout, signed out) keeps its tabs.
+
+RN Home's tabs are positions, Following 0, Live 1 and Clips 2, and everything about them is index-based: the tab row
+(`useFeedTabs`), the pager's pages (`DiscoveryFeedContent`'s children array, given to `HomeTabsPager`),
+`FEED_TAB_INDEX = {following: 0, live: 1, clips: 2}` and `TABS`, and the feed's comparisons with a tab's index.
+*Hide Clips* drops the last position; dropping the middle one moves Clips to 1. Two ways were weighed:
+
+- Edits that apply only for a combination of switches (`hide_clips` and not `hide_home_live`, and so on), which may
+  overlap when they exclude each other. That needs a new manifest condition, overlap rules in `HermesBundle`, a
+  combination-aware `TwitchBundle` and every verifier that reads edit keys to change, and the Hide Clips edits
+  rewritten per combination.
+- Edits that compose: each of Hide Live tab's structural edits removes entry 1 from whatever Hide Clips left, on bytes
+  Hide Clips doesn't touch. This is what ships. Each edit still has one key, the manifest, the runtime loader and the
+  verifiers are unchanged, and `requireSafeEdit`'s pairwise checks cover the two switches like any others.
+
+Hiding Live without renumbering (keeping three pages and only hiding the label) was not possible: the pager is
+index-based and swipeable, so a swipe or a programmatic jump would land on the unlabeled Live page.
+
+What changes with the switch on (`patches/.../twitch/home/HermesHomeTabs.kt`):
+
+- `FEED_TAB_INDEX`: the object literal's shape operand becomes the bundle's existing `{following, clips}` shape,
+  which reads the first two values: `{following: 0, clips: 1}`, and `TABS` (its keys) `[following, clips]`. Hide Clips'
+  edit after it then deletes `clips`. `HermesBundle` reads the object shape table and literal buffers to find and check
+  the shapes and values.
+- The tab row: the Live tab's block (its label and memo entries) becomes a jump past it, and the array's first two
+  definitions jump to a stub in its bytes: following at 0, clips at 1, then `length -= 1` (3 to 2, or Hide Clips' 2 to
+  1), and on past the third definition, which Hide Clips owns. Hide Clips' 16-byte edit of that array is now two (the
+  length and the third definition), with the same bytes.
+- The pager: the Live page's code becomes a stub that sets the two values the Clips page reads from it (`r103`, `r105`),
+  shortens the children array by one and jumps to the Clips page, whose first instruction is Hide Clips' jump to the
+  pager's props (that edit is now those 5 bytes instead of 9, with the same effect). The Clips page is defined at 1.
+- Index comparisons: Clips' index 2 becomes 1 in the page's active and mounted flags, the pager's mount callback, the
+  feed list's scroll, snap and scroll-end handlers, `useStoriesShelf` and `useFeedData` (which picks the Clips feed);
+  Live's comparisons (its active flag and free scroll) become false.
+- Initial tab: `TABS.findIndex(initialTab ?? "live")` finds no Live, and `Math.max(0, -1)` opens Following. A plain
+  launch passes `initialTab: "live"`; the loading placeholder (`FeedCoverPlaceholder`) marks Following. A requested
+  `live` tab (`TABS.indexOf`) is ignored.
+- Following's empty states lose their buttons to the Live tab ("Explore Live", and "Let's Go!" for an account that
+  follows no one), and the callback behind them (`onNavigateToLive`, `setActiveIndex(1)`) selects Following.
+
+The added code reads and writes `length` by value (`GetByVal`, `PutByValLoose`). A first build used `GetByIdShort` and
+`PutByIdLoose` with cache index 255, taken to mean "no caching", and crashed the JS thread (SIGSEGV in
+`libhermesvm.so`) on the phone with Live hidden and Clips shown. In Hermes' `CodeBlock.cpp`, 255 is the shared overflow
+entry of functions whose cache has 256 entries, and the interpreter reads the entry at any index before checking for a
+hit, so in a small function it reads past the cache. Hide Clips' native clip callback (`openClip`, a function with two
+read cache entries) still reads with index 255.
+
+`bin/test-twitch-interface-hermes` runs `tests/twitch/HomeLiveTabProbe.kt`, which interprets the edited code of the
+stock bundle for all four combinations of Hide Clips and Hide Live tab: `FEED_TAB_INDEX` and `TABS`, the tab row (twice,
+the second from its memo cache), the pager's children, the initial tab for `following`, `live`, `clips` and none, the
+active, free-scroll and mount comparisons, `useFeedData`'s feed and the placeholder's tab, and checks that tab row,
+pages and indexes name the same tabs. Registers the Live page's code used to set start unset, so a value the stub
+doesn't provide fails the run, and the replacements may not use a property cache. `verify_interface_hermes_structure.py`
+decodes the edited functions with the switch alone and with all on.
+
+Checked on 2026-11-19 on the development phone, signed in with the test account (which follows no one), in a build
+with every Twitch patch, for each combination:
+
+- Both off: Following, Live and Clips; Home opens on Live; "Let's Go!" in Following opens Live.
+- Hide Clips only (the defaults): Following and Live, as before.
+- Hide Live tab only: Following and Clips; Home opens on Following, without "Let's Go!". Tapping and swiping move
+  between the two (a swipe past Clips stays there), the Clips feed loads, plays a clip and scrolls to the next, pull
+  to refresh reloads it, and a stream opened from it returns to Clips.
+- Both on: Home is Following only and opens on it; swipes stay on Following, pull to refresh works, and a stream
+  opened by link returns to it. Twitch has no audio player running there, so the Live feed doesn't play hidden.
+
+In each, Back from a stream returned to the same Home tab, and the log had no React errors or crashes (with Live
+and Clips both shown, Twitch logged its own `Failed to report feed interactions` warnings). Not checked: the "Explore
+Live" button, which only an account whose followed channels are all offline sees.
 
 ### Chat
 
@@ -869,7 +949,9 @@ Claim button's event, `Claim(claimingState=<the drop>, secondsPassedUntilClaim=0
 is the handler a tap reaches: it marks the drop as claiming, sends Twitch's `ClaimDropRewardsMutation` with the
 drop instance ID through the account's GraphQL client, and reports its "claim" analytics event (blocked by
 Disable analytics). Drops earned while no notification is up (another channel, another device) stay in the
-inventory; a failed claim isn't retried until the next start.
+inventory; a failed claim isn't retried until the next start. Time-based Drops progress from the same
+`minute-watched` event as channel points, which *Disable analytics* blocks, so while this switch is on that one
+event goes out too (see *Auto-claim channel points*).
 
 `bin/test-twitch-drops <apk>` (`DropsArtProbe`) runs the injection point with real `Claimable` and
 `DropPresentation` objects and the real presenter, repository and claim service, with the GraphQL client left
@@ -878,6 +960,39 @@ out: off claims nothing; on, Twitch's handler runs and stops at the client's req
 presentation without a claimable drop isn't. The request, its account and integrity headers and the server's
 answer were not exercised: Twitch's Apollo client can't be pointed at a loopback server on ART without
 rebuilding the app's dependency graph, and no account exists to run it for real.
+
+*Keep Drops banner* (`drops_banner_keep`, on by default since it restores what the React Native player shows, issue
+68) keeps Twitch's Drops banner above native chat for the whole visit. In the native theatre a channel's Drops are a
+community highlight: when chat connects, the drops banner presenter asks `ViewerDropsCampaignsQuery` (the channel's
+`viewerDropCampaigns`, viewer-specific: signed out it is empty) for the campaigns there, picks the first active one
+with time-based drops and shows it as a "Twitch Drops" card above chat ("Earn rewards by purchasing or gifting subs
+to …", Twitch's text from the campaign's first drop) with a one-minute countdown bar. When the countdown runs out the
+presenter dismisses the banner, and nothing in the native player shows the channel's Drops again until the channel
+is reopened. Anyone who looks at chat a minute late, or sees a pinned message or poll first, sees no Drops at all,
+which is what the issue reported. React Native's theatre asks its own `ChannelDropsCampaigns` query instead and
+pushes a *standing* "Drops are on!" event (`DropsEventService`, `pushEvent(…, {standing: true})`), so its card stays,
+and its chat settings have "Drops & More". ("Drops are on!" in the native strings belongs to the vertical theatre's
+events bar, which has its own two-minute highlight that this patch doesn't change.)
+
+The banner's state lambda (the `invoke` that reads the campaign's image URL and makes a `BannerCountdown`) makes one
+countdown per layout, Compact and Visible. Right after each is constructed, `TwitchDrops.bannerCountdown` replaces it
+with null while the switch is on; the highlight view takes null as "no countdown" (as for highlights that have none),
+so no bar runs and nothing dismisses the banner. The viewer can still expand it for Twitch's campaign text, end
+date, View Details (Twitch's native campaign page, `DropCampaign(campaignId=…)`: each reward and how to earn it) and
+Dismiss This Message; "Don't show again" sends Twitch's own `SetDropsCommunityHighlightToHidden`. Other highlights
+still arrive: Twitch's highlight pager holds them as pages beside the banner, with page dots, as it does whenever
+two highlights are up. The patch fails if the lambda doesn't make exactly two countdowns.
+
+Checked on the phone on 2026-11-19, signed in, on stableronaldo (live in GTA VI, campaign "GTAVI Launch
+Celebration"): without the patch, and with the switch off, the banner showed with its bar and was dismissed exactly
+60 s later, and the channel's pinned message took its place; with the switch on it was still there after 80 s with
+no bar, the pinned message was the pager's other page, and View Details opened the campaign page (GTA DVD Chest, the
+sub chests and Golden Iguana, with "Watch for 1 hour" or "Purchase N subscriptions" for each). A channel without
+campaigns (leekbeats) showed only its pinned message. In one of six runs with the switch on, the first after another
+session had used the phone, the banner was gone (and the pager had one page) 70 s in; no log was kept from that run,
+and it didn't happen again, also not on a first start after reinstalling. With Debug logging on, each banner kept
+logs `drops: keeping the Drops banner up`. Not checked: the Compact layout (landscape) and a campaign whose drops
+are event-based only. `DropsArtProbe` checks the hook with the real countdown class, switch on and off.
 
 *Chat keywords* highlights native and React Native chat lines that mention you (your signed-in login) or contain one
 of your highlight words, with a tinted row and an optional vibration. It hides lines with blocked
@@ -1173,6 +1288,19 @@ against a local server) and on the emulator, signed out, in a 10,000-viewer chat
 channel's ID and badge definitions and holders arrive within seconds (Debug logging shows the counts). 7TV only
 pushes entitlements for chatters its own users have seen, so a quiet channel shows none.
 
+That is also why your own badge never showed
+([issue #60](https://github.com/jordanwoodson/lurk-morphe-patches/issues/60)): 7TV reports a chatter once their own
+7TV client announces them in a channel, which Lurk never does. *My 7TV badge* (`badges_7tv_self`, under 7TV badges,
+off by default) looks it up instead, once per account and app start, on the first chat line drawn: the signed-in
+account's Twitch user ID from Twitch's own store (`userIdString` in `twitch_user_prefs`, or the older `user` file),
+then `GET https://7tv.io/v3/users/twitch/<id>` for `user.style.badge_id`, then 7TV's GraphQL `cosmetics(list: [id])`
+for that badge's tooltip and files (the same shape as `cosmetic.create`). Your lines then get it like anyone else's.
+It sends 7TV your Twitch user ID, and nothing announces you, so other viewers still need 7TV to learn your badge
+another way. A failed lookup is retried after a minute. `tests/twitch/test_seventv_badges.py` (`self`) checks the
+two requests, the badge on native and React Native lines, one lookup per account, an account without a badge and
+signed out. On a phone, signed in, the lookup found the account in Twitch's store on the first chat line and 7TV
+answered that it has no badge (the test account has no 7TV profile), so a badge itself was only shown on the JVM.
+
 The exception is *pronouns* (`badges_pronouns`, off by default):
 pronouns.alejo.io has no bulk list, so the username of each chatter whose message you see is looked
 up there.
@@ -1335,7 +1463,7 @@ These features appear in other Twitch bundles and mods but are deliberately not 
 
 Native Spade dispatch completes the nullable success callback exactly once rather
 than leaving callers waiting. The native batch transport is also guarded. The one exception is
-`minute-watched` while *Auto-claim channel points* is on (see that patch): it passes the dispatcher, and
+`minute-watched` while *Auto-claim channel points* or *Auto-claim Drops* is on (see those patches): it passes the dispatcher, and
 the batch transport sends only `minute-watched` events. `tests/twitch/test_privacy_consent.py` checks both
 decisions. RN's
 `createSpadeReporter` retains its object/API while enqueue and flush return their
@@ -1582,11 +1710,13 @@ for the target methods:
   `--stock <base.apk>` runs the original control path.
 - `bin/test-twitch-interface-hermes <stock.bundle> [patched.bundle]`: production transforms and
   actual caller instructions for the two-tab model/pager, initial selection, swipe
-  bounds, explicit native clip callbacks and empty-feed initial-effect deduplication.
+  bounds, explicit native clip callbacks and empty-feed initial-effect deduplication, and Hide Live tab with
+  Hide Clips in all four combinations (`HomeLiveTabProbe.kt`, see [Hide Live tab](#hide-live-tab)).
 - `bash bin/test-twitch-emotes <patched.apk>`: the emote picker presenter's section building and the
   autocomplete filter with *Emotes in the picker* on and off (`EmotePickerArtProbe`).
 - `bash bin/test-twitch-drops <patched.apk>`: *Auto-claim Drops* through the drops notification's own Claim
-  handler, once per drop, only for claimable drops (`DropsArtProbe`).
+  handler, once per drop, only for claimable drops, and *Keep Drops banner*'s countdown hook with the real
+  countdown class (`DropsArtProbe`).
 
 The Python verifiers under `tests/twitch/` inspect emitted DEX and use the original
 JavaScript/Hermes as behavioral inputs. They check callback completion, untouched

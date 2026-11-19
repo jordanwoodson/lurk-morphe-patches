@@ -8,9 +8,12 @@ import io.github.jordanwoodson.patches.twitch.shared.hex
 internal fun HermesBundle.hideClipDiscoveryTabs() {
     // The original hook still localizes labels and runs all hooks. Only its final array excludes
     // the Clips object; its memo cache may retain that unused object without changing tab indexes.
-    replace("useFeedTabs", "hide_clips",
-        hex("08 03 03 00 5a 03 07 00 5a 03 06 01 5a 03 05 02"),
-        hex("08 03 02 00 5a 03 07 00 5a 03 06 01 93 00 93 00"))
+    // `[following, live, clips]`: NewArray r3, 3, then one DefineOwnInDenseArray per tab. Only the length and the
+    // third entry change, so Hide Live tab (home/HermesHomeTabs.kt) can replace the first two on its own.
+    val tabs = function("useFeedTabs")
+    val array = find(tabs, hex("08 03 03 00 5a 03 07 00 5a 03 06 01 5a 03 05 02"))
+    replaceAt(tabs, "hide_clips", array, hex("08 03 03 00"), hex("08 03 02 00"))
+    replaceAt(tabs, "hide_clips", array + 12, hex("5a 03 05 02"), hex("93 00 93 00"))
 
     // The chrome hook is not the pager's model. Remove the same key before Object.keys builds
     // exported TABS; following/live retain indexes 0/1. Its numeric sort is then redundant.
@@ -28,11 +31,12 @@ internal fun HermesBundle.hideClipDiscoveryTabs() {
     // Skip creation and insertion of ClipsFeedPage. The first two children, parent JSX call,
     // scroll ranges and initial selection now all use the same two-entry TABS model. Nothing
     // outside the skipped range jumps into it, and it writes none of the registers read after it.
-    // `children[1] = page; jsxs`, then a long jump to the parent props after the third child (0x711b).
+    // After `children[1] = page`, the clips page's first instruction (GetByIdShort jsxs) becomes a long jump to the
+    // parent props after the third child (0x711b). Hide Live tab jumps from the Live page to the same instruction.
     val secondPage = hex("5a 61 62 01 44 66 63 ff ${id8("jsxs")}")
     if (!content.body.copyOfRange(0x6f8f, 0x6f98).contentEquals(secondPage))
         throw PatchException("Twitch: unexpected clip pager children")
-    replace(content, "hide_clips", secondPage, hex("5a 61 62 01 af 88 01 00 00"))
+    replaceAt(content, "hide_clips", 0x6f93, secondPage.copyOfRange(4, 9), hex("af 88 01 00 00"))
 
     // Explicit in-feed clip requests use Twitch's existing native clip pager instead. The
     // original t86 callback selected index 2 before injecting a clip, which is no longer valid.
@@ -47,7 +51,8 @@ internal fun HermesBundle.hideClipDiscoveryTabs() {
     val empty = stringId("")
     val native = hex("34 02 01 3b 02 02 04") + // Discovery module's React Native namespace.
         get(2, 2, 0, "NativeModules") + get(2, 2, 1, "TwitchRNHostNavigation") +
-        get(3, 2, 255, "openClip") + hex("89 04 01") +
+        // A read cache index must be below the function's cache size (2 here): 255 would read past it.
+        get(3, 2, 1, "openClip") + hex("89 04 01") +
         byteArrayOf(0x90.toByte(), 5, empty.toByte(), (empty ushr 8).toByte()) +
         hex("6f 03 03 02 04 05 93 00 76 00")
     replace(entry, "hide_clips", entry.body, native.copyOf(entry.body.size))

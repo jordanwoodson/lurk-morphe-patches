@@ -1,3 +1,24 @@
+## [1.19.0-dev.1](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.18.0...v1.19.0-dev.1) (2026-11-19)
+
+### Twitch
+
+#### ✨ New Features
+
+* **Hide Home sections** can hide the Live tab ([bb012e7](https://github.com/jordanwoodson/lurk-morphe-patches/commit/bb012e78ba1fa6f8578ea72900d983073a145838))
+* **Keep Drops banner** shows a channel's Drops in native chat ([df6f08a](https://github.com/jordanwoodson/lurk-morphe-patches/commit/df6f08adb4dc100d3f975f993cc859ddef2eec90))
+* My 7TV badge shows your own 7TV badge on your messages ([8b6598c](https://github.com/jordanwoodson/lurk-morphe-patches/commit/8b6598c760c9b79f79da38156d397dfeba4650aa))
+
+#### 🐛 Bug Fixes
+
+* Auto-claim Drops lets Drops progress with **Disable analytics** on ([630500a](https://github.com/jordanwoodson/lurk-morphe-patches/commit/630500a240e1f1a5d978775622cdb3eb7815e6db))
+* **Hide Clips**' clip callback reads within its property cache ([f7bb0c7](https://github.com/jordanwoodson/lurk-morphe-patches/commit/f7bb0c78e2b8f4e8fd4bcbb27ca69fc7e587c85c))
+
+### Shared
+
+#### ✨ New Features
+
+* **Lurk icon** can switch back to the original icon in Lurk settings ([4f4d623](https://github.com/jordanwoodson/lurk-morphe-patches/commit/4f4d623226fb76cc4501501bb88636111265afc3))
+
 ## [1.18.0](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.17.2...v1.18.0) (2026-11-19)
 
 ### Kick
