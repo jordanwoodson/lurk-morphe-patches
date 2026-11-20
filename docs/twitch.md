@@ -94,7 +94,7 @@ based on this APK; the Rumble and Kick fingerprints do not apply directly.
 | Lurk icon | Purple Lurk artwork, adaptive/round/monochrome launcher resources. Twitch's own icon stays, and Lurk settings › Interface › App icon (`app_icon`) switches the launcher to it: the launcher entry (`LandingActivity`'s MAIN/LAUNCHER filter) moves to two aliases, one per icon, and the choice enables one ([how it works](rumble.md#app-icon)). Verified with a Clone app build too, which switches on its own. |
 | Remove tracking permissions | Removes the two present advertising-ID and Play install-referrer permissions. This alone does not stop other identifiers or telemetry. |
 | Clone app | Opt-in package `tv.twitch.android.app.lurk`; renames all provider authorities (ten in 31.8.0), including Amazon's suffix, and the app's signature permission. Amazon sign-in and verified app links are unverified after re-signing. |
-| Disable analytics | Native/RN Spade, local vendor consent decisions, ComScore permission, Branch events/tracking mode, Sentry and Crashlytics collection controls. Details below. |
+| Disable analytics | Native/RN Spade, local vendor consent decisions, ComScore permission, Branch events/tracking mode, Sentry and Crashlytics collection controls, and the in-app web pages' Sentry, Sprig, comScore and Nielsen requests. Details below. |
 | Clean share links | Native/RN share intents and clipboard paths; removes known tracking parameters only on Twitch-owned hosts. Keeps timestamps, unknown parameters, fragments and unrelated URLs. |
 | Disable autoplay | Separate switches for fresh feed-preview defaults and automatic next-video/clip advancement. Manual playback stays available. |
 | Default video quality | Opt-in default rendition, Source initially. Saved choices including Auto win; unavailable renditions use Twitch's fallback. |
@@ -298,6 +298,32 @@ with Disable analytics on by default and both Auto-claim switches off by default
 points and lost watch streaks (issue 98). It is read per event, so it needs no restart. Turned off, Disable
 analytics blocks `minute-watched` too unless an Auto-claim switch is on.
 
+The in-app web pages (portals, see [In-app web pages](#in-app-web-pages-fix-web-page-errors)) run Twitch's web
+client, with trackers of their own. While Disable analytics is on, both portal WebViewClients'
+`shouldInterceptRequest` starts with `TwitchPortals.trackerResponse(request)`, which answers requests to these
+hosts and their subdomains with an empty 204 (CORS headers that let `fetch()` and its preflight through), so
+they never leave the device:
+- `sentry.io`: every portal's Sentry client (`o278969.ingest.us.sentry.io`, the Android DSN) for error reports and
+  a sampled share of traces (`sentry_tracing_threshold`, 0.01 in the bundled settings);
+- `sprig.com`: Sprig, which every portal loads once its first page is up, in the countries of the
+  `c3p_sprig_countries` setting (US and Canada by default) while Twitch's `sprig-sdk-load` experiment is on
+  (`api.sprig.com`, and `cdn.sprig.com` for its session-replay recorder);
+- `scorecardresearch.com` and `imrworldwide.com`: the comScore and Nielsen pixels of the mod view's player.
+
+What the portals don't do: their Spade events don't go to `spade.twitch.tv` but to `gql.twitch.tv/gql` as a
+`sendSpadeEvents` GraphQL mutation (`graphqlSpadeEndpoint` is `graphqlEndpoint`), with the same headers as the
+page's other GraphQL requests, and `shouldInterceptRequest` gets no request body to tell them apart, so they still
+go. `spade_url`, `beacon_url` (`beacon.twitch.tv`) and the `amazon_ads_url*` values (`s.amazon-adsystem.com`,
+`aax-eu.amazon-adsystem.com`) are in the settings bundled into `portals.html`, but no portal code sends to them
+(`spade_url` only filters the page's network benchmarks). Branch's web SDK waits for an opt-in no portal gives.
+Kasada (`k.twitchcdn.net`, with its `cloudflare.com/cdn-cgi/trace` lookup) protects sign-in and sign-up and is left
+alone. On the emulator, signed out, with a temporary log of every request in the hook, Sign up, the login portal
+and Web Content Licenses requested only `m.twitch.tv`, `assets.twitch.tv`, `gql.twitch.tv`,
+`static-cdn.jtvnw.net`, `k.twitchcdn.net` and `cloudflare.com` in the 15 to 40 seconds watched. Requests from the
+Sign up page to each tracker host, made over the WebView's DevTools socket, got the 204 (a JSON POST to Sentry's
+envelope endpoint passed its preflight), and with Debug logging on Lurk logged `analytics: answered a web page's
+request to <host> locally`; with Disable analytics off the hook wasn't consulted and the request went out.
+
 A blanket "disable Google Play services" switch is deliberately not offered. It would break push,
 Google and FIDO sign-in, Cast and billing.
 
@@ -454,6 +480,8 @@ it has handled it, and the `SslError` parameter takes the answer. The `fix_web_p
 default: it restores expected behavior) turns it off. A blocked request still fails in the page; when that is
 something the page can't work without (its scripts on `assets.twitch.tv`, or `gql.twitch.tv`), the page stays
 open and shows its own error or stays empty instead of closing.
+
+Disable analytics now covers the portals too (see [Trackers in Disable analytics](#trackers-in-disable-analytics)).
 
 Checked on the emulator (`emulator-5580`, Android 16, WebView 133) on 2026-11-20, signed out, with WebView told
 to resolve one host to 1.1.1.1 (`/data/local/tmp/webview-command-line`, read on debuggable images: `_

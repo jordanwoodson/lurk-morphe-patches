@@ -17,6 +17,7 @@ internal const val PORTALS = "Lio/github/jordanwoodson/extension/shared/twitch/T
 
 private val SSL_ERROR_PARAMETERS =
     listOf("Landroid/webkit/WebView;", "Landroid/webkit/SslErrorHandler;", "Landroid/net/http/SslError;")
+private val INTERCEPT_PARAMETERS = listOf("Landroid/webkit/WebView;", "Landroid/webkit/WebResourceRequest;")
 
 // Capacitor plugin (its name is kept: Capacitor finds plugins by class) that gives a portal's bridge Twitch's
 // WebViewClient, the one portals opened as a PortalFragment (Create Clip, Report, Sign up) load in.
@@ -34,7 +35,7 @@ private object PortalViewSslErrorFingerprint : Fingerprint(
 )
 
 /** A portal WebViewClient's overrides the portal patches hook. */
-internal class PortalClient(val type: String, val sslError: MutableMethod)
+internal class PortalClient(val type: String, val sslError: MutableMethod, val intercept: MutableMethod)
 
 private fun Method.isOverride(name: String, parameters: List<String>, returnType: String) =
     this.name == name && this.returnType == returnType && parameterTypes.map { it.toString() } == parameters &&
@@ -42,7 +43,7 @@ private fun Method.isOverride(name: String, parameters: List<String>, returnType
 
 /**
  * Both portal WebViewClients. Each overrides onReceivedSslError, which reports every certificate error to the
- * portal (a failed load: Create Clip closes).
+ * portal (a failed load: Create Clip closes), and shouldInterceptRequest, which serves the page's local assets.
  */
 context(context: BytecodePatchContext)
 internal fun portalClients(): List<PortalClient> {
@@ -65,6 +66,7 @@ internal fun portalClients(): List<PortalClient> {
         PortalClient(
             type,
             override("onReceivedSslError", SSL_ERROR_PARAMETERS, "V"),
+            override("shouldInterceptRequest", INTERCEPT_PARAMETERS, "Landroid/webkit/WebResourceResponse;"),
         )
     }
 }

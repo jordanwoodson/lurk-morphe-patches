@@ -54,6 +54,8 @@ TwitchPrivacy.allowAnalyticsCollectionBoxed
 TwitchPrivacy.disableBranchTracking
 TwitchPrivacy.keepSpadeBatch
 TwitchPrivacy.keepSpadeEvent
+# The in-app web pages' (portals') tracker requests, in both portal WebViewClients.
+TwitchPortals.trackerResponse
 
 # if fix_web_pages
 # Certificate errors on other hosts than a web page's own, in both portal WebViewClients.
