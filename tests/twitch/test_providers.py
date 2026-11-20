@@ -124,12 +124,12 @@ if __name__ == '__main__':
             'rn-pronouns-dispose', 'rn-frame-passive', 'rn-passive', 'cache-bound', 'demand-reacquire', 'queue-rejection',
             'describe'], extra=PLATFORM | JSON_DOUBLE)
 
-    # Issue 100: services loading independently of each other and of the shared pool, retries after a failure,
-    # and cancelled loads stored as nothing.
+    # Issues 97 and 100: FrankerFaceZ's fallback to BetterTTV's copy, services loading independently of each
+    # other and of the shared pool, retries after a failure, and cancelled loads stored as nothing.
     run('TwitchEmoteLoadingProbe', ['twitch/TwitchEmotes.java', 'twitch/TwitchThirdParty.java', 'twitch/TwitchImageCache.java', 'twitch/TwitchContext.java', 'twitch/TwitchEmoteFavorites.java',
         'twitch/TwitchBadges.java', 'twitch/TwitchPronouns.java', 'twitch/TwitchSevenTvBadges.java'],
         Path(__file__).with_name('TwitchEmoteLoadingProbe.java').read_text(),
-        ['independent', 'retry', 'cancelled'], extra=LOADING | JSON_DOUBLE)
+        ['ffz-fallback', 'independent', 'retry', 'cancelled'], extra=LOADING | JSON_DOUBLE)
 
     # Completion ordering uses tokenized HTTP bodies and a drawing boundary; cache/scheduling code is production.
     completion=dict(PLATFORM)

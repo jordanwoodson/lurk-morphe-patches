@@ -36,7 +36,7 @@ import io.github.jordanwoodson.extension.shared.settings.Settings;
  * Emote lists are fetched in the background per channel and cached in memory; until they arrive, or if a
  * request fails, emote codes stay plain text. Each service loads on a lane of its own, so one that hangs can't
  * hold up another's lists, and a list that failed is tried again within seconds (then less often), keeping
- * whatever it had.
+ * whatever it had. While FrankerFaceZ's API doesn't answer, its lists come from BetterTTV's copy of them.
  */
 @SuppressWarnings({"unused", "rawtypes", "unchecked"})
 public final class TwitchEmotes {
@@ -73,6 +73,19 @@ public final class TwitchEmotes {
     private static final String CDN_7TV = "https://cdn.7tv.app/emote/";
     private static final String CDN_BTTV = "https://cdn.betterttv.net/emote/";
     private static final String CDN_FFZ = "https://cdn.frankerfacez.com/emote/";
+    /** BetterTTV's copy of FrankerFaceZ's emote images, for the lists that came from BetterTTV's copy. */
+    private static final String CDN_FFZ_MIRROR = "https://cdn.betterttv.net/frankerfacez_emote/";
+    /** The ID tag of a FrankerFaceZ emote from BetterTTV's copy: its images come from {@link #CDN_FFZ_MIRROR}. */
+    private static final char FFZ_MIRROR_TAG = 'z';
+    private static final String FFZ_API = "https://api.frankerfacez.com/v1/";
+    private static final String FFZ_MIRROR_API = "https://api.betterttv.net/3/cached/frankerfacez/";
+    /**
+     * How long FrankerFaceZ's API gets before BetterTTV's copy is asked instead. It normally answers within a
+     * second or two; when its origin is down, Cloudflare holds the request for longer than this before its 522.
+     */
+    private static final int FFZ_READ_TIMEOUT_MS = 8_000;
+    /** After FrankerFaceZ's API failed, how long its lists come from BetterTTV's copy first. */
+    private static final long FFZ_DOWN_MS = 10 * 60_000L;
 
     private static final String GLOBAL = "global";
     private static final long CHANNEL_TTL_MS = 10 * 60_000L;
@@ -95,6 +108,8 @@ public final class TwitchEmotes {
     private static final java.util.concurrent.ThreadPoolExecutor[] LANES = {
             TwitchThirdParty.lane("7tv", 2, 32), TwitchThirdParty.lane("bttv", 2, 32), TwitchThirdParty.lane("ffz", 2, 32),
     };
+    /** Until when (elapsed realtime) FrankerFaceZ's API counts as down, so its lists come from BetterTTV's copy first. */
+    private static volatile long ffzDownUntil;
     /** tag + provider emote ID -> width / height, for emotes that aren't square. */
     private static final Map<String, Float> RATIOS = Collections.synchronizedMap(new LinkedHashMap<String, Float>() {
         @Override protected boolean removeEldestEntry(Map.Entry<String, Float> eldest) { return size() > 8192; }
@@ -580,6 +595,7 @@ public final class TwitchEmotes {
     }
 
     private static int providerOf(char tag) {
+        if (tag == FFZ_MIRROR_TAG) return FFZ;
         for (int provider = 0; provider < TAGS.length; provider++) {
             if (TAGS[provider] == tag) return provider;
         }
@@ -832,12 +848,45 @@ public final class TwitchEmotes {
                         ? TwitchThirdParty.getJson("https://api.betterttv.net/3/cached/emotes/global", TwitchEmotes::parseBttvList, NONE)
                         : TwitchThirdParty.getJson("https://api.betterttv.net/3/cached/users/twitch/" + channel, TwitchEmotes::parseBttvUser, NONE);
             case FFZ:
-                return channel == null
-                        ? TwitchThirdParty.getJson("https://api.frankerfacez.com/v1/set/global", TwitchEmotes::parseFfz, NONE)
-                        : TwitchThirdParty.getJson("https://api.frankerfacez.com/v1/room/id/" + channel, TwitchEmotes::parseFfz, NONE);
+                return fetchFfz(channel);
             default:
                 return NONE;
         }
+    }
+
+    /**
+     * FrankerFaceZ's list (issue 97). When its API fails (no answer within {@link #FFZ_READ_TIMEOUT_MS}, an error
+     * status other than 404, a broken body), the same list comes from BetterTTV's copy of it, which BetterTTV's
+     * own extension uses too; for {@link #FFZ_DOWN_MS} after that the copy is asked first. A 404 is an answer (a
+     * channel FrankerFaceZ doesn't know), not a failure.
+     */
+    static Emote[] fetchFfz(String channel) throws IOException {
+        String direct = FFZ_API + (channel == null ? "set/global" : "room/id/" + channel);
+        String copy = FFZ_MIRROR_API + (channel == null ? "emotes/global" : "users/twitch/" + channel);
+        boolean copyFirst = SystemClock.elapsedRealtime() < ffzDownUntil;
+        String failures = null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            boolean fromCopy = copyFirst == (attempt == 0);
+            try {
+                Emote[] emotes = fromCopy
+                        ? TwitchThirdParty.getJson(copy, TwitchEmotes::parseFfzMirror, NONE)
+                        : TwitchThirdParty.getJson(direct, TwitchEmotes::parseFfz, NONE, FFZ_READ_TIMEOUT_MS);
+                if (!fromCopy && copyFirst) Logger.i("emotes: FrankerFaceZ's API answers again");
+                if (!fromCopy) ffzDownUntil = 0;
+                return emotes;
+            } catch (TwitchThirdParty.Cancelled e) {
+                throw e;
+            } catch (IOException | RuntimeException e) {
+                if (!fromCopy) {
+                    ffzDownUntil = SystemClock.elapsedRealtime() + FFZ_DOWN_MS;
+                    if (!copyFirst) Logger.w("emotes: FrankerFaceZ's API unavailable, using BetterTTV's copy of its lists: "
+                            + reason(e, channel));
+                }
+                String failure = (fromCopy ? "BetterTTV's copy: " : "FrankerFaceZ: ") + e;
+                failures = failures == null ? failure : failures + "; " + failure;
+            }
+        }
+        throw new IOException(failures);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -960,11 +1009,28 @@ public final class TwitchEmotes {
     /** BetterTTV cached v3 /emotes/global: [ { "id", "code", "animated", "modifier" } ]. */
     static Emote[] parseBttvList(JsonReader reader) throws IOException {
         List<Emote> out = new ArrayList<>();
-        parseBttvEmotes(reader, out);
+        parseBttvEmotes(reader, out, TAGS[BTTV]);
+        return out.toArray(NONE);
+    }
+
+    /**
+     * BetterTTV's copy of FrankerFaceZ's lists, /3/cached/frankerfacez/users/twitch/{id} and /emotes/global:
+     * [ { "id", "code", "animated", "modifier", "user": { "displayName" }, "images": {...} } ], with FrankerFaceZ's
+     * emote IDs and BetterTTV's format. The global one holds FrankerFaceZ's default sets. The emotes get the
+     * {@link #FFZ_MIRROR_TAG}, so their images come from BetterTTV's copy too. It has no sizes: a wide emote keeps
+     * its width only once FrankerFaceZ's own list named it.
+     */
+    static Emote[] parseFfzMirror(JsonReader reader) throws IOException {
+        List<Emote> out = new ArrayList<>();
+        parseBttvEmotes(reader, out, FFZ_MIRROR_TAG);
         return out.toArray(NONE);
     }
 
     private static void parseBttvEmotes(JsonReader reader, List<Emote> out) throws IOException {
+        parseBttvEmotes(reader, out, TAGS[BTTV]);
+    }
+
+    private static void parseBttvEmotes(JsonReader reader, List<Emote> out, char tag) throws IOException {
         if (!TwitchThirdParty.beginArray(reader)) return;
         while (reader.hasNext()) {
             if (!TwitchThirdParty.beginObject(reader)) continue;
@@ -997,7 +1063,7 @@ public final class TwitchEmotes {
             }
             reader.endObject();
             // Modifiers (w!, h!, ...) change the emote next to them in BetterTTV's own client; skip them.
-            if (!modifier) add(out, BTTV, id, code, animated, 0, owner);
+            if (!modifier) add(out, tag, id, code, animated, 0, owner);
         }
         reader.endArray();
     }
@@ -1109,6 +1175,11 @@ public final class TwitchEmotes {
 
     private static void add(List<Emote> out, int provider, String id, String code, boolean animated, float ratio,
                             String owner) {
+        add(out, TAGS[provider], id, code, animated, ratio, owner);
+    }
+
+    private static void add(List<Emote> out, char tag, String id, String code, boolean animated, float ratio,
+                            String owner) {
         if (id == null || code == null || id.isEmpty() || id.length() > 64 || code.isEmpty() || code.length() > 100) return;
         for (int i = 0; i < id.length(); i++) {
             char c = id.charAt(i);
@@ -1117,7 +1188,6 @@ public final class TwitchEmotes {
         for (int i = 0; i < code.length(); i++) {
             if (Character.isWhitespace(code.charAt(i))) return;
         }
-        char tag = TAGS[provider];
         out.add(new Emote(code, ID_PREFIX + tag + (animated ? 'a' : 's') + '_' + id, owner));
         if (ratio > 0 && (ratio < 0.95f || ratio > 1.05f)) RATIOS.put(tag + id, ratio);
     }
@@ -1140,6 +1210,9 @@ public final class TwitchEmotes {
         } else if (url.startsWith(CDN_FFZ)) {
             provider = FFZ;
             cdn = CDN_FFZ;
+        } else if (url.startsWith(CDN_FFZ_MIRROR)) {
+            provider = FFZ;
+            cdn = CDN_FFZ_MIRROR;
         } else {
             return null;
         }
@@ -1187,9 +1260,11 @@ public final class TwitchEmotes {
                 String size = scale <= 1 ? "1x" : scale <= 2 ? "2x" : "3x";
                 return CDN_BTTV + raw + "/" + size + (animated ? ".gif" : ".png");
             }
-            case 'f': {
+            case 'f':
+            case FFZ_MIRROR_TAG: {
+                // BetterTTV's copy has FrankerFaceZ's paths: /<id>/<1|2|4> and /<id>/animated/<1|2|4>.gif.
                 String size = scale <= 1 ? "1" : scale <= 2 ? "2" : "4";
-                return CDN_FFZ + raw + (animated ? "/animated/" + size + ".gif" : "/" + size);
+                return (tag == 'f' ? CDN_FFZ : CDN_FFZ_MIRROR) + raw + (animated ? "/animated/" + size + ".gif" : "/" + size);
             }
             default:
                 return null;
@@ -1211,6 +1286,10 @@ public final class TwitchEmotes {
         } else if (url.startsWith(CDN_FFZ)) {
             tag = 'f';
             start = CDN_FFZ.length();
+        } else if (url.startsWith(CDN_FFZ_MIRROR)) {
+            // The same emote IDs: a width FrankerFaceZ's own list gave still applies.
+            tag = 'f';
+            start = CDN_FFZ_MIRROR.length();
         } else {
             return null;
         }

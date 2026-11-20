@@ -1235,6 +1235,39 @@ and removed six seconds later: both 7TV lists failed at once and again 6 s later
 the next try 16 s after that. With `api.frankerfacez.com` blocked instead, BetterTTV's and 7TV's lists arrived 1 to
 5 s after chat connected while FrankerFaceZ's requests were still waiting.
 
+**FrankerFaceZ's fallback** ([issue #97](https://github.com/jordanwoodson/lurk-morphe-patches/issues/97):
+FrankerFaceZ emotes were text while its API answered 522s). FrankerFaceZ's emote lists fall back to BetterTTV's copy
+of them, the one BetterTTV's own extension uses: `api.betterttv.net/3/cached/frankerfacez/users/twitch/<id>` and
+`/emotes/global`. When `api.frankerfacez.com` gives no answer within 8 s (it normally answers within a second or
+two), answers with an error other than 404 (a 404 is a channel it doesn't know), or sends a body that doesn't parse,
+the same list comes from the copy, and for the next 10 minutes the copy is asked first, so other channels don't wait
+8 s each. Checked on 2026-11-20 against six channels and the global list: the copy has FrankerFaceZ's emote IDs,
+codes, animated flags and modifiers in BetterTTV's list format (`[{id, code, animated, modifier, user:
+{displayName}, images}]`), and its global list is FrankerFaceZ's default sets. Emotes from the copy get IDs
+`lurkz…` instead of `lurkf…`, and their images come from BetterTTV's copy of FrankerFaceZ's CDN,
+`cdn.betterttv.net/frankerfacez_emote/<id>/<1|2|4>` and `/animated/<1|2|4>.gif` (the same files), so they keep
+working when `cdn.frankerfacez.com` fails too; Lurk's image cache keeps them like any `cdn.betterttv.net` image, and
+*Emote and badge info* names them FrankerFaceZ emotes. The copy has no sizes, so a wide emote is drawn in a square
+box unless FrankerFaceZ's own list gave its width earlier in the session. The *FrankerFaceZ emotes* summary names
+`api.betterttv.net` and `cdn.betterttv.net`, since the fallback sends them the channel's ID. FrankerFaceZ's badges
+have no such copy (BetterTTV doesn't mirror FrankerFaceZ's badge list), so they stay away while FrankerFaceZ is
+down. A request that can't even complete its TLS handshake is tried on each of the host's addresses by Android's
+HTTP stack, each with its own timeout, so then the first fallback takes longer (24 s on the emulator below, three
+addresses).
+
+`TwitchEmoteLoadingProbe` (in `test_providers.py`) also runs FrankerFaceZ answering 522: lists from the copy,
+`lurkz` IDs, their CDN URLs, the info sheet's naming, the copy asked first for the next channel and FrankerFaceZ
+again ten minutes later with its own IDs and widths, a 404 kept as an empty list, and both failing counted as one
+failure. `bin/test-twitch-providers` parses the copy's format with Android's `JsonReader` and runs the fallback over
+controlled HTTPS on ART; `bin/test-twitch-chat-style` checks the info sheet's larger copy for the copy's image URLs.
+On the emulator, with `api.frankerfacez.com` blocked by an `iptables` rule matching its TLS server name: on lirik's
+channel FrankerFaceZ's channel and global lists came from the copy (18 and 11 emotes) 24 s after chat connected,
+once all three addresses had timed out, with the warning above; switching to pokelawls then took the copy straight
+away (62 emotes, 0.1 s), and FrankerFaceZ-only emotes drawn in its chat (`monkaW`) were in Lurk's image cache under
+their `cdn.betterttv.net/frankerfacez_emote` URLs. Before the rule, the emulator's requests to FrankerFaceZ had timed
+out on their own and fell back the same way (`PepeLa`, `monkaOMEGA` drawn from the copy). With the rule removed and
+the app restarted, the lists and the badge list came from FrankerFaceZ again.
+
 VOD replay splits its named message tokens. React Native chat gets `emotes=` ranges added to incoming
 IRC frames, and its `ImageSource` maps the same URLs. Compiled RN row wrappers additionally enrich
 history with cached emote/badge/pronoun snapshots. Offsets use Unicode code points, matching Twitch's
