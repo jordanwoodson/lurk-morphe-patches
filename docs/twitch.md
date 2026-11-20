@@ -810,7 +810,8 @@ clears the `ShowStoriesShelf` argument and filters the Following page's section 
 channels you follow" shelf of past streams on the Live tab, switch *Hide recent streams*). The last two were
 checked on a phone only as far as Home still rendering with the switches on: the test account can't follow
 channels (Twitch asks for a phone number first), so neither section was there to hide. Its *Hide Live tab* switch
-removes the Live tab itself ([Hide Live tab](#hide-live-tab)). *Hide mature
+removes the Live tab itself ([Hide Live tab](#hide-live-tab)); its *Hide Stories* switch on the React Native Home is
+described in [Hide Stories](#hide-stories). *Hide mature
 content warning* makes the label-acknowledgement check return true without saving anything; age,
 region, guardian and account gates still apply.
 
@@ -879,6 +880,51 @@ the switch on and off. The test account isn't offered Turbo, so the button itsel
 
 `bin/test-twitch-highlights` runs the real classes on ART with each switch on and off. Following
 sections, Hype Train and the RN paths are verified only statically.
+
+### Hide Stories
+
+*Hide Home sections*' *Hide Stories* switch (on by default, restart) hides the Stories button and shelf at the top of
+Home. Natively it clears the `ShowStoriesShelf` argument. React Native Home (phones, signed in) has no Stories switch of
+its own: `DiscoveryFeedContent` reads `recaps = useRecapsShelfEnabled()` and shows Stories while it is false
+(`showStoriesShelf = !recaps`). Stock Twitch with its recaps shelf on is therefore the model: no shelf, and none of the
+layout and scrolling that make room for one. `patches/.../twitch/home/HermesHomeStories.kt` changes three places in
+`DiscoveryFeedContent`, all under `hide_home_stories`:
+
+- `showStoriesShelf`: the `Not` negates the hook function instead of its result, so the value is false for the top
+  chrome (`FeedTopChrome`'s `showStoriesShelf`) and for `useStoriesShelf` (`shelfPresent`), and the hook still runs.
+  Hiding the shelf only in the chrome, as up to v1.17.1, left `useStoriesShelf` with a shelf, and a pull at the top of
+  the feed revealed the empty shelf instead of refreshing
+  ([issue #75](https://github.com/jordanwoodson/lurk-morphe-patches/issues/75)).
+- The shelf offset, `recaps ? 0 : shelfHeight + TABS_BAR_MARGIN_TOP`. `FeedTopChrome` is translated by
+  `shelfProgress` from `-offset` (shelf collapsed) to 0 (open), and the Following and Live pages from 0 to `offset`.
+  `TABS_BAR_MARGIN_TOP` (28 dp) is the gap the chrome puts above its tabs only while `showStoriesShelf` is on.
+  `useStoriesShelf` starts with the shelf open and the feed pinned, so the feed's first drag up collapses the shelf
+  even when there is none (`shelfHeight` 0). With the offset still 28, that moved the tabs 28 dp up under the status
+  bar, and without a shelf to reveal nothing moved them back until Home was rebuilt
+  ([issue #95](https://github.com/jordanwoodson/lurk-morphe-patches/issues/95)). The branch's `JmpTrue end, recaps`
+  is now `JmpFalse end, showStoriesShelf`: the same test with the switch off, offset 0 with it on.
+- `FollowingTab`'s `feedPinOffsetRef`, `recaps ? undefined : feedPinOffsetRef`, changes the same way. With the ref,
+  Following's scroll handler holds its list at the pin until a drag has collapsed the shelf, which is now invisible.
+
+The other reads of `recaps` keep Twitch's value: the recap cards and `RecapsShelfHeader` belong to the recaps shelf
+(*Hide recent streams*), and `useStoriesCreationAccess` still gets the account's ID. The patch checks that nothing
+writes `showStoriesShelf`'s register between the `Not` and the two branches.
+
+`bin/test-twitch-interface-hermes` runs `tests/twitch/HomeStoriesProbe.kt`, which runs the edited bytecode of the
+three places in the stock bundle for both switch positions and both values of the recaps flag: with the switch off
+every value is Twitch's, with it on `showStoriesShelf` is false, the offset 0 and Following has no pin, whatever the
+flag says.
+
+Checked on 2026-11-20 on the emulator with the issue reporter's Lurk switches, in a throwaway build (not part of the
+bundle) that shows React Native Home signed out. In 32.1.0 a phone gets it only with an account, so the build
+returned true from the Ultralight availability check (the method with the `isEnabled()Z` string), hid the second
+splash, which waits for a signed-in feed, and read `useAuth().isLoggedIn` as true in `DiscoveryFeedContent`. The feed
+and its gestures then render, though its requests fail and the pages show their error states. Before the fix, one drag
+up on Following moved the tabs under the status bar, cut in half as in the issue's screenshot, and they stayed there
+after scrolling back up and on the Live tab; the pages also started 28 dp lower. With the fix the tabs didn't move.
+With *Hide Stories* off, before and after the fix, the tabs sat under the (empty) Stories shelf, rose to just below
+the status bar when it collapsed and came back down when a pull revealed it. Not checked: a signed-in feed with items,
+and pull to refresh, which the error states don't offer.
 
 ### Hide Live tab
 
@@ -1836,7 +1882,8 @@ for the target methods:
 - `bin/test-twitch-interface-hermes <stock.bundle> [patched.bundle]`: production transforms and
   actual caller instructions for the two-tab model/pager, initial selection, swipe
   bounds, explicit native clip callbacks and empty-feed initial-effect deduplication, and Hide Live tab with
-  Hide Clips in all four combinations (`HomeLiveTabProbe.kt`, see [Hide Live tab](#hide-live-tab)).
+  Hide Clips in all four combinations (`HomeLiveTabProbe.kt`, see [Hide Live tab](#hide-live-tab)), and Hide Stories
+  with Twitch's recaps flag off and on (`HomeStoriesProbe.kt`, see [Hide Stories](#hide-stories)).
 - `bash bin/test-twitch-emotes <patched.apk>`: the emote picker presenter's section building and the
   autocomplete filter with *Emotes in the picker* on and off (`EmotePickerArtProbe`).
 - `bash bin/test-twitch-drops <patched.apk>`: *Auto-claim Drops* through the drops notification's own Claim
