@@ -34,7 +34,9 @@ import io.github.jordanwoodson.extension.shared.settings.Settings;
  * points it at the provider's CDN. VOD chat replay gets the same treatment on its message tokens, and
  * React Native chat on the emote tags of the chat lines it receives.
  * Emote lists are fetched in the background per channel and cached in memory; until they arrive, or if a
- * request fails, emote codes stay plain text.
+ * request fails, emote codes stay plain text. Each service loads on a lane of its own, so one that hangs can't
+ * hold up another's lists, and a list that failed is tried again within seconds (then less often), keeping
+ * whatever it had.
  */
 @SuppressWarnings({"unused", "rawtypes", "unchecked"})
 public final class TwitchEmotes {
@@ -75,7 +77,8 @@ public final class TwitchEmotes {
     private static final String GLOBAL = "global";
     private static final long CHANNEL_TTL_MS = 10 * 60_000L;
     private static final long GLOBAL_TTL_MS = 60 * 60_000L;
-    private static final long RETRY_MS = 60_000L;
+    /** When a list that failed is tried again: after its first, second, third and every later failure in a row. */
+    private static final long[] RETRY_MS = {5_000L, 15_000L, 30_000L, 60_000L};
     private static final int MAX_CHANNELS = 12;
 
     private static final Emote[] NONE = new Emote[0];
@@ -85,6 +88,13 @@ public final class TwitchEmotes {
     /** provider:scope -> the provider's emotes for a channel ID or "global". */
     private static final ConcurrentHashMap<String, Entry> SETS = new ConcurrentHashMap<>();
     private static final Set<String> LOADING = ConcurrentHashMap.newKeySet();
+    /**
+     * One lane per service, two threads each: FrankerFaceZ's API hanging until the read timeout (as in its 522
+     * outages) used to hold the shared pool's threads while 7TV's and BetterTTV's channel lists waited behind it.
+     */
+    private static final java.util.concurrent.ThreadPoolExecutor[] LANES = {
+            TwitchThirdParty.lane("7tv", 2, 32), TwitchThirdParty.lane("bttv", 2, 32), TwitchThirdParty.lane("ffz", 2, 32),
+    };
     /** tag + provider emote ID -> width / height, for emotes that aren't square. */
     private static final Map<String, Float> RATIOS = Collections.synchronizedMap(new LinkedHashMap<String, Float>() {
         @Override protected boolean removeEldestEntry(Map.Entry<String, Float> eldest) { return size() > 8192; }
@@ -107,14 +117,17 @@ public final class TwitchEmotes {
     // ---------------------------------------------------------------------------------------------
     // Injection points
 
-    /** Injection point: chat starts connecting to {@code channel} (a Tuid). Starts loading its emotes early. */
+    /**
+     * Injection point: chat starts connecting to {@code channel} (a Tuid). Starts loading its emotes early; a list
+     * that failed is tried again now rather than at its next retry time.
+     */
     public static void onChatChannel(Object channel) {
         try {
             if (channel != null) chatChannel = channel;
             // Once per start, whether or not a service is on: expired images go even after the switches went off.
             if (IMAGES_CHECKED.compareAndSet(false, true)) TwitchThirdParty.run("image cache", TwitchImageCache::maintain);
             int mask = enabledMask();
-            if (mask != 0 && channel != null) ensure(String.valueOf(channel), mask);
+            if (mask != 0 && channel != null) ensure(String.valueOf(channel), mask, true);
             if (channel != null) TwitchSevenTvBadges.onChannel(String.valueOf(channel));
         } catch (RuntimeException e) {
             Logger.d("emotes: prefetch failed: " + e);
@@ -711,29 +724,39 @@ public final class TwitchEmotes {
     }
 
     private static void ensure(String channel, int mask) {
+        ensure(channel, mask, false);
+    }
+
+    /**
+     * Loads the channel's and the global lists of each service in {@code mask} that aren't loaded or are due.
+     * {@code joined}: chat just connected to the channel, so a list that failed is tried again now.
+     */
+    private static void ensure(String channel, int mask, boolean joined) {
         if (!isTwitchId(channel)) return;
         for (int provider = 0; provider < KEYS.length; provider++) {
             if ((mask & (1 << provider)) == 0) continue;
-            ensure(provider, channel);
-            ensure(provider, GLOBAL);
+            ensure(provider, channel, null, joined);
+            ensure(provider, GLOBAL, null, joined);
         }
     }
 
-    private static void ensure(int provider, String scope) { ensure(provider,scope,null); }
-
     private static void ensure(int provider, String scope, java.util.function.BooleanSupplier wanted) {
+        ensure(provider, scope, wanted, false);
+    }
+
+    private static void ensure(int provider, String scope, java.util.function.BooleanSupplier wanted, boolean joined) {
         String key = key(provider, scope);
         TwitchThirdParty.Demand demand;
         synchronized (RN_REQUESTS) {
             Entry entry = SETS.get(key);
-            if (entry != null && SystemClock.elapsedRealtime() < entry.expires) return;
+            if (entry != null && !entry.due(SystemClock.elapsedRealtime(), joined)) return;
             demand = RN_REQUESTS.get(key);
             if (demand != null) { demand.add(wanted); return; }
             demand = new TwitchThirdParty.Demand(); demand.add(wanted);
             RN_REQUESTS.put(key,demand); LOADING.add(key);
         }
         TwitchThirdParty.Demand pending = demand;
-        TwitchThirdParty.run(key, () -> Settings.isEnabled(KEYS[provider]) && pending.getAsBoolean(),
+        TwitchThirdParty.run(LANES[provider], key, () -> Settings.isEnabled(KEYS[provider]) && pending.getAsBoolean(),
             () -> load(provider, scope, key), () -> {
                 synchronized (RN_REQUESTS) { RN_REQUESTS.remove(key); LOADING.remove(key); }
             });
@@ -745,17 +768,34 @@ public final class TwitchEmotes {
             Emote[] emotes = fetch(provider, global ? null : scope);
             put(key, emotes, global ? GLOBAL_TTL_MS : CHANNEL_TTL_MS);
             Logger.d("emotes: " + NAMES[provider] + " " + scope + ": " + emotes.length);
+        } catch (TwitchThirdParty.Cancelled e) {
+            // Nothing wants the list any more. Not a failure: whoever asks next starts a new request at once.
         } catch (IOException | RuntimeException e) {
+            // The list keeps what it had (a channel that never loaded has none), and is tried again soon: a
+            // failure on joining a channel used to leave only the global emotes for a whole minute.
             Entry old = SETS.get(key);
-            put(key, old != null ? old.emotes : NONE, RETRY_MS);
+            int failures = old == null ? 1 : old.failures + 1;
+            long retry = RETRY_MS[Math.min(failures, RETRY_MS.length) - 1];
+            put(key, old != null ? old.emotes : NONE, retry, failures);
             // Always written, since the emotes then stay text and a bug report needs the reason; without the
-            // channel's ID. At most once a minute per list: the next try waits RETRY_MS.
-            String reason = global ? String.valueOf(e) : String.valueOf(e).replace(scope, "<channel>");
-            Logger.w("emotes: " + NAMES[provider] + (global ? " global" : " channel") + " list unavailable: " + reason);
+            // channel's ID. Spaced by the retry times, at most once a minute per list after the first minute.
+            Logger.w("emotes: " + NAMES[provider] + (global ? " global" : " channel") + " list unavailable (failure "
+                    + failures + ", next try in " + retry / 1000 + " s): " + reason(e, global ? null : scope));
         }
     }
 
-    private static synchronized void put(String key, Emote[] emotes, long ttl) {
+    /** {@code e} as text for the log, with the channel's ID left out. */
+    private static String reason(Throwable e, String channel) {
+        String reason = String.valueOf(e);
+        return channel == null ? reason : reason.replace(channel, "<channel>");
+    }
+
+    /** Stores a list the service sent. */
+    private static void put(String key, Emote[] emotes, long ttl) {
+        put(key, emotes, ttl, 0);
+    }
+
+    private static synchronized void put(String key, Emote[] emotes, long ttl, int failures) {
         long now = SystemClock.elapsedRealtime();
         int limit = (MAX_CHANNELS + 1) * KEYS.length;
         while (!SETS.containsKey(key) && SETS.size() >= limit) {
@@ -768,7 +808,7 @@ public final class TwitchEmotes {
             if (oldest == null) break;
             SETS.remove(oldest);
         }
-        SETS.put(key, new Entry(emotes, now + ttl));
+        SETS.put(key, new Entry(emotes, now + ttl, failures, failures > 0 ? now : 0));
         GENERATION.incrementAndGet();
     }
 
@@ -1202,11 +1242,23 @@ public final class TwitchEmotes {
 
     private static final class Entry {
         final Emote[] emotes;
+        /** When the list is loaded again (elapsed realtime): its time to live, or the next try after a failure. */
         final long expires;
+        /** Failed loads in a row; 0 once the service answered. */
+        final int failures;
+        /** When the last of those failed (elapsed realtime), or 0. */
+        final long failed;
 
-        Entry(Emote[] emotes, long expires) {
+        Entry(Emote[] emotes, long expires, int failures, long failed) {
             this.emotes = emotes;
             this.expires = expires;
+            this.failures = failures;
+            this.failed = failed;
+        }
+
+        /** Whether to load it now: it expired, or it failed and chat just joined the channel (not right after). */
+        boolean due(long now, boolean joined) {
+            return now >= expires || joined && failures > 0 && now >= failed + RETRY_MS[0];
         }
     }
 

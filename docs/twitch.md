@@ -1209,6 +1209,32 @@ channel with no set on a service still gets the service's global emotes; a 404 f
 not a failure (checked on a channel none of the three services knows: three empty channel lists, then the
 global ones). The landscape one-chat overlay of the native theatre is native too and gets the same emotes.
 
+**Loading and failures** ([issue #100](https://github.com/jordanwoodson/lurk-morphe-patches/issues/100): a
+channel's emotes stayed text and the picker had only the global ones). A channel's lists load when chat connects to
+it and again whenever a chat line, the picker or autocomplete finds them expired. Up to v1.20.0 every list, the
+badge lists, pronoun badges and *Emote and badge info*'s images shared three background threads; a list that failed
+stayed empty for a minute, while the global lists kept what they had, so a failure on joining a channel left
+exactly the global emotes; and a request that got no answer held its thread for the 15 s read timeout. On
+2026-11-19, when FrankerFaceZ's API answered Cloudflare 522s, its channel list, global list and badge list each did
+that once a minute (the badges every two), so the three threads could all be waiting on it while 7TV's and
+BetterTTV's lists for the channel being opened queued behind them. No log came with the report, so which of these
+the reporter hit isn't known. FrankerFaceZ's API is still slow at times: on 2026-11-20 its badge list took 32 s to
+answer this host, and the emulator's channel and global requests once got no answer within 8 s.
+
+Now each service's lists load on a lane of their own (`TwitchEmotes.LANES`, two threads and a queue of 32 each), so
+a service that hangs only delays its own lists. A list that fails keeps what it had and is tried again after 5, 15
+and 30 s, then every minute; when chat joins the channel again, a failed list is tried at once (unless it failed in
+the last 5 s). Every failure is logged as a warning (tag `lurk`, without the channel's ID) with the reason and when
+the next try is. A request given up because its React Native rows went away stores nothing, so the next caller asks
+straight away. `tests/twitch/test_providers.py` runs the loader on the JVM with controlled HTTPS answers and clock
+(`TwitchEmoteLoadingProbe`): FrankerFaceZ hanging with the shared pool busy while 7TV's and BetterTTV's channel and
+global lists of two channels load; the retry times, a failing list keeping its emotes and a channel join retrying;
+and a cancelled load storing nothing. On the emulator (signed out, 7TV, BetterTTV and FrankerFaceZ emotes and
+badges on, Debug logging), with an `iptables` rule resetting connections to `7tv.io` while lirik's channel opened
+and removed six seconds later: both 7TV lists failed at once and again 6 s later, and arrived (998 channel emotes) on
+the next try 16 s after that. With `api.frankerfacez.com` blocked instead, BetterTTV's and 7TV's lists arrived 1 to
+5 s after chat connected while FrankerFaceZ's requests were still waiting.
+
 VOD replay splits its named message tokens. React Native chat gets `emotes=` ranges added to incoming
 IRC frames, and its `ImageSource` maps the same URLs. Compiled RN row wrappers additionally enrich
 history with cached emote/badge/pronoun snapshots. Offsets use Unicode code points, matching Twitch's

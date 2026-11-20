@@ -36,7 +36,7 @@ need it rather than skipping them.
 | `tests/twitch/test_playlist_proxy.py` | Playlist proxy channel-only URLs and token omission, malformed paths, existing bare/encoded-URL modes, and off/empty settings. |
 | `tests/twitch/test_vod_requests.py` | *VOD chapters* requests: shared loads, retries, bounded queues and waiters, player and owner changes, switching off. |
 | `tests/twitch/test_privacy_consent.py` | Twitch's privacy and consent helper. |
-| `tests/twitch/test_providers.py` | Third-party emote, badge and pronoun providers: scheduling, ownership, both response orders. |
+| `tests/twitch/test_providers.py` | Third-party emote, badge and pronoun providers: scheduling, ownership, both response orders; emote lists loading on a lane per service and retries after a failure (issue 100). |
 | `tests/twitch/test_seventv_badges.py` | *7TV badges*: cosmetic and entitlement events into the badge pipeline (native models, React Native snapshots, Emote and badge info, deletes, the holder bound, the switch off), and the WebSocket client against a local server: handshake, masking, 2- and 8-byte lengths, ping, fragmentation, resubscribing to another channel, close, and no connection while off or without a channel. |
 | `tests/twitch/test_image_cache.py` | The third-party image cache under Glide's network fetcher (issue 71): only third-party image URLs kept, a complete body stored and served again (also after a restart), partial, failed, non-image and oversized bodies not stored, the disk and memory limits (least recently used out first) and expiry. |
 | `tests/twitch/test_rn_chat.py` | The compiled React Native chat helpers, the chat overlay's context and the landscape chat column's opacity. |
