@@ -274,6 +274,10 @@ TwitchPlayer.seekSeconds
 TwitchPlayer.swipeIntercept
 TwitchPlayer.swipeTouch
 
+# if latency_badge
+# Latency badge: the IVS wrapper's ID3 timing tags, read while the player's own latency is negative (issue 99).
+TwitchLatency.id3
+
 # if normal_latency
 TwitchPlayer.loadLatency
 TwitchPlayer.lowLatency

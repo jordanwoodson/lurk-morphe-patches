@@ -485,8 +485,19 @@ only for a positive
 latency or a negative one below -1 (-1 means no player, 0 a stream still loading). After switching between
 live channels, IVS can keep reporting a negative latency (-28 to -96 s on the emulator in 32.1.0, also with
 only this patch applied) until the stream reloads, and Twitch's own stats panel shows that as 0 (issue 77).
-The pill then reads "? s"; a tap's Retry restored a normal 1.9 s at once. Signed in on a phone, about 30
-switches between live channels gave "? s" four times, and each tap tried brought it back to 1.4–1.6 s. Twitch's native player has no seek to live (only the React Native theatre has a DVR "jump to live"
+A tap's Retry restored a normal 1.9 s at once. Signed in on a phone, about 30 switches between live channels
+gave a negative reading four times, and each tap tried brought it back to 1.4–1.6 s.
+
+Until the stream reloads, the pill shows Twitch's own delay behind the broadcast instead (issue 99). Twitch
+tags each segment with a timed ID3 `TXXX` frame whose `ld_lat_data` command carries `transc_r`, the
+transcoder's wall clock time; as the cue plays, Twitch's parser (found by `ld_lat_data`, `stream_offset` and
+`transc_r`) stores now minus `transc_r` in the event the IVS wrapper makes from the cue (the wrapper method found
+by `ID3`, `TXXX`, `stream_loudness` and `cmd`). Right after that event's constructor, `TwitchLatency.id3` keeps
+the delay per wrapper, read through a bridge stub, and the badge reads its presenter's wrapper (the field its
+latency getter reads) through another. The pill uses a tag that played in the last 6 s only while IVS reports
+below -1, and reads "? s" only until the first tag arrives. On the emulator, signed out, 8 switches between live
+channels: IVS read 1.1–2.4 s and the tags 0.3–0.6 s less each time, and on the switch where IVS reported
+-86,569 ms the pill read 0.7 s from the tags (before the change, 4 of 10 switches showed "? s"). Twitch's native player has no seek to live (only the React Native theatre has a DVR "jump to live"
 pill), so a tap calls the presenter's Retry with `(0, true)`, the same call the error screen and *Refresh
 stream* make: a new access token and playlist, which start at the live edge. Verified on the emulator on a
 live channel: the pill read 2.3–2.7 s with low latency, a tap logged `jump to live from 2342 ms`, the stream
