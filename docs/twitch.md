@@ -785,7 +785,16 @@ either feed even with the switch off; with it on, both feeds loaded and scrolled
   `BaseViewDelegate` view and extension list to `TwitchHighlights.extensionIcons`, which hides the view and
   returns no extensions, so neither the icons nor the extensions button show. React Native chat opens extensions
   from its own sheet and keeps it. None of eight large live channels showed the test account extension icons, even
-  with the switch off, so the hide is checked only through its hook.
+  with the switch off, so the hide is checked only through its hook. The chat header (`chat_header`: the chat's
+  name, the leaderboard button, the extensions, then Follow/Subscribe/Gift A Sub in a `ComposeView`, over a
+  divider) is a fixed-height row that Twitch keeps showing when the extensions were all it had: a follower with no
+  subscription buttons (Twitch builds no buttons when Follow, Subscribe and Gift A Sub are all left out, as with
+  *Hide subscription upsells*) saw an empty band between the player and chat (issue 101). After hiding the
+  header's extensions, `extensionIcons` posts a check that runs after the header's render (which makes it visible
+  last) and hides the header when no part of its `header_container` row is visible; the next render shows it
+  and the check runs again. Signed out, the header always has Follow, so on the emulator the collapse was shown
+  with a test build that also counted the buttons and spacer as empty: on a channel with an extension button in
+  its header (Nix), the header went to zero height and chat started right under the player.
 
 *Hide player buttons* filters the clip button state and live overlay options, every AndroidX
 `MediaRouteButton` (Cast), and the VOD and vertical-theatre share buttons. Its *Hide chat mode pop-up* switch
