@@ -422,6 +422,52 @@ out. Two checks guard against it:
   `tests/twitch/verify_hooks.py`, which keeps the groups of the patches the APK includes (read from
   its settings registry) and checks each call is in the patched dex.
 
+### In-app web pages: Fix web page errors
+
+Issue 102: on Twitch 32.1.0, the player's Clip button opened the Create Clip sheet, which closed a moment later
+with "There was an error, please try again later". The reporter's log had `chromium: handshake failed; ...
+net_error -202`: something on the phone (an HTTPS-filtering ad blocker, a VPN or a DNS block page) answered
+some host with a certificate WebView doesn't trust.
+
+Create Clip, Report, Sign up, passkeys, collaboration and several other screens are *portals*: a Capacitor
+WebView on a page from `m.twitch.tv/wv/<page>` (`kau.a("clip_editor_portal", ..., "clip-creation", ...)`), run by
+Twitch's web client. Its own assets are bundled in `assets/public/portals.html` for portals that may use local
+assets (Sign up); Create Clip and Web Content Licenses load from the network (`m.twitch.tv` and
+`assets.twitch.tv`). Two WebViewClients serve portals: Capacitor's, which `TwitchBridgeWebViewClientPlugin.load`
+creates for a `PortalFragment` (`le50` in 32.1.0), and the one of Twitch's own `TwitchPortalView` (`me50`, which
+logs `onReceivedSslError(view=`). Both forward *every* certificate error to the portal: `onReceivedSslError`
+calls `super` (which cancels) and then `ne50.c(view, error)`, with no check that the error is the page's own, unlike
+their `onReceivedError` and `onReceivedHttpError`, which only forward main-frame errors. The portal records a
+`portal_hosting_app_event` named `received_ssl_error` and moves to its error state, and each screen reacts to
+that: `ClipEditorPortalFragment` shows `clip_creation_sheet_error` and dismisses itself (the collaboration
+sheets show "Something went wrong"); Sign up and Web Content Licenses keep showing the page. So one blocked
+request from any host the page loads closes Create Clip, unpatched Twitch included.
+
+The patch hooks the start of both clients' `onReceivedSslError` with `TwitchPortals.sslError(view, handler,
+error)`. When the error's URL (`SslError.getUrl()`) is on another host than the page's (`WebView.getUrl()` or
+`getOriginalUrl()`, the one still loading), it calls `handler.cancel()` (never `proceed()`: the request stays
+blocked) and returns null, and the hook returns before Twitch's code. Otherwise it returns the error and Twitch
+handles it as before: an error on the page's own host (the page itself), one while the page's host isn't known
+yet (no URL, `about:blank`), one without a URL, and every error while the switch is off. Capacitor's client has
+no local registers there, so the hook can't return a boolean: the extension hands back the error, or null once
+it has handled it, and the `SslError` parameter takes the answer. The `fix_web_pages` switch (Interface, on by
+default: it restores expected behavior) turns it off. A blocked request still fails in the page; when that is
+something the page can't work without (its scripts on `assets.twitch.tv`, or `gql.twitch.tv`), the page stays
+open and shows its own error or stays empty instead of closing.
+
+Checked on the emulator (`emulator-5580`, Android 16, WebView 133) on 2026-11-20, signed out, with WebView told
+to resolve one host to 1.1.1.1 (`/data/local/tmp/webview-command-line`, read on debuggable images: `_
+--host-resolver-rules="MAP <host> 1.1.1.1"`), which fails that host's TLS with a name mismatch (`net_error
+-200`, primary error 2). A temporary debug hook on the native Spade dispatcher logged the portal events. With
+`k.twitchcdn.net` (Kasada's script, which each of these portals loaded) mapped and the switch off, Web Content Licenses
+(network page) and Sign up and the login portal (local assets) each recorded `received_ssl_error` right after
+the handshake failure; with the switch on, Lurk logged `web page: ignored a certificate error (2) from
+k.twitchcdn.net`, no `received_ssl_error` followed, and the Sign up form stayed usable (read over the WebView's
+DevTools socket). With `m.twitch.tv` mapped, Web Content Licenses still recorded `received_ssl_error` and
+stayed blank, with no Lurk line, as unpatched. Create Clip itself needs a signed-in account, which Twitch refuses
+on the emulator; its reaction to `received_ssl_error` is from the code (`et7`). `tests/twitch/test_portals.py`
+pins the decisions.
+
 ### Player: sleep timer, refresh, gestures and latency
 
 The player patches hook IVS `CorePlayerImpl` (the SDK's names are kept) and Twitch's own control
@@ -1922,7 +1968,8 @@ patched APK as `assets/lurk/locators.json`:
   `twitch.hide_subscription_upsells.subscribe_renderer`/`turbo_dialog_route`/`chat_header_subscription_state` and
   `twitch.emote_picker.section`/`autocomplete_map`/`autocomplete_order`/`autocomplete_order_type` and
   `twitch.latency_badge.latency` and `twitch.auto_claim_drops.handler`/`handler_case` and
-  `twitch.emote_badge_info.placeholder`.
+  `twitch.emote_badge_info.placeholder` and `twitch.portals.bridge_client`/`view_client` (the two portal
+  WebViewClients).
 
 `ChatArtProbe`, `AdsProbe`, `PrivacyAdsProbe` and `HighlightsArtProbe` read the file through
 `ProbeLocators.java`, and `verify_privacy.py` and `verify_interface_emitted.py` through `locators.py`;
