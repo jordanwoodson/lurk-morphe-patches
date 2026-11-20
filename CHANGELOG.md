@@ -1,3 +1,22 @@
+## [1.20.0-dev.1](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.19.0...v1.20.0-dev.1) (2026-11-19)
+
+### Kick
+
+#### 🐛 Bug Fixes
+
+* cap **Default video quality** below every rendition, and offer 160p ([f4048ce](https://github.com/jordanwoodson/lurk-morphe-patches/commit/f4048ce1f697dfc4c44de89aeb6f34a62fca1ec2))
+
+### Twitch
+
+#### ✨ New Features
+
+* **Hide Clips** can keep the Clips tab on channel pages ([7867dcc](https://github.com/jordanwoodson/lurk-morphe-patches/commit/7867dcc9eaa27c4807aa889222d9d39de8cf7cee))
+* **Hide content label** ([dd60672](https://github.com/jordanwoodson/lurk-morphe-patches/commit/dd60672e64cb9a2d8694215fc067d8728dee9c9e))
+
+#### 🐛 Bug Fixes
+
+* **Hide subscription upsells** covers the stream title row, channel pages and Try Ad-Free ([09ba96a](https://github.com/jordanwoodson/lurk-morphe-patches/commit/09ba96ab47213a4d97322549b19cdaf40ba90736))
+
 ## [1.19.0](https://github.com/jordanwoodson/lurk-morphe-patches/compare/v1.18.0...v1.19.0) (2026-11-19)
 
 ### Twitch
