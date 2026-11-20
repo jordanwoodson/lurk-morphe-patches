@@ -291,6 +291,13 @@ Following.
   environment. Every public `Sprig` method has zero spare registers, so the facade can't be guarded
   directly.
 
+*Keep watch time* (`disable_analytics_watch_time`, under Disable analytics, on by default) lets the player's
+`minute-watched` Spade event through and nothing else, the same way the Auto-claim switches do (see *Auto-claim
+channel points*). Twitch credits channel points, watch streaks and time-based Drops only from that event, so
+with Disable analytics on by default and both Auto-claim switches off by default, a default build earned no
+points and lost watch streaks (issue 98). It is read per event, so it needs no restart. Turned off, Disable
+analytics blocks `minute-watched` too unless an Auto-claim switch is on.
+
 A blanket "disable Google Play services" switch is deliberately not offered. It would break push,
 Google and FIDO sign-in, Cast and billing.
 
@@ -962,7 +969,7 @@ fails on a version where any implementation dereferences the chat mode before ov
 stand-in for the action, so the request itself is unverified.
 
 Twitch offers points and the chest only for watch time it is told about: the player's `minute-watched`
-Spade event, which *Disable analytics* (on by default) blocks with every other event. Signed in on a phone
+Spade event, which *Disable analytics* (on by default) blocked with every other event until *Keep watch time*. Signed in on a phone
 with Twitch 32.1.0, 18 minutes with Disable analytics on brought neither the +10 watch points nor a chest;
 with it off, +10 came after about 5 minutes and the chest was claimed by itself (`chat: claiming a channel
 points bonus`, 320 to 380 points). So while this switch is on, Disable analytics lets `minute-watched`
@@ -1502,7 +1509,7 @@ These features appear in other Twitch bundles and mods but are deliberately not 
 
 Native Spade dispatch completes the nullable success callback exactly once rather
 than leaving callers waiting. The native batch transport is also guarded. The one exception is
-`minute-watched` while *Auto-claim channel points* or *Auto-claim Drops* is on (see those patches): it passes the dispatcher, and
+`minute-watched` while *Keep watch time*, *Auto-claim channel points* or *Auto-claim Drops* is on (see those patches): it passes the dispatcher, and
 the batch transport sends only `minute-watched` events. `tests/twitch/test_privacy_consent.py` checks both
 decisions. RN's
 `createSpadeReporter` retains its object/API while enqueue and flush return their

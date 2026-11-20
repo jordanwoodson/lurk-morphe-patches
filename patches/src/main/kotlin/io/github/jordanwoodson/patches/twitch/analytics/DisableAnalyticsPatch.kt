@@ -30,10 +30,10 @@ val disableAnalyticsPatch = bytecodePatch(
     name = "Disable analytics",
     description = "Stops Twitch's native and React Native Spade event uploads, denies local analytics SDK " +
         "consent, enables Branch's limited tracking mode, blocks Crashlytics uploads, Nielsen audience pings and Sprig surveys, " +
-        "and prevents Sentry initialization. Watch progress, viewing statistics and rewards may " +
-        "stop updating; with Auto-claim channel points or Auto-claim Drops on, the minute-watched event that earns " +
-        "channel points and progresses Drops still goes. Restart Twitch after changing this setting. Playback " +
-        "requests still run.",
+        "and prevents Sentry initialization. Keep watch time (on by default) still sends the minute-watched event " +
+        "that earns channel points and watch streaks and progresses Drops; with it off, those stop unless Auto-claim " +
+        "channel points or Auto-claim Drops is on. Restart Twitch after changing this setting. Playback requests " +
+        "still run.",
 ) {
     compatibleWith(COMPATIBILITY_TWITCH)
     dependsOn(twitchHermesPatch)
@@ -191,7 +191,10 @@ val disableAnalyticsPatch = bytecodePatch(
         SprigConfigureFingerprint.twitchMatch("Sprig configuration").method.addInstructionsIfEnabled(KEY, "return-void")
 
         twitchSettings.add(SwitchSetting(KEY, "Disable analytics",
-            "Stops Spade, Nielsen and Sprig, limits Branch tracking, denies SDK consent, disables Crashlytics uploads and Sentry. Watch progress/rewards may be affected; Auto-claim channel points and Auto-claim Drops keep the watch-time event that earns points and Drops.",
+            "Stops Spade, Nielsen and Sprig, limits Branch tracking, denies SDK consent, disables Crashlytics uploads and Sentry.",
             Section.PRIVACY, restart = true))
+        twitchSettings.add(SwitchSetting("disable_analytics_watch_time", "Keep watch time",
+            "Still sends the minute-watched event, so channel points, watch streaks and Drops count your watch time. Every other analytics event stays blocked. Off: none of them count, unless an Auto-claim switch is on.",
+            Section.PRIVACY, default = true, parent = KEY))
     }
 }
